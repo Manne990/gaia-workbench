@@ -14,21 +14,23 @@
     "ci": "npm run typecheck && npm run test && npm run build && npm run test:e2e"
   },
   "dependencies": {
+    "better-sqlite3": "^12.4.0",
     "express": "^5.1.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.53.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.1",
     "@types/node": "^24.0.1",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.8",
+    "@types/supertest": "^6.0.3",
     "@vitejs/plugin-react": "^4.4.1",
     "@vitest/ui": "^3.2.4",
     "playwright": "^1.53.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "supertest": "^7.1.0",
-    "@types/supertest": "^6.0.3",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
     "vitest": "^3.2.4",

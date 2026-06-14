@@ -166,6 +166,33 @@ npm install
 npm run start
 ```
 
+## Quick Start
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run local verification:
+
+```bash
+npm run ci
+```
+
+Start the built application:
+
+```bash
+npm run build
+npm run start
+```
+
+The application serves:
+
+* `GET /health`
+* `GET /api/health`
+* the TinyTracker React shell from the built client
+
 ---
 
 ## Why This Project Exists

@@ -1,0 +1,35 @@
+{
+  "name": "gaia-workbench",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "install": "node -e \"console.log('TinyTracker dependencies ready')\"",
+    "typecheck": "tsc -p server/tsconfig.typecheck.json && tsc -p client/tsconfig.app.json --noEmit",
+    "test": "vitest run",
+    "build:server": "tsc -p server/tsconfig.json",
+    "build:client": "vite build --config client/vite.config.ts",
+    "build": "npm run build:server && npm run build:client",
+    "start": "node dist/server/index.js",
+    "test:e2e": "playwright test",
+    "ci": "npm run typecheck && npm run test && npm run build && npm run test:e2e"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.53.0",
+    "@types/express": "^5.0.1",
+    "@types/node": "^24.0.1",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.8",
+    "@types/supertest": "^6.0.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "supertest": "^7.1.0",
+    "typescript": "^5.8.3",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.8"
+  }
+}

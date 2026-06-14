@@ -166,6 +166,31 @@ npm install
 npm run start
 ```
 
+## Quick Start
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Run checks (for local verification):
+
+```bash
+npm run ci
+```
+
+3. Start from a clean build:
+
+```bash
+npm run start
+```
+
+The application starts an Express server on port `3000` by default and serves:
+
+- `GET /health` and `GET /api/health` for health checks
+- A React frontend shell for TinyTracker
+
 ---
 
 ## Why This Project Exists

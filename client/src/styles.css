@@ -337,6 +337,29 @@ td > span:not(.pill) {
   line-height: 1.45;
 }
 
+.label-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.label-pill {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border: 1px solid #cfd6dd;
+  border-radius: 999px;
+  background: #f7f0e6;
+  color: #5b4630;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .row-actions {
   display: flex;
   flex-wrap: wrap;
@@ -435,6 +458,10 @@ td > span:not(.pill) {
 .detail-description.muted {
   color: #64707c;
   font-weight: 700;
+}
+
+.detail-labels {
+  margin-top: 16px;
 }
 
 .comments-section {

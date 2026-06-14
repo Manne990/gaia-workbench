@@ -8,6 +8,7 @@ export interface Issue {
   description: string;
   status: IssueStatus;
   priority: IssuePriority;
+  labels: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -17,6 +18,7 @@ export interface NewIssue {
   description?: string;
   status?: IssueStatus;
   priority?: IssuePriority;
+  labels?: string[];
 }
 
 export interface IssueUpdate {
@@ -24,6 +26,7 @@ export interface IssueUpdate {
   description?: string;
   status?: IssueStatus;
   priority?: IssuePriority;
+  labels?: string[];
 }
 
 export interface IssueListFilters {

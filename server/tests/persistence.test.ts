@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { CommentRepository, createDatabase, IssueRepository, TABLE_NAMES } from '../src/db/index.js';
 
 describe('persistence layer', () => {
@@ -20,14 +23,16 @@ describe('persistence layer', () => {
       const created = issueRepository.create({
         title: '  Add issue storage  ',
         description: 'Persist issues',
-        priority: 'high'
+        priority: 'high',
+        labels: ['bug', ' storage ', 'bug']
       });
 
       expect(created).toMatchObject({
         title: 'Add issue storage',
         description: 'Persist issues',
         status: 'todo',
-        priority: 'high'
+        priority: 'high',
+        labels: ['bug', 'storage']
       });
 
       const secondRepository = new IssueRepository(database);
@@ -37,19 +42,51 @@ describe('persistence layer', () => {
       const updated = secondRepository.update(created.id, {
         status: 'in_progress',
         priority: 'medium',
-        description: 'Persist issues in SQLite'
+        description: 'Persist issues in SQLite',
+        labels: ['api', 'docs']
       });
 
       expect(updated).toMatchObject({
         id: created.id,
         status: 'in_progress',
         priority: 'medium',
-        description: 'Persist issues in SQLite'
+        description: 'Persist issues in SQLite',
+        labels: ['api', 'docs']
       });
 
       expect(secondRepository.list()).toHaveLength(1);
     } finally {
       database.close();
+    }
+  });
+
+  it('preserves issue labels across a file-backed SQLite restart', () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'tinytracker-labels-'));
+    const databasePath = path.join(tempDir, 'tracker.sqlite');
+
+    try {
+      const firstDatabase = createDatabase(databasePath);
+      const firstRepository = new IssueRepository(firstDatabase);
+      const created = firstRepository.create({
+        title: 'Restart labels',
+        labels: ['ui', 'persistence']
+      });
+
+      firstDatabase.close();
+
+      const secondDatabase = createDatabase(databasePath);
+      const secondRepository = new IssueRepository(secondDatabase);
+
+      try {
+        expect(secondRepository.getById(created.id)).toMatchObject({
+          id: created.id,
+          labels: ['ui', 'persistence']
+        });
+      } finally {
+        secondDatabase.close();
+      }
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
@@ -74,6 +111,13 @@ describe('persistence layer', () => {
           priority: 'urgent'
         })
       ).toThrow('Invalid issue priority');
+      expect(() =>
+        issueRepository.update(issue.id, {
+          // @ts-expect-error intentionally invalid for runtime validation
+          labels: 'bug'
+        })
+      ).toThrow('Invalid issue labels');
+      expect(() => issueRepository.update(issue.id, { labels: [''] })).toThrow('Invalid issue labels');
       expect(() => commentRepository.create({ issueId: issue.id, body: '' })).toThrow('body is required');
     } finally {
       database.close();

@@ -13,6 +13,7 @@ type IssueRow = {
   description: string;
   status: IssueStatus;
   priority: IssuePriority;
+  labels: string;
   created_at: string;
   updated_at: string;
 };
@@ -39,6 +40,48 @@ function assertValidPriority(value: unknown): asserts value is IssuePriority {
   }
 }
 
+function normalizeLabels(value: unknown): string[] {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error('Invalid issue labels');
+  }
+
+  const labels: string[] = [];
+  const seen = new Set<string>();
+
+  for (const label of value) {
+    if (typeof label !== 'string') {
+      throw new Error('Invalid issue labels');
+    }
+
+    const trimmed = label.trim();
+
+    if (trimmed.length === 0 || trimmed.length > 32) {
+      throw new Error('Invalid issue labels');
+    }
+
+    const key = trimmed.toLowerCase();
+
+    if (!seen.has(key)) {
+      labels.push(trimmed);
+      seen.add(key);
+    }
+  }
+
+  return labels;
+}
+
+function parseLabels(value: string): string[] {
+  try {
+    return normalizeLabels(JSON.parse(value));
+  } catch {
+    return [];
+  }
+}
+
 function mapIssueRow(row: IssueRow): Issue {
   return {
     id: row.id,
@@ -46,6 +89,7 @@ function mapIssueRow(row: IssueRow): Issue {
     description: row.description,
     status: row.status,
     priority: row.priority,
+    labels: parseLabels(row.labels),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -68,6 +112,7 @@ export class IssueRepository {
       description: (input.description ?? '').trim(),
       status: input.status ?? DEFAULT_STATUS,
       priority: input.priority ?? DEFAULT_PRIORITY,
+      labels: normalizeLabels(input.labels),
       createdAt: now,
       updatedAt: now
     };
@@ -77,8 +122,8 @@ export class IssueRepository {
 
     this.database
       .prepare(`
-        INSERT INTO issues (id, title, description, status, priority, created_at, updated_at)
-        VALUES (@id, @title, @description, @status, @priority, @createdAt, @updatedAt)
+        INSERT INTO issues (id, title, description, status, priority, labels, created_at, updated_at)
+        VALUES (@id, @title, @description, @status, @priority, @labels, @createdAt, @updatedAt)
       `)
       .run({
         id: issue.id,
@@ -86,6 +131,7 @@ export class IssueRepository {
         description: issue.description,
         status: issue.status,
         priority: issue.priority,
+        labels: JSON.stringify(issue.labels),
         createdAt: issue.createdAt,
         updatedAt: issue.updatedAt
       });
@@ -96,7 +142,7 @@ export class IssueRepository {
   getById(id: string): Issue | null {
     const row = this.database
       .prepare(`
-        SELECT id, title, description, status, priority, created_at, updated_at
+        SELECT id, title, description, status, priority, labels, created_at, updated_at
         FROM issues
         WHERE id = @id
       `)
@@ -130,7 +176,7 @@ export class IssueRepository {
     const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
     const rows = this.database
       .prepare(`
-        SELECT id, title, description, status, priority, created_at, updated_at
+        SELECT id, title, description, status, priority, labels, created_at, updated_at
         FROM issues
         ${whereClause}
         ORDER BY created_at DESC, id DESC
@@ -145,7 +191,8 @@ export class IssueRepository {
       input.title === undefined &&
       input.description === undefined &&
       input.status === undefined &&
-      input.priority === undefined
+      input.priority === undefined &&
+      input.labels === undefined
     ) {
       return this.getById(id);
     }
@@ -174,6 +221,11 @@ export class IssueRepository {
       assertValidPriority(input.priority);
       fields.push('priority = @priority');
       values.priority = input.priority;
+    }
+
+    if (input.labels !== undefined) {
+      fields.push('labels = @labels');
+      values.labels = JSON.stringify(normalizeLabels(input.labels));
     }
 
     const updatedAt = nowIso();

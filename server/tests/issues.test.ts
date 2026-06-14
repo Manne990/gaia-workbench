@@ -8,14 +8,19 @@ describe('issues API', () => {
 
     const created = await request(app)
       .post('/api/issues')
-      .send({ title: 'Add API', description: 'Persist through repository' })
+      .send({
+        title: 'Add API',
+        description: 'Persist through repository',
+        labels: ['api', 'backend', 'api']
+      })
       .expect(201);
 
     expect(created.body).toMatchObject({
       title: 'Add API',
       description: 'Persist through repository',
       status: 'todo',
-      priority: 'medium'
+      priority: 'medium',
+      labels: ['api', 'backend']
     });
     expect(created.body.id).toEqual(expect.any(String));
 
@@ -102,7 +107,8 @@ describe('issues API', () => {
         title: 'Updated issue',
         description: 'New description',
         status: 'in_progress',
-        priority: 'high'
+        priority: 'high',
+        labels: ['docs', 'ui']
       })
       .expect(200);
 
@@ -111,7 +117,18 @@ describe('issues API', () => {
       title: 'Updated issue',
       description: 'New description',
       status: 'in_progress',
-      priority: 'high'
+      priority: 'high',
+      labels: ['docs', 'ui']
+    });
+
+    const relabeled = await request(app)
+      .put(`/api/issues/${created.body.id}`)
+      .send({ labels: ['api'] })
+      .expect(200);
+
+    expect(relabeled.body).toMatchObject({
+      id: created.body.id,
+      labels: ['api']
     });
   });
 
@@ -165,6 +182,13 @@ describe('issues API', () => {
     await request(app).get('/api/issues?priority=urgent').expect(400, {
       error: 'Invalid issue priority'
     });
+
+    await request(app)
+      .put(`/api/issues/${created.body.id}`)
+      .send({ labels: [''] })
+      .expect(400, {
+        error: 'Invalid issue labels'
+      });
   });
 
   it('returns 404 for missing issues', async () => {

@@ -60,7 +60,7 @@ p {
 }
 
 h1 {
-  font-size: clamp(2rem, 4vw, 3rem);
+  font-size: clamp(2rem, 4vw, 2.6rem);
   line-height: 1.05;
 }
 
@@ -89,7 +89,7 @@ h2 {
 }
 
 .summary-grid article,
-.lane {
+.panel {
   border: 1px solid #d6ddd2;
   border-radius: 8px;
   background: #ffffff;
@@ -102,8 +102,7 @@ h2 {
   padding: 18px;
 }
 
-.summary-grid span,
-.lane p {
+.summary-grid span {
   color: #657066;
   font-size: 0.875rem;
 }
@@ -112,17 +111,125 @@ h2 {
   font-size: 1.4rem;
 }
 
-.board {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+.panel {
+  margin-top: 4px;
+  padding: 16px;
 }
 
-.lane {
+.panel h2 {
+  margin: 0 0 14px;
+}
+
+.state-message {
+  margin: 0;
+  min-height: 42px;
   display: grid;
-  gap: 14px;
-  min-height: 180px;
-  padding: 16px;
+  align-items: center;
+  font-size: 0.95rem;
+  color: #39423d;
+}
+
+.state-message--loading {
+  font-weight: 600;
+  color: #5b6a60;
+}
+
+.state-message--error {
+  color: #7a2020;
+}
+
+.issue-list-wrapper {
+  display: grid;
+  gap: 10px;
+}
+
+.issue-list-row {
+  display: grid;
+  align-items: center;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid #dde4db;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.issue-list-head {
+  border: none;
+  background: transparent;
+  color: #5f6f65;
+  font-weight: 700;
+  font-size: 0.875rem;
+}
+
+.issue-title {
+  display: grid;
+  gap: 4px;
+}
+
+.issue-title strong {
+  line-height: 1.2;
+}
+
+.issue-title small {
+  color: #636d68;
+  font-size: 0.8rem;
+}
+
+.issue-metadata {
+  display: grid;
+  gap: 2px;
+}
+
+.issue-metadata span {
+  color: #657066;
+  font-size: 0.81rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.status-todo {
+  background: #ecf2ff;
+  color: #204f9a;
+}
+
+.status-in-progress {
+  background: #fff4e5;
+  color: #8a4b00;
+}
+
+.status-review {
+  background: #f3e7ff;
+  color: #4a2f92;
+}
+
+.status-done {
+  background: #e8f5eb;
+  color: #1c5f2f;
+}
+
+.priority-low {
+  background: #edf7ef;
+  color: #2c6f38;
+}
+
+.priority-medium {
+  background: #eef1f6;
+  color: #425267;
+}
+
+.priority-high {
+  background: #fdebec;
+  color: #7a2020;
 }
 
 @media (max-width: 760px) {
@@ -133,12 +240,23 @@ h2 {
 
   .topbar,
   .summary-grid,
-  .board {
+  .issue-list-row {
     grid-template-columns: 1fr;
   }
 
   .topbar {
     display: grid;
+  }
+
+  .issue-list-wrapper,
+  .issue-list-head,
+  .issue-title,
+  .issue-metadata {
+    display: block;
+  }
+
+  .issue-list-head {
+    display: none;
   }
 
   .status-pill {

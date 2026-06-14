@@ -167,4 +167,12 @@ export class IssueRepository {
 
     return this.getById(id);
   }
+
+  close(id: string): Issue | null {
+    return this.update(id, { status: 'done' });
+  }
+
+  reopen(id: string): Issue | null {
+    return this.update(id, { status: DEFAULT_STATUS });
+  }
 }

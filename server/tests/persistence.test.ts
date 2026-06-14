@@ -80,6 +80,53 @@ describe('persistence layer', () => {
     }
   });
 
+  it('supports issue status, priority, close, and reopen workflow values', () => {
+    const database = createDatabase(':memory:');
+    const issueRepository = new IssueRepository(database);
+
+    try {
+      const statuses = ['todo', 'in_progress', 'review', 'done'] as const;
+      const priorities = ['low', 'medium', 'high'] as const;
+
+      for (const status of statuses) {
+        const issue = issueRepository.create({
+          title: `Status ${status}`,
+          status
+        });
+
+        expect(issue.status).toBe(status);
+      }
+
+      for (const priority of priorities) {
+        const issue = issueRepository.create({
+          title: `Priority ${priority}`,
+          priority
+        });
+
+        expect(issue.priority).toBe(priority);
+      }
+
+      const issue = issueRepository.create({
+        title: 'Workflow issue',
+        status: 'in_progress',
+        priority: 'high'
+      });
+
+      expect(issueRepository.close(issue.id)).toMatchObject({
+        id: issue.id,
+        status: 'done',
+        priority: 'high'
+      });
+      expect(issueRepository.reopen(issue.id)).toMatchObject({
+        id: issue.id,
+        status: 'todo',
+        priority: 'high'
+      });
+    } finally {
+      database.close();
+    }
+  });
+
   it('persists comments and records edit history', () => {
     const database = createDatabase(':memory:');
     const issueRepository = new IssueRepository(database);

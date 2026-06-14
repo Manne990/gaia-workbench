@@ -56,6 +56,55 @@ describe('comments API', () => {
     });
   });
 
+  it('exposes issue activity for issue changes and comments', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const issue = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Activity issue', labels: ['ui'], dueDate: '2999-12-31' })
+      .expect(201);
+
+    await request(app)
+      .put(`/api/issues/${issue.body.id}`)
+      .send({
+        status: 'review',
+        priority: 'high',
+        labels: ['api'],
+        dueDate: '2000-01-01'
+      })
+      .expect(200);
+    const comment = await request(app)
+      .post(`/api/issues/${issue.body.id}/comments`)
+      .send({ body: 'Activity comment' })
+      .expect(201);
+    await request(app)
+      .put(`/api/comments/${comment.body.id}`)
+      .send({ body: 'Edited activity comment' })
+      .expect(200);
+
+    const activity = await request(app).get(`/api/issues/${issue.body.id}/activity`).expect(200);
+
+    expect(activity.body.map((event: { type: string }) => event.type)).toEqual([
+      'issue_created',
+      'issue_status_changed',
+      'issue_priority_changed',
+      'issue_due_date_changed',
+      'issue_labels_changed',
+      'comment_added',
+      'comment_edited'
+    ]);
+    expect(activity.body[0]).toMatchObject({
+      issueId: issue.body.id,
+      type: 'issue_created',
+      metadata: { title: 'Activity issue' }
+    });
+    expect(activity.body.find((event: { type: string }) => event.type === 'issue_due_date_changed')).toMatchObject({
+      metadata: { from: '2999-12-31', to: '2000-01-01' }
+    });
+    expect(activity.body.find((event: { type: string }) => event.type === 'comment_added')).toMatchObject({
+      metadata: { commentId: comment.body.id }
+    });
+  });
+
   it('validates comment payloads', async () => {
     const app = createApp({ databasePath: ':memory:' });
     const issue = await request(app).post('/api/issues').send({ title: 'Validation issue' }).expect(201);
@@ -77,6 +126,10 @@ describe('comments API', () => {
     const app = createApp({ databasePath: ':memory:' });
 
     await request(app).get('/api/issues/not-found/comments').expect(404, {
+      error: 'Issue not found'
+    });
+
+    await request(app).get('/api/issues/not-found/activity').expect(404, {
       error: 'Issue not found'
     });
 

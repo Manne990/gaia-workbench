@@ -34,6 +34,27 @@ type CommentEditHistory = {
   editedAt: string;
 };
 
+type ActivityEventType =
+  | 'issue_created'
+  | 'issue_title_changed'
+  | 'issue_description_changed'
+  | 'issue_status_changed'
+  | 'issue_priority_changed'
+  | 'issue_due_date_changed'
+  | 'issue_labels_changed'
+  | 'comment_added'
+  | 'comment_edited';
+
+type ActivityMetadataValue = string | string[] | null;
+
+type ActivityEvent = {
+  id: string;
+  issueId: string;
+  type: ActivityEventType;
+  metadata: Record<string, ActivityMetadataValue>;
+  createdAt: string;
+};
+
 type LoadState = 'loading' | 'loaded' | 'error';
 type CommentLoadState = LoadState | 'idle';
 type FormMode = 'create' | 'edit';
@@ -109,6 +130,16 @@ async function fetchCommentHistory(
   return (await response.json()) as CommentEditHistory[];
 }
 
+async function fetchIssueActivity(issueId: string, signal?: AbortSignal): Promise<ActivityEvent[]> {
+  const response = await fetch(`/api/issues/${issueId}/activity`, { signal });
+
+  if (!response.ok) {
+    throw new Error('Activity request failed');
+  }
+
+  return (await response.json()) as ActivityEvent[];
+}
+
 function parseLabelsInput(value: string): string[] {
   const labels: string[] = [];
   const seen = new Set<string>();
@@ -160,6 +191,91 @@ function parseDueDateInput(value: string): string | null {
   return dueDate;
 }
 
+function metadataText(event: ActivityEvent, key: string): string | null {
+  const value = event.metadata[key];
+  return typeof value === 'string' ? value : null;
+}
+
+function metadataList(event: ActivityEvent, key: string): string[] {
+  const value = event.metadata[key];
+  return Array.isArray(value) ? value : [];
+}
+
+function formatOptionalText(value: string | null): string {
+  return value && value.trim().length > 0 ? value : 'empty';
+}
+
+function formatStatusValue(value: string | null): string {
+  return value && value in statusLabels ? statusLabels[value as IssueStatus] : formatOptionalText(value);
+}
+
+function formatPriorityValue(value: string | null): string {
+  return value && value in priorityLabels ? priorityLabels[value as IssuePriority] : formatOptionalText(value);
+}
+
+function formatDueDateValue(value: string | null): string {
+  return value ? formatDueDate(value) : 'No due date';
+}
+
+function formatLabelList(labels: string[]): string {
+  return labels.length > 0 ? labels.join(', ') : 'No labels';
+}
+
+function activityTitle(event: ActivityEvent): string {
+  switch (event.type) {
+    case 'issue_created':
+      return 'Issue created';
+    case 'issue_title_changed':
+      return 'Title changed';
+    case 'issue_description_changed':
+      return 'Description changed';
+    case 'issue_status_changed':
+      return 'Status changed';
+    case 'issue_priority_changed':
+      return 'Priority changed';
+    case 'issue_due_date_changed':
+      return 'Due date changed';
+    case 'issue_labels_changed':
+      return 'Labels changed';
+    case 'comment_added':
+      return 'Comment added';
+    case 'comment_edited':
+      return 'Comment edited';
+    default:
+      return 'Activity recorded';
+  }
+}
+
+function activityDetail(event: ActivityEvent): string {
+  const from = metadataText(event, 'from');
+  const to = metadataText(event, 'to');
+
+  switch (event.type) {
+    case 'issue_created':
+      return `Created ${formatOptionalText(metadataText(event, 'title'))}.`;
+    case 'issue_title_changed':
+      return `${formatOptionalText(from)} -> ${formatOptionalText(to)}`;
+    case 'issue_description_changed':
+      return `${formatOptionalText(from)} -> ${formatOptionalText(to)}`;
+    case 'issue_status_changed':
+      return `${formatStatusValue(from)} -> ${formatStatusValue(to)}`;
+    case 'issue_priority_changed':
+      return `${formatPriorityValue(from)} -> ${formatPriorityValue(to)}`;
+    case 'issue_due_date_changed':
+      return `${formatDueDateValue(from)} -> ${formatDueDateValue(to)}`;
+    case 'issue_labels_changed':
+      return `${formatLabelList(metadataList(event, 'from'))} -> ${formatLabelList(metadataList(event, 'to'))}`;
+    case 'comment_added':
+      return `Added "${formatOptionalText(metadataText(event, 'preview'))}".`;
+    case 'comment_edited':
+      return `${formatOptionalText(metadataText(event, 'previousPreview'))} -> ${formatOptionalText(
+        metadataText(event, 'newPreview')
+      )}`;
+    default:
+      return 'Activity details are not available.';
+  }
+}
+
 export function App() {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loadState, setLoadState] = useState<LoadState>('loading');
@@ -171,6 +287,8 @@ export function App() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentHistory, setCommentHistory] = useState<Record<string, CommentEditHistory[]>>({});
   const [commentLoadState, setCommentLoadState] = useState<CommentLoadState>('idle');
+  const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
+  const [activityLoadState, setActivityLoadState] = useState<CommentLoadState>('idle');
   const [commentBody, setCommentBody] = useState('');
   const [commentError, setCommentError] = useState<string | null>(null);
   const [isCommentSubmitting, setIsCommentSubmitting] = useState(false);
@@ -209,27 +327,34 @@ export function App() {
       setComments([]);
       setCommentHistory({});
       setCommentLoadState('idle');
+      setActivityEvents([]);
+      setActivityLoadState('idle');
       return;
     }
 
+    const issueId = selectedIssueId;
     const controller = new AbortController();
 
-    async function loadComments() {
+    async function loadIssueDetailData() {
       setCommentLoadState('loading');
+      setActivityLoadState('loading');
       setCommentError(null);
       setEditingCommentId(null);
       setEditCommentError(null);
 
       try {
-        const response = await fetch(`/api/issues/${selectedIssueId}/comments`, {
-          signal: controller.signal
-        });
+        const [commentsResponse, loadedActivityEvents] = await Promise.all([
+          fetch(`/api/issues/${issueId}/comments`, {
+            signal: controller.signal
+          }),
+          fetchIssueActivity(issueId, controller.signal)
+        ]);
 
-        if (!response.ok) {
+        if (!commentsResponse.ok) {
           throw new Error('Comment request failed');
         }
 
-        const loadedComments = (await response.json()) as Comment[];
+        const loadedComments = (await commentsResponse.json()) as Comment[];
         const historyPairs = await Promise.all(
           loadedComments.map(async (comment) => {
             const history = await fetchCommentHistory(comment.id, controller.signal).catch(() => []);
@@ -243,15 +368,18 @@ export function App() {
 
         setComments(loadedComments);
         setCommentHistory(Object.fromEntries(historyPairs));
+        setActivityEvents(loadedActivityEvents);
         setCommentLoadState('loaded');
+        setActivityLoadState('loaded');
       } catch (error) {
         if (!controller.signal.aborted) {
           setCommentLoadState('error');
+          setActivityLoadState('error');
         }
       }
     }
 
-    void loadComments();
+    void loadIssueDetailData();
 
     return () => controller.abort();
   }, [selectedIssueId]);
@@ -308,6 +436,17 @@ export function App() {
     setEditingCommentId(null);
     setEditCommentBody('');
     setEditCommentError(null);
+  }
+
+  async function refreshActivity(issueId: string) {
+    setActivityLoadState('loading');
+
+    try {
+      setActivityEvents(await fetchIssueActivity(issueId));
+      setActivityLoadState('loaded');
+    } catch {
+      setActivityLoadState('error');
+    }
   }
 
   async function submitIssue(event: FormEvent<HTMLFormElement>) {
@@ -367,6 +506,9 @@ export function App() {
           : current.map((issue) => (issue.id === savedIssue.id ? savedIssue : issue))
       );
       setLoadState('loaded');
+      if (selectedIssueId === savedIssue.id) {
+        await refreshActivity(savedIssue.id);
+      }
       cancelForm();
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Issue save failed');
@@ -407,6 +549,7 @@ export function App() {
       const savedComment = (await response.json()) as Comment;
       setComments((current) => [...current, savedComment]);
       setCommentHistory((current) => ({ ...current, [savedComment.id]: [] }));
+      await refreshActivity(savedComment.issueId);
       setCommentBody('');
       setCommentLoadState('loaded');
     } catch (error) {
@@ -463,6 +606,7 @@ export function App() {
         current.map((comment) => (comment.id === savedComment.id ? savedComment : comment))
       );
       setCommentHistory((current) => ({ ...current, [savedComment.id]: history }));
+      await refreshActivity(savedComment.issueId);
       cancelEditComment();
     } catch (error) {
       setEditCommentError(error instanceof Error ? error.message : 'Comment update failed');
@@ -759,6 +903,43 @@ export function App() {
                   ))}
                 </div>
               ) : null}
+
+              <section className="activity-section" aria-labelledby="activity-heading">
+                <div className="activity-header">
+                  <h3 id="activity-heading">Activity</h3>
+                  <span>{activityEvents.length}</span>
+                </div>
+
+                {activityLoadState === 'loading' ? (
+                  <div className="state-message compact" role="status">
+                    Loading activity...
+                  </div>
+                ) : null}
+
+                {activityLoadState === 'error' ? (
+                  <div className="state-message compact error" role="alert">
+                    Unable to load activity.
+                  </div>
+                ) : null}
+
+                {activityLoadState === 'loaded' && activityEvents.length === 0 ? (
+                  <div className="state-message compact">No activity yet.</div>
+                ) : null}
+
+                {activityEvents.length > 0 ? (
+                  <ol className="activity-list" aria-label="Issue activity">
+                    {activityEvents.map((event) => (
+                      <li key={event.id} className="activity-item">
+                        <div>
+                          <strong>{activityTitle(event)}</strong>
+                          <p>{activityDetail(event)}</p>
+                        </div>
+                        <time dateTime={event.createdAt}>{formatDate(event.createdAt)}</time>
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
+              </section>
 
               <section className="comments-section" aria-labelledby="comments-heading">
                 <div className="comments-header">

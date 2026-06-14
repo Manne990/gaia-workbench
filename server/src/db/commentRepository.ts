@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
+import { recordActivityEvent } from './activityRepository.js';
 import { Comment, CommentEditHistory, CommentUpdate, NewComment } from './types.js';
 
 type CommentRow = {
@@ -26,6 +27,12 @@ function assertNonEmptyString(value: unknown, field: string): asserts value is s
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new Error(`${field} is required`);
   }
+}
+
+function previewCommentBody(value: string): string {
+  const compact = value.replace(/\s+/g, ' ').trim();
+
+  return compact.length > 80 ? `${compact.slice(0, 77)}...` : compact;
 }
 
 function mapCommentRow(row: CommentRow): Comment {
@@ -64,19 +71,29 @@ export class CommentRepository {
       updatedAt: now
     };
 
-    this.database
-      .prepare(`
-        INSERT INTO comments (id, issue_id, body, created_at, updated_at)
-        VALUES (@id, @issueId, @body, @createdAt, @updatedAt)
-      `)
-      .run({
-        id: comment.id,
-        issueId: comment.issueId,
-        body: comment.body,
-        createdAt: comment.createdAt,
-        updatedAt: comment.updatedAt
-      });
+    const transaction = this.database.transaction(() => {
+      this.database
+        .prepare(`
+          INSERT INTO comments (id, issue_id, body, created_at, updated_at)
+          VALUES (@id, @issueId, @body, @createdAt, @updatedAt)
+        `)
+        .run({
+          id: comment.id,
+          issueId: comment.issueId,
+          body: comment.body,
+          createdAt: comment.createdAt,
+          updatedAt: comment.updatedAt
+        });
 
+      recordActivityEvent(this.database, {
+        issueId: comment.issueId,
+        type: 'comment_added',
+        metadata: { commentId: comment.id, preview: previewCommentBody(comment.body) },
+        createdAt: comment.createdAt
+      });
+    });
+
+    transaction();
     return comment;
   }
 
@@ -115,6 +132,10 @@ export class CommentRepository {
 
     const updatedAt = nowIso();
     const nextBody = input.body.trim();
+    if (nextBody === current.body) {
+      return current;
+    }
+
     const transaction = this.database.transaction(() => {
       this.database
         .prepare(`
@@ -136,6 +157,17 @@ export class CommentRepository {
           newBody: nextBody,
           editedAt: updatedAt
         });
+
+      recordActivityEvent(this.database, {
+        issueId: current.issueId,
+        type: 'comment_edited',
+        metadata: {
+          commentId: id,
+          previousPreview: previewCommentBody(current.body),
+          newPreview: previewCommentBody(nextBody)
+        },
+        createdAt: updatedAt
+      });
     });
 
     transaction();

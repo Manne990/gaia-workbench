@@ -526,12 +526,14 @@ td > span:not(.pill) {
   margin-top: 16px;
 }
 
+.activity-section,
 .comments-section {
   margin-top: 22px;
   padding-top: 20px;
   border-top: 1px solid #e4e8ec;
 }
 
+.activity-header,
 .comments-header {
   display: flex;
   align-items: center;
@@ -539,6 +541,7 @@ td > span:not(.pill) {
   gap: 12px;
 }
 
+.activity-header span,
 .comments-header span {
   display: inline-grid;
   width: 30px;
@@ -549,6 +552,46 @@ td > span:not(.pill) {
   color: #52606d;
   font-size: 0.82rem;
   font-weight: 800;
+}
+
+.activity-list {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activity-item {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid #edf0f2;
+}
+
+.activity-item:last-child {
+  border-bottom: 0;
+}
+
+.activity-item strong {
+  color: #15181c;
+  font-size: 0.95rem;
+}
+
+.activity-item p {
+  margin: 5px 0 0;
+  color: #4c5661;
+  line-height: 1.45;
+}
+
+.activity-item time {
+  flex: 0 0 auto;
+  color: #64707c;
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .comment-form,
@@ -692,6 +735,12 @@ td > span:not(.pill) {
 
   .issue-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .activity-item {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 6px;
   }
 
   th,

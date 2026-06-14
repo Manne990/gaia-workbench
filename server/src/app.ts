@@ -1,7 +1,13 @@
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
-import { CommentRepository, createDatabase, IssueListFilters, IssueRepository } from './db/index.js';
+import {
+  ActivityRepository,
+  CommentRepository,
+  createDatabase,
+  IssueListFilters,
+  IssueRepository
+} from './db/index.js';
 
 type AppConfig = {
   clientDir?: string;
@@ -43,6 +49,7 @@ export function createApp(config: AppConfig = {}) {
   const database = createDatabase(config.databasePath ?? ':memory:');
   const issueRepository = new IssueRepository(database);
   const commentRepository = new CommentRepository(database);
+  const activityRepository = new ActivityRepository(database);
 
   app.use(express.json());
 
@@ -138,6 +145,16 @@ export function createApp(config: AppConfig = {}) {
     }
 
     return res.status(200).json(commentRepository.listByIssueId(issue.id));
+  });
+
+  app.get('/api/issues/:id/activity', (req, res) => {
+    const issue = issueRepository.getById(req.params.id);
+
+    if (!issue) {
+      return res.status(404).json({ error: 'Issue not found' });
+    }
+
+    return res.status(200).json(activityRepository.listByIssueId(issue.id));
   });
 
   app.post('/api/issues/:id/comments', (req, res) => {

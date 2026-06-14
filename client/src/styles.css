@@ -1,6 +1,6 @@
 :root {
   color: #15181c;
-  background: #f7f7f4;
+  background: #f4f6f8;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
@@ -20,24 +20,25 @@ body {
 
 .app-shell {
   min-height: 100vh;
-  padding: 48px 24px;
-  background:
-    linear-gradient(135deg, rgba(49, 107, 113, 0.14), transparent 42%),
-    #f7f7f4;
+  padding: 32px 24px;
+  background: #f4f6f8;
 }
 
 .workspace {
-  width: min(1040px, 100%);
+  width: min(1120px, 100%);
   margin: 0 auto;
 }
 
-.masthead {
-  max-width: 720px;
+.dashboard-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
 }
 
 .eyebrow {
-  margin: 0 0 12px;
-  color: #316b71;
+  margin: 0 0 8px;
+  color: #2f6f73;
   font-size: 0.82rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -45,37 +46,52 @@ body {
 
 h1 {
   margin: 0;
-  max-width: 12ch;
-  font-size: 4rem;
-  line-height: 1;
+  font-size: 2.25rem;
+  line-height: 1.1;
   letter-spacing: 0;
 }
 
-.summary {
-  margin: 20px 0 0;
-  max-width: 58ch;
-  color: #5b626c;
-  font-size: 1.08rem;
-  line-height: 1.6;
+.total-summary {
+  min-width: 168px;
+  padding: 14px 16px;
+  border: 1px solid #d7dde3;
+  border-radius: 8px;
+  background: #ffffff;
+  text-align: right;
+}
+
+.total-summary span,
+.panel-header p,
+.panel-count {
+  color: #59636e;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.total-summary strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 2rem;
+  line-height: 1;
 }
 
 .status-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
-  margin-top: 48px;
+  margin-top: 28px;
 }
 
 .status-grid article {
-  min-height: 128px;
+  min-height: 112px;
   padding: 18px;
-  border: 1px solid #d5d9d6;
+  border: 1px solid #d7dde3;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.72);
+  background: #ffffff;
 }
 
 .status-grid span {
-  color: #4c555f;
+  color: #4c5661;
   font-size: 0.94rem;
   font-weight: 700;
 }
@@ -87,26 +103,173 @@ h1 {
   line-height: 1;
 }
 
+.issue-panel {
+  margin-top: 24px;
+  border: 1px solid #d7dde3;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #e4e8ec;
+}
+
+h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+
+.panel-header p {
+  margin: 6px 0 0;
+}
+
+.panel-count {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 999px;
+  background: #e8f1f2;
+  color: #245d61;
+}
+
+.state-message {
+  padding: 32px 20px;
+  color: #59636e;
+  font-weight: 700;
+}
+
+.state-message.error {
+  color: #9a2f2f;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 16px 20px;
+  border-bottom: 1px solid #edf0f2;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  color: #59636e;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+td {
+  color: #30363d;
+  font-size: 0.95rem;
+}
+
+td strong,
+td span {
+  display: block;
+}
+
+td strong {
+  margin-bottom: 5px;
+}
+
+td > span:not(.pill) {
+  max-width: 52ch;
+  color: #64707c;
+  line-height: 1.45;
+}
+
+.pill {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.status-todo {
+  background: #eef1f4;
+  color: #4b5560;
+}
+
+.status-in_progress {
+  background: #e8f1f2;
+  color: #245d61;
+}
+
+.status-review {
+  background: #f3ecda;
+  color: #735315;
+}
+
+.status-done {
+  background: #e6f1e8;
+  color: #29613b;
+}
+
+.priority-low {
+  background: #edf1f5;
+  color: #52606d;
+}
+
+.priority-medium {
+  background: #f1edfb;
+  color: #59479a;
+}
+
+.priority-high {
+  background: #fae8e5;
+  color: #9a2f2f;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     padding: 32px 16px;
   }
 
+  .dashboard-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .total-summary {
+    text-align: left;
+  }
+
   h1 {
-    max-width: 11ch;
-    font-size: 3rem;
+    font-size: 2rem;
   }
 
   .status-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  th,
+  td {
+    padding: 14px 16px;
+  }
 }
 
 @media (max-width: 460px) {
-  h1 {
-    font-size: 2.4rem;
-  }
-
   .status-grid {
     grid-template-columns: 1fr;
   }

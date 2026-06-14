@@ -22,6 +22,29 @@ afterEach(() => {
 });
 
 describe("IssueRepository", () => {
+  function seededIssues() {
+    const issueA = repository.createIssue({
+      title: "Login page timeout",
+      description: "The login page rejects long-running sessions.",
+      status: "Todo",
+      priority: "High"
+    });
+    const issueB = repository.createIssue({
+      title: "Database migration",
+      description: "OAuth callback fails intermittently.",
+      status: "In Progress",
+      priority: "Medium"
+    });
+    const issueC = repository.createIssue({
+      title: "Update API docs",
+      description: "Authentication flow should be documented.",
+      status: "Done",
+      priority: "Low"
+    });
+
+    return { issueA, issueB, issueC };
+  }
+
   it("creates, reads, updates, and lists issues", () => {
     const issue = repository.createIssue({
       title: "Add persistence",
@@ -54,6 +77,31 @@ describe("IssueRepository", () => {
     expect(updated?.updatedAt).not.toEqual(issue.updatedAt);
 
     expect(repository.listIssues()).toEqual([updated]);
+  });
+
+  it("lists issues by title search filter", () => {
+    const { issueA, issueB, issueC } = seededIssues();
+
+    expect(repository.listIssues({ title: "Login" })).toEqual([issueA]);
+    expect(repository.listIssues({ title: "API" })).toEqual([issueC]);
+    expect(repository.listIssues({ title: "missing" })).toEqual([]);
+    expect(repository.listIssues({ title: "a", status: "Todo" })).toEqual([issueA]);
+  });
+
+  it("lists issues by description search filter", () => {
+    const { issueA, issueB, issueC } = seededIssues();
+
+    expect(repository.listIssues({ description: "OAuth" })).toEqual([issueB]);
+    expect(repository.listIssues({ description: "Authentication" })).toEqual([issueC]);
+    expect(repository.listIssues({ description: "nonexistent" })).toEqual([]);
+  });
+
+  it("filters issues by status and by combined status + text search", () => {
+    const { issueA, issueB, issueC } = seededIssues();
+
+    expect(repository.listIssues({ status: "Done" })).toEqual([issueC]);
+    expect(repository.listIssues({ status: "In Progress", search: "Migration" })).toEqual([issueB]);
+    expect(repository.listIssues({ status: "Todo", search: "Documentation" })).toEqual([]);
   });
 
   it("creates and lists comments for an issue", () => {

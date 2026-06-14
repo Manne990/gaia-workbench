@@ -70,6 +70,10 @@ async function createIssue(address: AddressInfo, body: Record<string, unknown>) 
   });
 }
 
+async function listIssues(address: AddressInfo, query: string) {
+  return fetch(`http://127.0.0.1:${address.port}/api/issues${query}`);
+}
+
 async function createComment(address: AddressInfo, issueId: number, body: Record<string, unknown>) {
   return fetch(`http://127.0.0.1:${address.port}/api/issues/${issueId}/comments`, {
     method: "POST",
@@ -127,6 +131,83 @@ describe("TinyTracker API", () => {
 
     expect(getResponse.status).toBe(200);
     expect(loadedIssue).toEqual(createdIssue);
+  });
+
+  it("supports searching issues by title and description", async () => {
+    const address = await startTestServer();
+
+    const first = await createIssue(address, {
+      title: "Login timeout",
+      description: "User reports session issues."
+    });
+    const second = await createIssue(address, {
+      title: "Database migration",
+      description: "OAuth callback intermittently fails."
+    });
+    const third = await createIssue(address, {
+      title: "Doc update",
+      description: "Improve OAuth endpoint docs."
+    });
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(third.status).toBe(201);
+
+    const titleSearchResponse = await listIssues(address, "?search=Login");
+    const byTitle = await titleSearchResponse.json();
+    expect(titleSearchResponse.status).toBe(200);
+    expect(byTitle.map((issue: { id: number }) => issue.id)).toEqual([1]);
+
+    const descriptionSearchResponse = await listIssues(address, "?search=OAuth");
+    const byDescription = await descriptionSearchResponse.json();
+    expect(descriptionSearchResponse.status).toBe(200);
+    expect(byDescription.map((issue: { id: number }) => issue.id)).toEqual([2, 3]);
+  });
+
+  it("supports filtering by status and combined search + status filters", async () => {
+    const address = await startTestServer();
+
+    await createIssue(address, {
+      title: "Todo ticket",
+      description: "Needs follow-up",
+      status: "Todo"
+    });
+    await createIssue(address, {
+      title: "In progress work",
+      description: "OAuth integration in progress",
+      status: "In Progress"
+    });
+    await createIssue(address, {
+      title: "Done OAuth ticket",
+      description: "OAuth work complete",
+      status: "Done"
+    });
+
+    const statusFilterResponse = await listIssues(address, "?status=Done");
+    const statusFiltered = await statusFilterResponse.json();
+    expect(statusFilterResponse.status).toBe(200);
+    expect(statusFiltered).toHaveLength(1);
+    expect(statusFiltered[0].id).toBe(3);
+
+    const combinedFilterResponse = await listIssues(address, "?status=In%20Progress&search=OAuth");
+    const combinedFiltered = await combinedFilterResponse.json();
+    expect(combinedFilterResponse.status).toBe(200);
+    expect(combinedFiltered).toEqual([
+      {
+        id: 2,
+        title: "In progress work",
+        description: "OAuth integration in progress",
+        status: "In Progress",
+        priority: "Medium",
+        createdAt: "2026-06-14T00:00:00.000Z",
+        updatedAt: "2026-06-14T00:00:00.000Z"
+      }
+    ]);
+
+    const emptyCombinedResponse = await listIssues(address, "?status=Todo&search=OAuth");
+    const emptyCombined = await emptyCombinedResponse.json();
+    expect(emptyCombinedResponse.status).toBe(200);
+    expect(emptyCombined).toEqual([]);
   });
 
   it("updates an issue by id", async () => {
@@ -358,6 +439,13 @@ describe("TinyTracker API", () => {
     await expect(badClosed.json()).resolves.toMatchObject({
       error: "Invalid request payload.",
       details: "closed must be true or false."
+    });
+
+    const badStatusFilter = await listIssues(address, "?status=Unknown");
+    expect(badStatusFilter.status).toBe(400);
+    await expect(badStatusFilter.json()).resolves.toMatchObject({
+      error: "Invalid request payload.",
+      details: "status must be Todo, In Progress, Review, or Done."
     });
   });
 

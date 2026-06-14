@@ -108,6 +108,47 @@ function parseCreateCommentBody(body: unknown): { body: string } {
   return { body: commentBody.trim() };
 }
 
+function parseIssueListQuery(query: unknown): {
+  status?: (typeof issueStatuses)[number];
+  search?: string;
+  title?: string;
+  description?: string;
+} {
+  if (!query || typeof query !== "object" || Array.isArray(query)) {
+    return {};
+  }
+
+  const typedQuery = query as Record<string, unknown>;
+  const status = typedQuery.status;
+  if (status !== undefined && !isIssueStatus(status)) {
+    throw new Error("status must be Todo, In Progress, Review, or Done.");
+  }
+
+  const searchRaw = typedQuery.search ?? typedQuery.q ?? typedQuery.query;
+  const search = typeof searchRaw === "string" ? searchRaw : undefined;
+  const title = typeof typedQuery.title === "string" ? typedQuery.title : undefined;
+  const description = typeof typedQuery.description === "string" ? typedQuery.description : undefined;
+
+  if (searchRaw !== undefined && typeof searchRaw !== "string") {
+    throw new Error("search must be a string.");
+  }
+
+  if (typedQuery.title !== undefined && typeof typedQuery.title !== "string") {
+    throw new Error("title must be a string.");
+  }
+
+  if (typedQuery.description !== undefined && typeof typedQuery.description !== "string") {
+    throw new Error("description must be a string.");
+  }
+
+  return {
+    status: status,
+    search,
+    title,
+    description
+  };
+}
+
 function parseCommentUpdateBody(body: unknown): { body: string } {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new Error("Request body must be an object.");
@@ -273,9 +314,18 @@ export function createApp({ repository: providedRepository }: CreateAppOptions =
     }
   });
 
-  app.get("/api/issues", (_request, response) => {
-    const issues = repository.listIssues();
-    response.status(200).json(issues);
+  app.get("/api/issues", (request, response) => {
+    try {
+      const filters = parseIssueListQuery(request.query);
+      const issues = repository.listIssues(filters);
+      response.status(200).json(issues);
+    } catch (error) {
+      if (error instanceof Error) {
+        createValidationError(response, error.message);
+        return;
+      }
+      throw error;
+    }
   });
 
   app.get("/api/issues/:id", (request, response) => {

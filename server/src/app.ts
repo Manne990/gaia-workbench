@@ -2,9 +2,13 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  type ActivityEvent,
   ActivityRepository,
+  type Comment,
+  type CommentEditHistory,
   CommentRepository,
   createDatabase,
+  type Issue,
   IssueListFilters,
   IssueRepository
 } from './db/index.js';
@@ -12,6 +16,20 @@ import {
 type AppConfig = {
   clientDir?: string;
   databasePath?: string;
+};
+
+type ExportedComment = Comment & {
+  editHistory: CommentEditHistory[];
+};
+
+type ExportedIssue = Issue & {
+  comments: ExportedComment[];
+  activityEvents: ActivityEvent[];
+};
+
+type TrackerExport = {
+  exportVersion: 1;
+  issues: ExportedIssue[];
 };
 
 const validationErrorMessages = new Set([
@@ -43,6 +61,28 @@ function getOptionalQueryString(value: unknown): string | undefined {
   return undefined;
 }
 
+function buildTrackerExport(
+  issueRepository: IssueRepository,
+  commentRepository: CommentRepository,
+  activityRepository: ActivityRepository
+): TrackerExport {
+  return {
+    exportVersion: 1,
+    issues: issueRepository.listForExport().map((issue) => {
+      const comments = commentRepository.listByIssueId(issue.id).map((comment) => ({
+        ...comment,
+        editHistory: commentRepository.getHistory(comment.id)
+      }));
+
+      return {
+        ...issue,
+        comments,
+        activityEvents: activityRepository.listByIssueId(issue.id)
+      };
+    })
+  };
+}
+
 export function createApp(config: AppConfig = {}) {
   const app = express();
   const clientDir = config.clientDir ? path.resolve(config.clientDir) : null;
@@ -59,6 +99,10 @@ export function createApp(config: AppConfig = {}) {
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok', service: 'TinyTracker' });
+  });
+
+  app.get('/api/export', (_req, res) => {
+    res.status(200).json(buildTrackerExport(issueRepository, commentRepository, activityRepository));
   });
 
   app.get('/api/issues', (req, res) => {

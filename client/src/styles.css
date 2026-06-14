@@ -45,22 +45,34 @@ body {
 button,
 input,
 textarea,
-select {
+select,
+.button-link {
   font: inherit;
 }
 
-button {
+button,
+.button-link {
   min-height: 38px;
   border: 0;
   border-radius: 8px;
-  cursor: pointer;
   font-weight: 800;
   letter-spacing: 0;
+}
+
+button {
+  cursor: pointer;
 }
 
 button:disabled {
   cursor: not-allowed;
   opacity: 0.58;
+}
+
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
 }
 
 .primary-button {
@@ -808,6 +820,7 @@ td > span:not(.pill) {
   }
 
   .header-actions .primary-button,
+  .header-actions .button-link,
   .form-actions button {
     width: 100%;
   }

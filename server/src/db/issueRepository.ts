@@ -14,6 +14,7 @@ type IssueRow = {
   status: IssueStatus;
   priority: IssuePriority;
   labels: string;
+  due_date: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -82,7 +83,45 @@ function parseLabels(value: string): string[] {
   }
 }
 
+function todayLocalDate(): string {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeDueDate(value: unknown): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error('Invalid issue due date');
+  }
+
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const isRealDate =
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day;
+
+  if (!isRealDate) {
+    throw new Error('Invalid issue due date');
+  }
+
+  return value;
+}
+
+function isIssueOverdue(dueDate: string | null, status: IssueStatus): boolean {
+  return dueDate !== null && status !== 'done' && dueDate < todayLocalDate();
+}
+
 function mapIssueRow(row: IssueRow): Issue {
+  const dueDate = normalizeDueDate(row.due_date);
+
   return {
     id: row.id,
     title: row.title,
@@ -90,6 +129,8 @@ function mapIssueRow(row: IssueRow): Issue {
     status: row.status,
     priority: row.priority,
     labels: parseLabels(row.labels),
+    dueDate,
+    isOverdue: isIssueOverdue(dueDate, row.status),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -113,17 +154,20 @@ export class IssueRepository {
       status: input.status ?? DEFAULT_STATUS,
       priority: input.priority ?? DEFAULT_PRIORITY,
       labels: normalizeLabels(input.labels),
+      dueDate: normalizeDueDate(input.dueDate),
+      isOverdue: false,
       createdAt: now,
       updatedAt: now
     };
 
     assertValidStatus(issue.status);
     assertValidPriority(issue.priority);
+    issue.isOverdue = isIssueOverdue(issue.dueDate, issue.status);
 
     this.database
       .prepare(`
-        INSERT INTO issues (id, title, description, status, priority, labels, created_at, updated_at)
-        VALUES (@id, @title, @description, @status, @priority, @labels, @createdAt, @updatedAt)
+        INSERT INTO issues (id, title, description, status, priority, labels, due_date, created_at, updated_at)
+        VALUES (@id, @title, @description, @status, @priority, @labels, @dueDate, @createdAt, @updatedAt)
       `)
       .run({
         id: issue.id,
@@ -132,6 +176,7 @@ export class IssueRepository {
         status: issue.status,
         priority: issue.priority,
         labels: JSON.stringify(issue.labels),
+        dueDate: issue.dueDate,
         createdAt: issue.createdAt,
         updatedAt: issue.updatedAt
       });
@@ -142,7 +187,7 @@ export class IssueRepository {
   getById(id: string): Issue | null {
     const row = this.database
       .prepare(`
-        SELECT id, title, description, status, priority, labels, created_at, updated_at
+        SELECT id, title, description, status, priority, labels, due_date, created_at, updated_at
         FROM issues
         WHERE id = @id
       `)
@@ -176,7 +221,7 @@ export class IssueRepository {
     const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
     const rows = this.database
       .prepare(`
-        SELECT id, title, description, status, priority, labels, created_at, updated_at
+        SELECT id, title, description, status, priority, labels, due_date, created_at, updated_at
         FROM issues
         ${whereClause}
         ORDER BY created_at DESC, id DESC
@@ -192,13 +237,14 @@ export class IssueRepository {
       input.description === undefined &&
       input.status === undefined &&
       input.priority === undefined &&
-      input.labels === undefined
+      input.labels === undefined &&
+      input.dueDate === undefined
     ) {
       return this.getById(id);
     }
 
     const fields: string[] = [];
-    const values: Record<string, string> = { id };
+    const values: Record<string, string | null> = { id };
 
     if (input.title !== undefined) {
       assertNonEmptyString(input.title, 'title');
@@ -226,6 +272,11 @@ export class IssueRepository {
     if (input.labels !== undefined) {
       fields.push('labels = @labels');
       values.labels = JSON.stringify(normalizeLabels(input.labels));
+    }
+
+    if (input.dueDate !== undefined) {
+      fields.push('due_date = @dueDate');
+      values.dueDate = normalizeDueDate(input.dueDate);
     }
 
     const updatedAt = nowIso();

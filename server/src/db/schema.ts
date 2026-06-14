@@ -8,6 +8,7 @@ const createIssuesTable = `
     status TEXT NOT NULL CHECK (status IN ('todo', 'in_progress', 'review', 'done')),
     priority TEXT NOT NULL CHECK (priority IN ('low', 'medium', 'high')),
     labels TEXT NOT NULL DEFAULT '[]',
+    due_date TEXT DEFAULT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -33,19 +34,20 @@ const createCommentEditHistoryTable = `
   );
 `;
 
-function ensureIssueLabelsColumn(database: Database.Database): void {
+function ensureIssueColumn(database: Database.Database, columnName: string, definition: string): void {
   const columns = database.prepare('PRAGMA table_info(issues)').all() as Array<{ name: string }>;
-  const hasLabels = columns.some((column) => column.name === 'labels');
+  const hasColumn = columns.some((column) => column.name === columnName);
 
-  if (!hasLabels) {
-    database.exec("ALTER TABLE issues ADD COLUMN labels TEXT NOT NULL DEFAULT '[]';");
+  if (!hasColumn) {
+    database.exec(`ALTER TABLE issues ADD COLUMN ${definition};`);
   }
 }
 
 export function ensureTinyTrackerSchema(database: Database.Database): void {
   database.pragma('foreign_keys = ON');
   database.exec(createIssuesTable);
-  ensureIssueLabelsColumn(database);
+  ensureIssueColumn(database, 'labels', "labels TEXT NOT NULL DEFAULT '[]'");
+  ensureIssueColumn(database, 'due_date', 'due_date TEXT DEFAULT NULL');
   database.exec(createCommentsTable);
   database.exec(createCommentEditHistoryTable);
 }

@@ -24,7 +24,8 @@ describe('persistence layer', () => {
         title: '  Add issue storage  ',
         description: 'Persist issues',
         priority: 'high',
-        labels: ['bug', ' storage ', 'bug']
+        labels: ['bug', ' storage ', 'bug'],
+        dueDate: '2999-12-31'
       });
 
       expect(created).toMatchObject({
@@ -32,7 +33,9 @@ describe('persistence layer', () => {
         description: 'Persist issues',
         status: 'todo',
         priority: 'high',
-        labels: ['bug', 'storage']
+        labels: ['bug', 'storage'],
+        dueDate: '2999-12-31',
+        isOverdue: false
       });
 
       const secondRepository = new IssueRepository(database);
@@ -43,7 +46,8 @@ describe('persistence layer', () => {
         status: 'in_progress',
         priority: 'medium',
         description: 'Persist issues in SQLite',
-        labels: ['api', 'docs']
+        labels: ['api', 'docs'],
+        dueDate: '2000-01-01'
       });
 
       expect(updated).toMatchObject({
@@ -51,7 +55,9 @@ describe('persistence layer', () => {
         status: 'in_progress',
         priority: 'medium',
         description: 'Persist issues in SQLite',
-        labels: ['api', 'docs']
+        labels: ['api', 'docs'],
+        dueDate: '2000-01-01',
+        isOverdue: true
       });
 
       expect(secondRepository.list()).toHaveLength(1);
@@ -69,7 +75,8 @@ describe('persistence layer', () => {
       const firstRepository = new IssueRepository(firstDatabase);
       const created = firstRepository.create({
         title: 'Restart labels',
-        labels: ['ui', 'persistence']
+        labels: ['ui', 'persistence'],
+        dueDate: '2999-12-31'
       });
 
       firstDatabase.close();
@@ -80,7 +87,9 @@ describe('persistence layer', () => {
       try {
         expect(secondRepository.getById(created.id)).toMatchObject({
           id: created.id,
-          labels: ['ui', 'persistence']
+          labels: ['ui', 'persistence'],
+          dueDate: '2999-12-31',
+          isOverdue: false
         });
       } finally {
         secondDatabase.close();
@@ -118,6 +127,18 @@ describe('persistence layer', () => {
         })
       ).toThrow('Invalid issue labels');
       expect(() => issueRepository.update(issue.id, { labels: [''] })).toThrow('Invalid issue labels');
+      expect(() =>
+        issueRepository.update(issue.id, {
+          // @ts-expect-error intentionally invalid for runtime validation
+          dueDate: 20260615
+        })
+      ).toThrow('Invalid issue due date');
+      expect(() => issueRepository.update(issue.id, { dueDate: '2026-02-30' })).toThrow(
+        'Invalid issue due date'
+      );
+      expect(() => issueRepository.update(issue.id, { dueDate: 'tomorrow' })).toThrow(
+        'Invalid issue due date'
+      );
       expect(() => commentRepository.create({ issueId: issue.id, body: '' })).toThrow('body is required');
     } finally {
       database.close();
@@ -165,6 +186,44 @@ describe('persistence layer', () => {
         id: issue.id,
         status: 'todo',
         priority: 'high'
+      });
+    } finally {
+      database.close();
+    }
+  });
+
+  it('derives overdue state from due date and status', () => {
+    const database = createDatabase(':memory:');
+    const issueRepository = new IssueRepository(database);
+
+    try {
+      const withoutDueDate = issueRepository.create({ title: 'No due date' });
+      const overdue = issueRepository.create({
+        title: 'Past due active issue',
+        dueDate: '2000-01-01'
+      });
+      const donePastDue = issueRepository.create({
+        title: 'Past due done issue',
+        status: 'done',
+        dueDate: '2000-01-01'
+      });
+      const future = issueRepository.create({
+        title: 'Future issue',
+        dueDate: '2999-12-31'
+      });
+
+      expect(withoutDueDate).toMatchObject({ dueDate: null, isOverdue: false });
+      expect(overdue).toMatchObject({ dueDate: '2000-01-01', isOverdue: true });
+      expect(donePastDue).toMatchObject({ dueDate: '2000-01-01', isOverdue: false });
+      expect(future).toMatchObject({ dueDate: '2999-12-31', isOverdue: false });
+
+      expect(issueRepository.update(overdue.id, { status: 'done' })).toMatchObject({
+        dueDate: '2000-01-01',
+        isOverdue: false
+      });
+      expect(issueRepository.update(donePastDue.id, { dueDate: null })).toMatchObject({
+        dueDate: null,
+        isOverdue: false
       });
     } finally {
       database.close();

@@ -18,6 +18,7 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   await issueForm.getByLabel('Title').fill('Create issue from UI');
   await issueForm.getByLabel('Description').fill('Created through the dashboard form.');
   await issueForm.getByLabel('Labels').fill('ui, bug, ui');
+  await issueForm.getByLabel('Due Date').fill('2000-01-01');
   await issueForm.getByLabel('Status').selectOption('review');
   await issueForm.getByLabel('Priority').selectOption('high');
   await page.getByRole('button', { name: 'Create Issue' }).click();
@@ -26,6 +27,7 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   await expect(createdRow).toBeVisible();
   await expect(createdRow.locator('.label-pill').getByText('ui', { exact: true })).toBeVisible();
   await expect(createdRow.locator('.label-pill').getByText('bug', { exact: true })).toBeVisible();
+  await expect(createdRow.locator('.overdue-pill')).toHaveText('Overdue');
   await expect(page.getByText('1 high priority')).toBeVisible();
 
   await page.getByRole('button', { name: 'Edit Create issue from UI' }).click();
@@ -40,6 +42,7 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   await expect(updatedRow).toBeVisible();
   await expect(updatedRow.locator('.label-pill').getByText('docs', { exact: true })).toBeVisible();
   await expect(updatedRow.locator('.label-pill').getByText('api', { exact: true })).toBeVisible();
+  await expect(updatedRow.locator('.overdue-pill')).toHaveCount(0);
   await expect(page.getByText('Create issue from UI')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Open Edit issue from UI' }).click();
@@ -49,6 +52,7 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   await expect(detail.getByText('Updated through the dashboard form.')).toBeVisible();
   await expect(detail.getByLabel('Issue labels').getByText('docs')).toBeVisible();
   await expect(detail.getByLabel('Issue labels').getByText('api')).toBeVisible();
+  await expect(detail.locator('.detail-overdue')).toHaveCount(0);
   await expect(detail.getByText('No comments yet.')).toBeVisible();
 
   const commentForm = page.getByRole('form', { name: 'Comment form' });

@@ -12,6 +12,8 @@ type Issue = {
   status: IssueStatus;
   priority: IssuePriority;
   labels: string[];
+  dueDate: string | null;
+  isOverdue: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -42,6 +44,7 @@ type IssueFormValues = {
   status: IssueStatus;
   priority: IssuePriority;
   labels: string;
+  dueDate: string;
 };
 
 type ActiveForm = {
@@ -70,7 +73,8 @@ const emptyFormValues: IssueFormValues = {
   description: '',
   status: 'todo',
   priority: 'medium',
-  labels: ''
+  labels: '',
+  dueDate: ''
 };
 
 function formatDate(value: string): string {
@@ -80,6 +84,16 @@ function formatDate(value: string): string {
     hour: 'numeric',
     minute: '2-digit'
   }).format(new Date(value));
+}
+
+function formatDueDate(value: string): string {
+  const [year, month, day] = value.split('-').map(Number);
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  }).format(new Date(year, month - 1, day));
 }
 
 async function fetchCommentHistory(
@@ -119,6 +133,31 @@ function parseLabelsInput(value: string): string[] {
   }
 
   return labels;
+}
+
+function parseDueDateInput(value: string): string | null {
+  const dueDate = value.trim();
+
+  if (!dueDate) {
+    return null;
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+    throw new Error('Due date must be a valid date.');
+  }
+
+  const [year, month, day] = dueDate.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const isRealDate =
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day;
+
+  if (!isRealDate) {
+    throw new Error('Due date must be a valid date.');
+  }
+
+  return dueDate;
 }
 
 export function App() {
@@ -245,7 +284,8 @@ export function App() {
       description: issue.description,
       status: issue.status,
       priority: issue.priority,
-      labels: issue.labels.join(', ')
+      labels: issue.labels.join(', '),
+      dueDate: issue.dueDate ?? ''
     });
     setFormError(null);
   }
@@ -283,11 +323,13 @@ export function App() {
     }
 
     let labels: string[];
+    let dueDate: string | null;
 
     try {
       labels = parseLabelsInput(formValues.labels);
+      dueDate = parseDueDateInput(formValues.dueDate);
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Invalid issue labels');
+      setFormError(error instanceof Error ? error.message : 'Invalid issue form values');
       return;
     }
 
@@ -299,7 +341,8 @@ export function App() {
       description: formValues.description.trim(),
       status: formValues.status,
       priority: formValues.priority,
-      labels
+      labels,
+      dueDate
     };
     const endpoint =
       activeForm.mode === 'create' ? '/api/issues' : `/api/issues/${activeForm.issueId}`;
@@ -502,6 +545,19 @@ export function App() {
                 />
               </label>
 
+              <label htmlFor="issue-due-date">
+                <span>Due Date</span>
+                <input
+                  id="issue-due-date"
+                  type="date"
+                  value={formValues.dueDate}
+                  onChange={(event) =>
+                    setFormValues({ ...formValues, dueDate: event.target.value })
+                  }
+                  disabled={isSubmitting}
+                />
+              </label>
+
               <label htmlFor="issue-status">
                 <span>Status</span>
                 <select
@@ -585,13 +641,14 @@ export function App() {
                     <th scope="col">Issue</th>
                     <th scope="col">Status</th>
                     <th scope="col">Priority</th>
+                    <th scope="col">Due</th>
                     <th scope="col">Updated</th>
                     <th scope="col">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {issues.map((issue) => (
-                    <tr key={issue.id}>
+                    <tr key={issue.id} className={issue.isOverdue ? 'overdue-row' : undefined}>
                       <td>
                         <strong>{issue.title}</strong>
                         {issue.description ? <span>{issue.description}</span> : null}
@@ -610,6 +667,14 @@ export function App() {
                       </td>
                       <td>
                         <span className={`pill priority-${issue.priority}`}>{priorityLabels[issue.priority]}</span>
+                      </td>
+                      <td>
+                        <div className="due-date-cell">
+                          <span className={issue.isOverdue ? 'due-date-text overdue' : 'due-date-text'}>
+                            {issue.dueDate ? formatDueDate(issue.dueDate) : 'No due date'}
+                          </span>
+                          {issue.isOverdue ? <span className="overdue-pill">Overdue</span> : null}
+                        </div>
                       </td>
                       <td>{formatDate(issue.updatedAt)}</td>
                       <td>
@@ -661,6 +726,13 @@ export function App() {
                 <div>
                   <span>Priority</span>
                   <strong>{priorityLabels[selectedIssue.priority]}</strong>
+                </div>
+                <div className={selectedIssue.isOverdue ? 'detail-overdue' : undefined}>
+                  <span>Due</span>
+                  <strong>
+                    {selectedIssue.dueDate ? formatDueDate(selectedIssue.dueDate) : 'No due date'}
+                  </strong>
+                  {selectedIssue.isOverdue ? <em>Overdue</em> : null}
                 </div>
                 <div>
                   <span>Created</span>

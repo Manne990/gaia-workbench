@@ -31,6 +31,7 @@ function parseCreateBody(body: unknown): {
   description: string;
   status?: (typeof issueStatuses)[number];
   priority?: (typeof issuePriorities)[number];
+  closed?: boolean;
 } {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new Error("Request body must be an object.");
@@ -58,11 +59,22 @@ function parseCreateBody(body: unknown): {
     throw new Error("priority must be Low, Medium, or High.");
   }
 
+  const closed = parseIssueClosedField(typedBody.closed);
+  if (closed !== undefined) {
+    if (status !== undefined && status !== (closed ? "Done" : "Todo")) {
+      throw new Error("status must be consistent with closed.");
+    }
+  }
+
   return {
     title: title.trim(),
     description: description ?? "",
-    status: status as (typeof issueStatuses)[number] | undefined,
-    priority: priority as (typeof issuePriorities)[number] | undefined
+    status: resolveClosedStatus({
+      status: status as (typeof issueStatuses)[number] | undefined,
+      closed
+    }),
+    priority: priority as (typeof issuePriorities)[number] | undefined,
+    closed
   };
 }
 
@@ -72,7 +84,7 @@ function parseUpdateBody(body: unknown): UpdateIssueInput {
   }
 
   const typedBody = body as Record<string, unknown>;
-  const allowed = new Set(["title", "description", "status", "priority"]);
+  const allowed = new Set(["title", "description", "status", "priority", "closed"]);
   const extraKeys = Object.keys(typedBody).filter((key) => !allowed.has(key));
   if (extraKeys.length > 0) {
     throw new Error(`Unknown fields: ${extraKeys.join(", ")}.`);
@@ -117,7 +129,46 @@ function parseUpdateBody(body: unknown): UpdateIssueInput {
     input.priority = priority;
   }
 
+  if ("closed" in typedBody) {
+    const closed = parseIssueClosedField(typedBody.closed);
+    const status = resolveClosedStatus({
+      status: input.status,
+      closed
+    });
+    if ("status" in typedBody && status !== input.status) {
+      throw new Error("status must be consistent with closed.");
+    }
+    input.closed = closed;
+    input.status = status;
+  }
+
   return input;
+}
+
+function parseIssueClosedField(value: unknown): boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "boolean") {
+    throw new Error("closed must be true or false.");
+  }
+
+  return value;
+}
+
+function resolveClosedStatus({
+  status,
+  closed
+}: {
+  status?: (typeof issueStatuses)[number];
+  closed?: boolean;
+}): (typeof issueStatuses)[number] | undefined {
+  if (closed === undefined) {
+    return status;
+  }
+
+  return closed ? "Done" : "Todo";
 }
 
 function createValidationError(response: Response, message: string) {

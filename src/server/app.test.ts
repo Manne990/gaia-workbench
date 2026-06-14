@@ -140,6 +140,62 @@ describe("TinyTracker API", () => {
     });
   });
 
+  it("supports close and reopen through status updates and explicit closed field", async () => {
+    const address = await startTestServer();
+    const createResponse = await createIssue(address, repositoryIssueFixture());
+    const issue = await createResponse.json();
+
+    const closeByStatus = await fetch(`http://127.0.0.1:${address.port}/api/issues/${issue.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ status: "Done" })
+    });
+    const closedIssue = await closeByStatus.json();
+    expect(closeByStatus.status).toBe(200);
+    expect(closedIssue).toMatchObject({ id: issue.id, status: "Done" });
+
+    const reopenByStatus = await fetch(`http://127.0.0.1:${address.port}/api/issues/${issue.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ status: "Todo" })
+    });
+    const reopenedIssue = await reopenByStatus.json();
+    expect(reopenByStatus.status).toBe(200);
+    expect(reopenedIssue).toMatchObject({ id: issue.id, status: "Todo" });
+
+    const closeByExplicitField = await fetch(
+      `http://127.0.0.1:${address.port}/api/issues/${issue.id}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ closed: true })
+      }
+    );
+    const explicitClosedIssue = await closeByExplicitField.json();
+    expect(closeByExplicitField.status).toBe(200);
+    expect(explicitClosedIssue).toMatchObject({ id: issue.id, status: "Done" });
+
+    const reopenByExplicitField = await fetch(
+      `http://127.0.0.1:${address.port}/api/issues/${issue.id}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ closed: false })
+      }
+    );
+    const explicitOpenIssue = await reopenByExplicitField.json();
+    expect(reopenByExplicitField.status).toBe(200);
+    expect(explicitOpenIssue).toMatchObject({ id: issue.id, status: "Todo" });
+  });
+
   it("returns 404 for unknown issue IDs", async () => {
     const address = await startTestServer();
 
@@ -185,6 +241,18 @@ describe("TinyTracker API", () => {
       error: "Invalid request payload.",
       details: "priority must be Low, Medium, or High."
     });
+
+    const badClosed = await fetch(`http://127.0.0.1:${address.port}/api/issues/${issue.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ closed: "yes" })
+    });
+    expect(badClosed.status).toBe(400);
+    await expect(badClosed.json()).resolves.toMatchObject({
+      error: "Invalid request payload.",
+      details: "closed must be true or false."
+    });
   });
 });
-

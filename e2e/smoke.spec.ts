@@ -33,4 +33,30 @@ test('TinyTracker dashboard creates and edits issues', async ({ page }) => {
 
   await expect(page.getByRole('row', { name: /Edit issue from UI.*Done.*Low/ })).toBeVisible();
   await expect(page.getByText('Create issue from UI')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Open Edit issue from UI' }).click();
+  const detail = page.getByRole('region', { name: 'Edit issue from UI' });
+
+  await expect(detail.getByRole('heading', { name: 'Edit issue from UI' })).toBeVisible();
+  await expect(detail.getByText('Updated through the dashboard form.')).toBeVisible();
+  await expect(detail.getByText('No comments yet.')).toBeVisible();
+
+  const commentForm = page.getByRole('form', { name: 'Comment form' });
+
+  await commentForm.getByRole('button', { name: 'Add Comment' }).click();
+  await expect(commentForm.getByRole('alert')).toHaveText('Comment is required.');
+
+  await commentForm.getByLabel('New comment').fill('Initial detail comment');
+  await commentForm.getByRole('button', { name: 'Add Comment' }).click();
+  await expect(page.getByLabel('Issue comments').getByText('Initial detail comment')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Edit comment Initial detail comment' }).click();
+  const editCommentForm = page.getByRole('form', { name: 'Edit comment form' });
+
+  await editCommentForm.getByLabel('Comment').fill('Edited detail comment');
+  await editCommentForm.getByRole('button', { name: 'Save Comment' }).click();
+
+  await expect(page.getByLabel('Issue comments').getByText('Edited detail comment')).toBeVisible();
+  await expect(page.getByText('1 edit')).toBeVisible();
+  await expect(page.getByText('Previous: Initial detail comment')).toBeVisible();
 });

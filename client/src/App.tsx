@@ -15,7 +15,24 @@ type Issue = {
   updatedAt: string;
 };
 
+type Comment = {
+  id: string;
+  issueId: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type CommentEditHistory = {
+  id: string;
+  commentId: string;
+  previousBody: string;
+  newBody: string;
+  editedAt: string;
+};
+
 type LoadState = 'loading' | 'loaded' | 'error';
+type CommentLoadState = LoadState | 'idle';
 type FormMode = 'create' | 'edit';
 
 type IssueFormValues = {
@@ -62,13 +79,37 @@ function formatDate(value: string): string {
   }).format(new Date(value));
 }
 
+async function fetchCommentHistory(
+  commentId: string,
+  signal?: AbortSignal
+): Promise<CommentEditHistory[]> {
+  const response = await fetch(`/api/comments/${commentId}/history`, { signal });
+
+  if (!response.ok) {
+    throw new Error('Comment history request failed');
+  }
+
+  return (await response.json()) as CommentEditHistory[];
+}
+
 export function App() {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loadState, setLoadState] = useState<LoadState>('loading');
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [activeForm, setActiveForm] = useState<ActiveForm | null>(null);
   const [formValues, setFormValues] = useState<IssueFormValues>(emptyFormValues);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentHistory, setCommentHistory] = useState<Record<string, CommentEditHistory[]>>({});
+  const [commentLoadState, setCommentLoadState] = useState<CommentLoadState>('idle');
+  const [commentBody, setCommentBody] = useState('');
+  const [commentError, setCommentError] = useState<string | null>(null);
+  const [isCommentSubmitting, setIsCommentSubmitting] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editCommentBody, setEditCommentBody] = useState('');
+  const [editCommentError, setEditCommentError] = useState<string | null>(null);
+  const [isCommentEditing, setIsCommentEditing] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -94,6 +135,62 @@ export function App() {
 
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    if (!selectedIssueId) {
+      setComments([]);
+      setCommentHistory({});
+      setCommentLoadState('idle');
+      return;
+    }
+
+    const controller = new AbortController();
+
+    async function loadComments() {
+      setCommentLoadState('loading');
+      setCommentError(null);
+      setEditingCommentId(null);
+      setEditCommentError(null);
+
+      try {
+        const response = await fetch(`/api/issues/${selectedIssueId}/comments`, {
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          throw new Error('Comment request failed');
+        }
+
+        const loadedComments = (await response.json()) as Comment[];
+        const historyPairs = await Promise.all(
+          loadedComments.map(async (comment) => {
+            const history = await fetchCommentHistory(comment.id, controller.signal).catch(() => []);
+            return [comment.id, history] as const;
+          })
+        );
+
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setComments(loadedComments);
+        setCommentHistory(Object.fromEntries(historyPairs));
+        setCommentLoadState('loaded');
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setCommentLoadState('error');
+        }
+      }
+    }
+
+    void loadComments();
+
+    return () => controller.abort();
+  }, [selectedIssueId]);
+
+  const selectedIssue = useMemo(() => {
+    return issues.find((issue) => issue.id === selectedIssueId) ?? null;
+  }, [issues, selectedIssueId]);
 
   const statusCounts = useMemo(() => {
     return statusOrder.map((status) => ({
@@ -127,6 +224,20 @@ export function App() {
     setActiveForm(null);
     setFormValues(emptyFormValues);
     setFormError(null);
+  }
+
+  function openIssue(issue: Issue) {
+    setSelectedIssueId(issue.id);
+    cancelForm();
+  }
+
+  function closeIssueDetail() {
+    setSelectedIssueId(null);
+    setCommentBody('');
+    setCommentError(null);
+    setEditingCommentId(null);
+    setEditCommentBody('');
+    setEditCommentError(null);
   }
 
   async function submitIssue(event: FormEvent<HTMLFormElement>) {
@@ -178,6 +289,102 @@ export function App() {
       setFormError(error instanceof Error ? error.message : 'Issue save failed');
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function submitComment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const body = commentBody.trim();
+
+    if (body.length === 0) {
+      setCommentError('Comment is required.');
+      return;
+    }
+
+    if (!selectedIssue) {
+      return;
+    }
+
+    setIsCommentSubmitting(true);
+    setCommentError(null);
+
+    try {
+      const response = await fetch(`/api/issues/${selectedIssue.id}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body })
+      });
+
+      if (!response.ok) {
+        const responseBody = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(responseBody?.error ?? 'Comment save failed');
+      }
+
+      const savedComment = (await response.json()) as Comment;
+      setComments((current) => [...current, savedComment]);
+      setCommentHistory((current) => ({ ...current, [savedComment.id]: [] }));
+      setCommentBody('');
+      setCommentLoadState('loaded');
+    } catch (error) {
+      setCommentError(error instanceof Error ? error.message : 'Comment save failed');
+    } finally {
+      setIsCommentSubmitting(false);
+    }
+  }
+
+  function startEditComment(comment: Comment) {
+    setEditingCommentId(comment.id);
+    setEditCommentBody(comment.body);
+    setEditCommentError(null);
+  }
+
+  function cancelEditComment() {
+    setEditingCommentId(null);
+    setEditCommentBody('');
+    setEditCommentError(null);
+  }
+
+  async function submitCommentEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const body = editCommentBody.trim();
+
+    if (body.length === 0) {
+      setEditCommentError('Comment is required.');
+      return;
+    }
+
+    if (!editingCommentId) {
+      return;
+    }
+
+    setIsCommentEditing(true);
+    setEditCommentError(null);
+
+    try {
+      const response = await fetch(`/api/comments/${editingCommentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body })
+      });
+
+      if (!response.ok) {
+        const responseBody = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(responseBody?.error ?? 'Comment update failed');
+      }
+
+      const savedComment = (await response.json()) as Comment;
+      const history = await fetchCommentHistory(savedComment.id);
+      setComments((current) =>
+        current.map((comment) => (comment.id === savedComment.id ? savedComment : comment))
+      );
+      setCommentHistory((current) => ({ ...current, [savedComment.id]: history }));
+      cancelEditComment();
+    } catch (error) {
+      setEditCommentError(error instanceof Error ? error.message : 'Comment update failed');
+    } finally {
+      setIsCommentEditing(false);
     }
   }
 
@@ -346,14 +553,24 @@ export function App() {
                       </td>
                       <td>{formatDate(issue.updatedAt)}</td>
                       <td>
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={() => startEdit(issue)}
-                          aria-label={`Edit ${issue.title}`}
-                        >
-                          Edit
-                        </button>
+                        <div className="row-actions">
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={() => openIssue(issue)}
+                            aria-label={`Open ${issue.title}`}
+                          >
+                            Open
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={() => startEdit(issue)}
+                            aria-label={`Edit ${issue.title}`}
+                          >
+                            Edit
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -362,6 +579,191 @@ export function App() {
             </div>
           ) : null}
         </section>
+
+        {selectedIssue ? (
+          <section className="detail-panel" aria-labelledby="issue-detail-heading">
+            <div className="panel-header">
+              <div>
+                <h2 id="issue-detail-heading">{selectedIssue.title}</h2>
+                <p>Updated {formatDate(selectedIssue.updatedAt)}</p>
+              </div>
+              <button type="button" className="secondary-button" onClick={closeIssueDetail}>
+                Close
+              </button>
+            </div>
+
+            <div className="detail-content">
+              <div className="issue-detail-grid" aria-label="Issue details">
+                <div>
+                  <span>Status</span>
+                  <strong>{statusLabels[selectedIssue.status]}</strong>
+                </div>
+                <div>
+                  <span>Priority</span>
+                  <strong>{priorityLabels[selectedIssue.priority]}</strong>
+                </div>
+                <div>
+                  <span>Created</span>
+                  <strong>{formatDate(selectedIssue.createdAt)}</strong>
+                </div>
+                <div>
+                  <span>Comments</span>
+                  <strong>{comments.length}</strong>
+                </div>
+              </div>
+
+              <p
+                className={selectedIssue.description ? 'detail-description' : 'detail-description muted'}
+              >
+                {selectedIssue.description || 'No description.'}
+              </p>
+
+              <section className="comments-section" aria-labelledby="comments-heading">
+                <div className="comments-header">
+                  <h3 id="comments-heading">Comments</h3>
+                  <span>{comments.length}</span>
+                </div>
+
+                {commentLoadState === 'loading' ? (
+                  <div className="state-message compact" role="status">
+                    Loading comments...
+                  </div>
+                ) : null}
+
+                {commentLoadState === 'error' ? (
+                  <div className="state-message compact error" role="alert">
+                    Unable to load comments.
+                  </div>
+                ) : null}
+
+                {commentLoadState === 'loaded' && comments.length === 0 ? (
+                  <div className="state-message compact">No comments yet.</div>
+                ) : null}
+
+                <form className="comment-form" aria-label="Comment form" onSubmit={submitComment}>
+                  <label htmlFor="comment-body">
+                    <span>New comment</span>
+                    <textarea
+                      id="comment-body"
+                      value={commentBody}
+                      onChange={(event) => setCommentBody(event.target.value)}
+                      disabled={isCommentSubmitting || commentLoadState === 'loading'}
+                      rows={3}
+                    />
+                  </label>
+
+                  {commentError ? (
+                    <div className="form-error" role="alert">
+                      {commentError}
+                    </div>
+                  ) : null}
+
+                  <div className="form-actions">
+                    <button
+                      type="submit"
+                      className="primary-button"
+                      disabled={isCommentSubmitting || commentLoadState === 'loading'}
+                    >
+                      Add Comment
+                    </button>
+                  </div>
+                </form>
+
+                {comments.length > 0 ? (
+                  <ul className="comment-list" aria-label="Issue comments">
+                    {comments.map((comment) => {
+                      const history = commentHistory[comment.id] ?? [];
+                      const isEditingComment = editingCommentId === comment.id;
+
+                      return (
+                        <li key={comment.id} className="comment-item">
+                          <div className="comment-meta">
+                            <strong>{formatDate(comment.updatedAt)}</strong>
+                            {comment.updatedAt !== comment.createdAt ? <span>Edited</span> : null}
+                          </div>
+
+                          {isEditingComment ? (
+                            <form
+                              className="comment-edit-form"
+                              aria-label="Edit comment form"
+                              onSubmit={submitCommentEdit}
+                            >
+                              <label htmlFor={`comment-edit-${comment.id}`}>
+                                <span>Comment</span>
+                                <textarea
+                                  id={`comment-edit-${comment.id}`}
+                                  value={editCommentBody}
+                                  onChange={(event) => setEditCommentBody(event.target.value)}
+                                  disabled={isCommentEditing}
+                                  rows={3}
+                                />
+                              </label>
+
+                              {editCommentError ? (
+                                <div className="form-error" role="alert">
+                                  {editCommentError}
+                                </div>
+                              ) : null}
+
+                              <div className="form-actions">
+                                <button
+                                  type="submit"
+                                  className="primary-button"
+                                  disabled={isCommentEditing}
+                                >
+                                  Save Comment
+                                </button>
+                                <button
+                                  type="button"
+                                  className="secondary-button"
+                                  onClick={cancelEditComment}
+                                  disabled={isCommentEditing}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </form>
+                          ) : (
+                            <>
+                              <p>{comment.body}</p>
+                              <div className="comment-actions">
+                                <button
+                                  type="button"
+                                  className="ghost-button"
+                                  onClick={() => startEditComment(comment)}
+                                  aria-label={`Edit comment ${comment.body}`}
+                                  disabled={isCommentEditing}
+                                >
+                                  Edit
+                                </button>
+                              </div>
+                            </>
+                          )}
+
+                          {history.length > 0 ? (
+                            <div className="comment-history" aria-label="Comment edit history">
+                              <strong>
+                                {history.length} {history.length === 1 ? 'edit' : 'edits'}
+                              </strong>
+                              <ul>
+                                {history.map((entry) => (
+                                  <li key={entry.id}>
+                                    <span>{formatDate(entry.editedAt)}</span>
+                                    <p>Previous: {entry.previousBody}</p>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
+              </section>
+            </div>
+          </section>
+        ) : null}
       </section>
     </main>
   );

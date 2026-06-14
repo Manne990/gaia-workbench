@@ -168,6 +168,14 @@ h1 {
   overflow: hidden;
 }
 
+.detail-panel {
+  margin-top: 24px;
+  border: 1px solid #d7dde3;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
 .panel-header {
   display: flex;
   align-items: center;
@@ -180,6 +188,12 @@ h1 {
 h2 {
   margin: 0;
   font-size: 1.15rem;
+  line-height: 1.2;
+}
+
+h3 {
+  margin: 0;
+  font-size: 1rem;
   line-height: 1.2;
 }
 
@@ -240,7 +254,9 @@ h2 {
 
 .issue-form input:focus,
 .issue-form textarea:focus,
-.issue-form select:focus {
+.issue-form select:focus,
+.comment-form textarea:focus,
+.comment-edit-form textarea:focus {
   border-color: #2f6f73;
   outline: 3px solid #d9ecee;
 }
@@ -268,6 +284,10 @@ h2 {
   padding: 32px 20px;
   color: #59636e;
   font-weight: 700;
+}
+
+.state-message.compact {
+  padding: 18px 0;
 }
 
 .state-message.error {
@@ -315,6 +335,12 @@ td > span:not(.pill) {
   max-width: 52ch;
   color: #64707c;
   line-height: 1.45;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .pill {
@@ -365,6 +391,179 @@ td > span:not(.pill) {
   color: #9a2f2f;
 }
 
+.detail-content {
+  padding: 20px;
+}
+
+.issue-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.issue-detail-grid div {
+  min-height: 82px;
+  padding: 14px;
+  border: 1px solid #e4e8ec;
+  border-radius: 8px;
+  background: #f8fafb;
+}
+
+.issue-detail-grid span,
+.comment-form label span,
+.comment-edit-form label span,
+.comment-history span {
+  display: block;
+  color: #59636e;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.issue-detail-grid strong {
+  display: block;
+  margin-top: 12px;
+  color: #15181c;
+  font-size: 1.1rem;
+}
+
+.detail-description {
+  margin: 18px 0 0;
+  color: #30363d;
+  line-height: 1.55;
+}
+
+.detail-description.muted {
+  color: #64707c;
+  font-weight: 700;
+}
+
+.comments-section {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid #e4e8ec;
+}
+
+.comments-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.comments-header span {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 999px;
+  background: #edf1f5;
+  color: #52606d;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.comment-form,
+.comment-edit-form {
+  display: grid;
+  gap: 12px;
+}
+
+.comment-form {
+  margin-top: 16px;
+}
+
+.comment-form label,
+.comment-edit-form label {
+  display: block;
+}
+
+.comment-form label span,
+.comment-edit-form label span {
+  margin-bottom: 7px;
+}
+
+.comment-form textarea,
+.comment-edit-form textarea {
+  width: 100%;
+  min-height: 92px;
+  padding: 10px 11px;
+  border: 1px solid #cfd6dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #15181c;
+  resize: vertical;
+}
+
+.comment-list {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.comment-item {
+  padding: 14px;
+  border: 1px solid #e4e8ec;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.comment-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #59636e;
+  font-size: 0.82rem;
+}
+
+.comment-meta strong,
+.comment-meta span {
+  font-weight: 800;
+}
+
+.comment-item p {
+  margin: 10px 0 0;
+  color: #30363d;
+  line-height: 1.5;
+}
+
+.comment-actions {
+  margin-top: 12px;
+}
+
+.comment-history {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #e4e8ec;
+}
+
+.comment-history > strong {
+  color: #245d61;
+  font-size: 0.86rem;
+}
+
+.comment-history ul {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.comment-history li {
+  padding: 10px;
+  border-radius: 8px;
+  background: #eef5f6;
+}
+
+.comment-history p {
+  margin-top: 5px;
+  color: #4c5661;
+  font-size: 0.9rem;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     padding: 32px 16px;
@@ -402,6 +601,10 @@ td > span:not(.pill) {
     grid-template-columns: 1fr;
   }
 
+  .issue-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   th,
   td {
     padding: 14px 16px;
@@ -410,6 +613,10 @@ td > span:not(.pill) {
 
 @media (max-width: 460px) {
   .status-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .issue-detail-grid {
     grid-template-columns: 1fr;
   }
 }

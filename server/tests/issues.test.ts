@@ -64,6 +64,33 @@ describe('issues API', () => {
     });
   });
 
+  it('closes and reopens issues through workflow endpoints', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const created = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Workflow issue', status: 'review', priority: 'high' })
+      .expect(201);
+
+    const closed = await request(app).post(`/api/issues/${created.body.id}/close`).expect(200);
+
+    expect(closed.body).toMatchObject({
+      id: created.body.id,
+      title: 'Workflow issue',
+      status: 'done',
+      priority: 'high'
+    });
+
+    const reopened = await request(app).post(`/api/issues/${created.body.id}/reopen`).expect(200);
+
+    expect(reopened.body).toMatchObject({
+      id: created.body.id,
+      title: 'Workflow issue',
+      status: 'todo',
+      priority: 'high'
+    });
+  });
+
   it('returns validation errors for invalid issue payloads', async () => {
     const app = createApp({ databasePath: ':memory:' });
 
@@ -89,6 +116,14 @@ describe('issues API', () => {
     });
 
     await request(app).put('/api/issues/not-found').send({ title: 'Nope' }).expect(404, {
+      error: 'Issue not found'
+    });
+
+    await request(app).post('/api/issues/not-found/close').expect(404, {
+      error: 'Issue not found'
+    });
+
+    await request(app).post('/api/issues/not-found/reopen').expect(404, {
       error: 'Issue not found'
     });
   });

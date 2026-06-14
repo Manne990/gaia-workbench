@@ -39,6 +39,14 @@ function invalidIssue() {
   };
 }
 
+function uniqueComment() {
+  const suffix = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+  return {
+    body: `Comment body ${suffix}`
+  };
+}
+
 test("renders issue list from real API payload", async ({ page, request }) => {
   const payload = issuePayload();
   await request.post("/api/issues", { data: payload[0] });
@@ -151,6 +159,126 @@ test("edits an issue in place", async ({ page, request }) => {
   await expect(updatedRow).toContainText("High");
   await page.screenshot({
     path: "test-results/verification/issue-8-edit.png",
+    fullPage: true
+  });
+});
+
+test("opens issue details from the list", async ({ page, request }) => {
+  const payload = uniqueIssue();
+  const created = await request.post("/api/issues", { data: payload });
+  const issue = (await created.json()) as { id: number; title: string; description: string };
+
+  await page.goto("/");
+
+  await page.locator(".issue-list-row", { hasText: issue.title }).getByRole("button", {
+    name: `Open issue ${issue.id}`
+  }).click();
+
+  await expect(page.getByRole("heading", { name: "Issue details" })).toBeVisible();
+  const detailPanel = page.locator("section[aria-labelledby='issue-detail-title']");
+
+  await expect(detailPanel.getByText(issue.title)).toBeVisible();
+  await expect(detailPanel.getByText(payload.description)).toBeVisible();
+  await expect(detailPanel.locator(".issue-detail-meta").getByText(payload.status)).toBeVisible();
+  await expect(detailPanel.locator(".issue-detail-meta").getByText(payload.priority)).toBeVisible();
+  await page.screenshot({
+    path: "test-results/verification/issue-9-open-details.png",
+    fullPage: true
+  });
+});
+
+test("adds a comment in issue detail", async ({ page, request }) => {
+  const issuePayload = uniqueIssue();
+  const created = await request.post("/api/issues", { data: issuePayload });
+  const issue = (await created.json()) as { id: number };
+  const comment = uniqueComment();
+
+  await page.goto("/");
+  await page.locator(".issue-list-row", { hasText: issuePayload.title }).getByRole("button", {
+    name: `Open issue ${issue.id}`
+  }).click();
+
+  await page.getByLabel("New comment").fill(comment.body);
+
+  const commentCreateRequest = page.waitForResponse((response) => {
+    return response.url().endsWith(`/api/issues/${issue.id}/comments`) && response.request().method() === "POST";
+  });
+  await page.getByRole("button", { name: "Add comment" }).click();
+  await commentCreateRequest;
+
+  await expect(page.locator(".comment-list", { hasText: comment.body })).toBeVisible();
+  await page.screenshot({
+    path: "test-results/verification/issue-9-add-comment.png",
+    fullPage: true
+  });
+});
+
+test("edits a comment in issue detail", async ({ page, request }) => {
+  const issuePayload = uniqueIssue();
+  const issueResponse = await request.post("/api/issues", { data: issuePayload });
+  const issue = (await issueResponse.json()) as { id: number };
+  const commentResponse = await request.post(`/api/issues/${issue.id}/comments`, {
+    data: { body: "Original issue-9 comment." }
+  });
+  const comment = (await commentResponse.json()) as { id: number; body: string };
+
+  await page.goto("/");
+  await page.locator(".issue-list-row", { hasText: issuePayload.title }).getByRole("button", {
+    name: `Open issue ${issue.id}`
+  }).click();
+
+  const row = page.locator(".comment-row");
+  await row.getByRole("button", { name: "Edit" }).click();
+
+  const commentEditForm = page.locator("form.comment-edit-form");
+  await commentEditForm.getByRole("textbox").fill("Revised issue-9 comment.");
+
+  const commentUpdateRequest = page.waitForResponse((response) => {
+    return response.url().endsWith(`/api/comments/${comment.id}`) && response.request().method() === "PATCH";
+  });
+  await commentEditForm.getByRole("button", { name: "Save" }).click();
+  await commentUpdateRequest;
+
+  await expect(commentEditForm).toHaveCount(0);
+  await expect(page.locator(".comment-list")).toContainText("Revised issue-9 comment.");
+  await page.screenshot({
+    path: "test-results/verification/issue-9-edit-comment.png",
+    fullPage: true
+  });
+});
+
+test("inspects comment history", async ({ page, request }) => {
+  const issuePayload = uniqueIssue();
+  const issueResponse = await request.post("/api/issues", { data: issuePayload });
+  const issue = (await issueResponse.json()) as { id: number };
+
+  const commentCreate = await request.post(`/api/issues/${issue.id}/comments`, {
+    data: { body: "History draft comment." }
+  });
+  const comment = (await commentCreate.json()) as { id: number };
+
+  await request.patch(`/api/comments/${comment.id}`, {
+    data: { body: "History first edit." }
+  });
+  await request.patch(`/api/comments/${comment.id}`, {
+    data: { body: "History second edit." }
+  });
+
+  await page.goto("/");
+  await page.locator(".issue-list-row", { hasText: issuePayload.title }).getByRole("button", {
+    name: `Open issue ${issue.id}`
+  }).click();
+
+  const row = page.locator(".comment-row").first();
+
+  await row.getByRole("button", { name: "Show history" }).click();
+
+  await expect(row.locator(".comment-history-list")).toBeVisible();
+  await expect(row.getByText("History draft comment.")).toBeVisible();
+  await expect(row.getByText("History first edit.")).toBeVisible();
+
+  await page.screenshot({
+    path: "test-results/verification/issue-9-comment-history.png",
     fullPage: true
   });
 });

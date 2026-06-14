@@ -10,7 +10,7 @@ export default defineConfig({
     trace: 'on-first-retry'
   },
   webServer: {
-    command: `PORT=${port} npm run start`,
+    command: `DATABASE_PATH=:memory: PORT=${port} npm run start`,
     url: `http://127.0.0.1:${port}`,
     reuseExistingServer: false,
     timeout: 15_000

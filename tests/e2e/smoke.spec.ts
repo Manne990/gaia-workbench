@@ -177,8 +177,8 @@ test("opens issue details from the list", async ({ page, request }) => {
   await expect(page.getByRole("heading", { name: "Issue details" })).toBeVisible();
   const detailPanel = page.locator("section[aria-labelledby='issue-detail-title']");
 
-  await expect(page.getByText(issue.title)).toBeVisible();
-  await expect(page.getByText(payload.description)).toBeVisible();
+  await expect(detailPanel.getByText(issue.title)).toBeVisible();
+  await expect(detailPanel.getByText(payload.description)).toBeVisible();
   await expect(detailPanel.locator(".issue-detail-meta").getByText(payload.status)).toBeVisible();
   await expect(detailPanel.locator(".issue-detail-meta").getByText(payload.priority)).toBeVisible();
   await page.screenshot({

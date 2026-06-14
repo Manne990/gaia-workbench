@@ -17,21 +17,29 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
 
   await issueForm.getByLabel('Title').fill('Create issue from UI');
   await issueForm.getByLabel('Description').fill('Created through the dashboard form.');
+  await issueForm.getByLabel('Labels').fill('ui, bug, ui');
   await issueForm.getByLabel('Status').selectOption('review');
   await issueForm.getByLabel('Priority').selectOption('high');
   await page.getByRole('button', { name: 'Create Issue' }).click();
 
-  await expect(page.getByRole('row', { name: /Create issue from UI.*Review.*High/ })).toBeVisible();
+  const createdRow = page.getByRole('row', { name: /Create issue from UI.*Review.*High/ });
+  await expect(createdRow).toBeVisible();
+  await expect(createdRow.locator('.label-pill').getByText('ui', { exact: true })).toBeVisible();
+  await expect(createdRow.locator('.label-pill').getByText('bug', { exact: true })).toBeVisible();
   await expect(page.getByText('1 high priority')).toBeVisible();
 
   await page.getByRole('button', { name: 'Edit Create issue from UI' }).click();
   await issueForm.getByLabel('Title').fill('Edit issue from UI');
   await issueForm.getByLabel('Description').fill('Updated through the dashboard form.');
+  await issueForm.getByLabel('Labels').fill('docs, api');
   await issueForm.getByLabel('Status').selectOption('done');
   await issueForm.getByLabel('Priority').selectOption('low');
   await page.getByRole('button', { name: 'Save Changes' }).click();
 
-  await expect(page.getByRole('row', { name: /Edit issue from UI.*Done.*Low/ })).toBeVisible();
+  const updatedRow = page.getByRole('row', { name: /Edit issue from UI.*Done.*Low/ });
+  await expect(updatedRow).toBeVisible();
+  await expect(updatedRow.locator('.label-pill').getByText('docs', { exact: true })).toBeVisible();
+  await expect(updatedRow.locator('.label-pill').getByText('api', { exact: true })).toBeVisible();
   await expect(page.getByText('Create issue from UI')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Open Edit issue from UI' }).click();
@@ -39,6 +47,8 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
 
   await expect(detail.getByRole('heading', { name: 'Edit issue from UI' })).toBeVisible();
   await expect(detail.getByText('Updated through the dashboard form.')).toBeVisible();
+  await expect(detail.getByLabel('Issue labels').getByText('docs')).toBeVisible();
+  await expect(detail.getByLabel('Issue labels').getByText('api')).toBeVisible();
   await expect(detail.getByText('No comments yet.')).toBeVisible();
 
   const commentForm = page.getByRole('form', { name: 'Comment form' });

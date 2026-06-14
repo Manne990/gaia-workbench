@@ -11,6 +11,7 @@ type Issue = {
   description: string;
   status: IssueStatus;
   priority: IssuePriority;
+  labels: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -40,6 +41,7 @@ type IssueFormValues = {
   description: string;
   status: IssueStatus;
   priority: IssuePriority;
+  labels: string;
 };
 
 type ActiveForm = {
@@ -67,7 +69,8 @@ const emptyFormValues: IssueFormValues = {
   title: '',
   description: '',
   status: 'todo',
-  priority: 'medium'
+  priority: 'medium',
+  labels: ''
 };
 
 function formatDate(value: string): string {
@@ -90,6 +93,32 @@ async function fetchCommentHistory(
   }
 
   return (await response.json()) as CommentEditHistory[];
+}
+
+function parseLabelsInput(value: string): string[] {
+  const labels: string[] = [];
+  const seen = new Set<string>();
+
+  for (const rawLabel of value.split(',')) {
+    const label = rawLabel.trim();
+
+    if (!label) {
+      continue;
+    }
+
+    if (label.length > 32) {
+      throw new Error('Labels must be 32 characters or fewer.');
+    }
+
+    const key = label.toLowerCase();
+
+    if (!seen.has(key)) {
+      labels.push(label);
+      seen.add(key);
+    }
+  }
+
+  return labels;
 }
 
 export function App() {
@@ -215,7 +244,8 @@ export function App() {
       title: issue.title,
       description: issue.description,
       status: issue.status,
-      priority: issue.priority
+      priority: issue.priority,
+      labels: issue.labels.join(', ')
     });
     setFormError(null);
   }
@@ -252,6 +282,15 @@ export function App() {
       return;
     }
 
+    let labels: string[];
+
+    try {
+      labels = parseLabelsInput(formValues.labels);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Invalid issue labels');
+      return;
+    }
+
     setIsSubmitting(true);
     setFormError(null);
 
@@ -259,7 +298,8 @@ export function App() {
       title: formValues.title.trim(),
       description: formValues.description.trim(),
       status: formValues.status,
-      priority: formValues.priority
+      priority: formValues.priority,
+      labels
     };
     const endpoint =
       activeForm.mode === 'create' ? '/api/issues' : `/api/issues/${activeForm.issueId}`;
@@ -451,6 +491,17 @@ export function App() {
                 />
               </label>
 
+              <label className="full-span" htmlFor="issue-labels">
+                <span>Labels</span>
+                <input
+                  id="issue-labels"
+                  value={formValues.labels}
+                  onChange={(event) => setFormValues({ ...formValues, labels: event.target.value })}
+                  disabled={isSubmitting}
+                  placeholder="bug, docs, ui"
+                />
+              </label>
+
               <label htmlFor="issue-status">
                 <span>Status</span>
                 <select
@@ -544,6 +595,15 @@ export function App() {
                       <td>
                         <strong>{issue.title}</strong>
                         {issue.description ? <span>{issue.description}</span> : null}
+                        {issue.labels.length > 0 ? (
+                          <div className="label-row" aria-label={`Labels for ${issue.title}`}>
+                            {issue.labels.map((label) => (
+                              <span key={label} className="label-pill">
+                                {label}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                       </td>
                       <td>
                         <span className={`pill status-${issue.status}`}>{statusLabels[issue.status]}</span>
@@ -617,6 +677,16 @@ export function App() {
               >
                 {selectedIssue.description || 'No description.'}
               </p>
+
+              {selectedIssue.labels.length > 0 ? (
+                <div className="label-row detail-labels" aria-label="Issue labels">
+                  {selectedIssue.labels.map((label) => (
+                    <span key={label} className="label-pill">
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
 
               <section className="comments-section" aria-labelledby="comments-heading">
                 <div className="comments-header">

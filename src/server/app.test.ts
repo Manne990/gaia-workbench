@@ -70,6 +70,26 @@ async function createIssue(address: AddressInfo, body: Record<string, unknown>) 
   });
 }
 
+async function createComment(address: AddressInfo, issueId: number, body: Record<string, unknown>) {
+  return fetch(`http://127.0.0.1:${address.port}/api/issues/${issueId}/comments`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+}
+
+async function updateComment(address: AddressInfo, commentId: number, body: Record<string, unknown>) {
+  return fetch(`http://127.0.0.1:${address.port}/api/comments/${commentId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+}
+
 describe("TinyTracker API", () => {
   it("reports health status", async () => {
     const address = await startTestServer();
@@ -196,6 +216,91 @@ describe("TinyTracker API", () => {
     expect(explicitOpenIssue).toMatchObject({ id: issue.id, status: "Todo" });
   });
 
+  it("creates and lists comments for an issue", async () => {
+    const address = await startTestServer();
+    const issueResponse = await createIssue(address, repositoryIssueFixture());
+    const issue = await issueResponse.json();
+
+    const createFirst = await createComment(address, issue.id, { body: "First note." });
+    const first = await createFirst.json();
+    const createSecond = await createComment(address, issue.id, { body: "Second note." });
+    const second = await createSecond.json();
+
+    expect(createFirst.status).toBe(201);
+    expect(createSecond.status).toBe(201);
+    expect(first).toMatchObject({
+      id: 1,
+      issueId: issue.id,
+      body: "First note."
+    });
+    expect(second).toMatchObject({
+      id: 2,
+      issueId: issue.id,
+      body: "Second note."
+    });
+
+    const listResponse = await fetch(
+      `http://127.0.0.1:${address.port}/api/issues/${issue.id}/comments`
+    );
+    const listPayload = await listResponse.json();
+
+    expect(listResponse.status).toBe(200);
+    expect(listPayload).toEqual([first, second]);
+  });
+
+  it("edits a comment and updates its body", async () => {
+    const address = await startTestServer();
+    const issueResponse = await createIssue(address, repositoryIssueFixture());
+    const issue = await issueResponse.json();
+
+    const createCommentResponse = await createComment(address, issue.id, { body: "Needs updates." });
+    const comment = await createCommentResponse.json();
+
+    expect(createCommentResponse.status).toBe(201);
+
+    const updateResponse = await updateComment(address, comment.id, { body: "Updated text." });
+    const updatedComment = await updateResponse.json();
+
+    expect(updateResponse.status).toBe(200);
+    expect(updatedComment).toMatchObject({
+      id: comment.id,
+      issueId: issue.id,
+      body: "Updated text."
+    });
+  });
+
+  it("returns comment history for edited comments", async () => {
+    const address = await startTestServer();
+    const issueResponse = await createIssue(address, repositoryIssueFixture());
+    const issue = await issueResponse.json();
+
+    const commentResponse = await createComment(address, issue.id, { body: "Draft version." });
+    const comment = await commentResponse.json();
+    await updateComment(address, comment.id, { body: "Revised version." });
+    await updateComment(address, comment.id, { body: "Final version." });
+
+    const historyResponse = await fetch(
+      `http://127.0.0.1:${address.port}/api/comments/${comment.id}/history`
+    );
+    const historyPayload = await historyResponse.json();
+
+    expect(historyResponse.status).toBe(200);
+    expect(historyPayload).toEqual([
+      {
+        id: 1,
+        commentId: comment.id,
+        previousBody: "Draft version.",
+        editedAt: "2026-06-14T00:00:00.000Z"
+      },
+      {
+        id: 2,
+        commentId: comment.id,
+        previousBody: "Revised version.",
+        editedAt: "2026-06-14T00:00:00.000Z"
+      }
+    ]);
+  });
+
   it("returns 404 for unknown issue IDs", async () => {
     const address = await startTestServer();
 
@@ -253,6 +358,32 @@ describe("TinyTracker API", () => {
     await expect(badClosed.json()).resolves.toMatchObject({
       error: "Invalid request payload.",
       details: "closed must be true or false."
+    });
+  });
+
+  it("rejects comment requests for unknown issue and unknown comment IDs", async () => {
+    const address = await startTestServer();
+
+    const issueResponse = await createComment(address, 999, { body: "Should fail." });
+    expect(issueResponse.status).toBe(404);
+    await expect(issueResponse.json()).resolves.toEqual({
+      error: "Issue not found."
+    });
+
+    const commentUpdate = await updateComment(address, 999, {
+      body: "Should fail."
+    });
+    expect(commentUpdate.status).toBe(404);
+    await expect(commentUpdate.json()).resolves.toEqual({
+      error: "Comment not found."
+    });
+
+    const commentHistory = await fetch(
+      `http://127.0.0.1:${address.port}/api/comments/999/history`
+    );
+    expect(commentHistory.status).toBe(404);
+    await expect(commentHistory.json()).resolves.toEqual({
+      error: "Comment not found."
     });
   });
 });

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('TinyTracker dashboard creates and edits issues', async ({ page }) => {
+test('TinyTracker smoke creates lists updates and comments on an issue', async ({ page }) => {
   await page.goto('/');
 
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();

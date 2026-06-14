@@ -10,7 +10,7 @@
     "build:server": "tsc -p server/tsconfig.json",
     "build:client": "vite build --config client/vite.config.ts",
     "build": "npm run build:server && npm run build:client",
-    "start": "node dist/server/index.js",
+    "start": "npm run build && node dist/server/index.js",
     "test:e2e": "playwright test",
     "ci": "npm run typecheck && npm run test && npm run build && npm run test:e2e"
   },

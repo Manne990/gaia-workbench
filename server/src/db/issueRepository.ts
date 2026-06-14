@@ -193,6 +193,14 @@ export class IssueRepository {
     return row;
   }
 
+  close(id: string): Issue | null {
+    return this.update(id, { status: 'done' });
+  }
+
+  reopen(id: string): Issue | null {
+    return this.update(id, { status: 'todo' });
+  }
+
   delete(id: string): void {
     this.database.prepare('DELETE FROM issues WHERE id = @id').run({ id });
   }

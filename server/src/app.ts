@@ -74,6 +74,22 @@ export function createApp(config: AppConfig = {}) {
     }
   });
 
+  app.post('/api/issues/:id/close', (_req, res) => {
+    const issue = issueRepository.close(_req.params.id);
+    if (!issue) {
+      return res.status(404).json({ error: 'Issue not found' });
+    }
+    return res.status(200).json(issue);
+  });
+
+  app.post('/api/issues/:id/reopen', (_req, res) => {
+    const issue = issueRepository.reopen(_req.params.id);
+    if (!issue) {
+      return res.status(404).json({ error: 'Issue not found' });
+    }
+    return res.status(200).json(issue);
+  });
+
   if (resolvedClientDir && fs.existsSync(resolvedClientDir)) {
     app.use(express.static(resolvedClientDir));
 

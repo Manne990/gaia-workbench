@@ -78,6 +78,23 @@ describe('persistence layer', () => {
     }
   });
 
+  it('supports close and reopen through repository helpers', () => {
+    const database = createDatabase(':memory:');
+    const issueRepository = new IssueRepository(database);
+
+    try {
+      const issue = issueRepository.create({ title: 'Lifecycle test' });
+
+      const closed = issueRepository.close(issue.id);
+      expect(closed).toMatchObject({ id: issue.id, status: 'done' });
+
+      const reopened = issueRepository.reopen(issue.id);
+      expect(reopened).toMatchObject({ id: issue.id, status: 'todo' });
+    } finally {
+      database.close();
+    }
+  });
+
   it('rejects invalid issue status transitions at repository boundary', () => {
     const database = createDatabase(':memory:');
     const issueRepository = new IssueRepository(database);

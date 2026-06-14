@@ -56,6 +56,27 @@ describe('issues API', () => {
     expect(updated.body.description).toBe('New desc');
   });
 
+  it('supports close and reopen transitions', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const created = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Lifecycle issue' })
+      .expect(201);
+
+    const closed = await request(app)
+      .post(`/api/issues/${created.body.id}/close`)
+      .expect(200);
+
+    expect(closed.body.status).toBe('done');
+
+    const reopened = await request(app)
+      .post(`/api/issues/${created.body.id}/reopen`)
+      .expect(200);
+
+    expect(reopened.body.status).toBe('todo');
+  });
+
   it('returns 400 for invalid issue payloads', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

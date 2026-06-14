@@ -337,6 +337,14 @@ td > span:not(.pill) {
   line-height: 1.45;
 }
 
+.overdue-row {
+  background: #fff8f2;
+}
+
+.overdue-row td {
+  border-bottom-color: #efd7c7;
+}
+
 .label-row {
   display: flex;
   flex-wrap: wrap;
@@ -355,6 +363,38 @@ td > span:not(.pill) {
   border-radius: 999px;
   background: #f7f0e6;
   color: #5b4630;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.due-date-cell {
+  display: grid;
+  gap: 7px;
+  min-width: 128px;
+}
+
+.due-date-text {
+  color: #4c5661;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.due-date-text.overdue {
+  color: #9a2f2f;
+}
+
+.overdue-pill {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border: 1px solid #e6b7ad;
+  border-radius: 999px;
+  background: #fae8e5;
+  color: #9a2f2f;
   font-size: 0.78rem;
   font-weight: 800;
   line-height: 1;
@@ -420,7 +460,7 @@ td > span:not(.pill) {
 
 .issue-detail-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -447,6 +487,28 @@ td > span:not(.pill) {
   margin-top: 12px;
   color: #15181c;
   font-size: 1.1rem;
+}
+
+.issue-detail-grid em {
+  display: inline-flex;
+  width: max-content;
+  margin-top: 8px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #fae8e5;
+  color: #9a2f2f;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.issue-detail-grid .detail-overdue {
+  border-color: #e6b7ad;
+  background: #fff8f2;
+}
+
+.issue-detail-grid .detail-overdue strong {
+  color: #9a2f2f;
 }
 
 .detail-description {

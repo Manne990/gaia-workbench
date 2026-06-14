@@ -13,7 +13,8 @@ const validationErrorMessages = new Set([
   'body is required',
   'Invalid issue status',
   'Invalid issue priority',
-  'Invalid issue labels'
+  'Invalid issue labels',
+  'Invalid issue due date'
 ]);
 
 function isValidationError(error: unknown): error is Error {

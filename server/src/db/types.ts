@@ -9,6 +9,8 @@ export interface Issue {
   status: IssueStatus;
   priority: IssuePriority;
   labels: string[];
+  dueDate: string | null;
+  isOverdue: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -19,6 +21,7 @@ export interface NewIssue {
   status?: IssueStatus;
   priority?: IssuePriority;
   labels?: string[];
+  dueDate?: string | null;
 }
 
 export interface IssueUpdate {
@@ -27,6 +30,7 @@ export interface IssueUpdate {
   status?: IssueStatus;
   priority?: IssuePriority;
   labels?: string[];
+  dueDate?: string | null;
 }
 
 export interface IssueListFilters {

@@ -11,7 +11,8 @@ describe('issues API', () => {
       .send({
         title: 'Add API',
         description: 'Persist through repository',
-        labels: ['api', 'backend', 'api']
+        labels: ['api', 'backend', 'api'],
+        dueDate: '2999-12-31'
       })
       .expect(201);
 
@@ -20,7 +21,9 @@ describe('issues API', () => {
       description: 'Persist through repository',
       status: 'todo',
       priority: 'medium',
-      labels: ['api', 'backend']
+      labels: ['api', 'backend'],
+      dueDate: '2999-12-31',
+      isOverdue: false
     });
     expect(created.body.id).toEqual(expect.any(String));
 
@@ -108,7 +111,8 @@ describe('issues API', () => {
         description: 'New description',
         status: 'in_progress',
         priority: 'high',
-        labels: ['docs', 'ui']
+        labels: ['docs', 'ui'],
+        dueDate: '2000-01-01'
       })
       .expect(200);
 
@@ -118,18 +122,59 @@ describe('issues API', () => {
       description: 'New description',
       status: 'in_progress',
       priority: 'high',
-      labels: ['docs', 'ui']
+      labels: ['docs', 'ui'],
+      dueDate: '2000-01-01',
+      isOverdue: true
     });
 
     const relabeled = await request(app)
       .put(`/api/issues/${created.body.id}`)
-      .send({ labels: ['api'] })
+      .send({ labels: ['api'], dueDate: null })
       .expect(200);
 
     expect(relabeled.body).toMatchObject({
       id: created.body.id,
-      labels: ['api']
+      labels: ['api'],
+      dueDate: null,
+      isOverdue: false
     });
+  });
+
+  it('returns derived overdue state for active issues only', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const overdue = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Past due issue', dueDate: '2000-01-01' })
+      .expect(201);
+    const donePastDue = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Done past due issue', status: 'done', dueDate: '2000-01-01' })
+      .expect(201);
+    const future = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Future due issue', dueDate: '2999-12-31' })
+      .expect(201);
+
+    expect(overdue.body).toMatchObject({
+      dueDate: '2000-01-01',
+      isOverdue: true
+    });
+    expect(donePastDue.body).toMatchObject({
+      dueDate: '2000-01-01',
+      isOverdue: false
+    });
+    expect(future.body).toMatchObject({
+      dueDate: '2999-12-31',
+      isOverdue: false
+    });
+
+    const list = await request(app).get('/api/issues').expect(200);
+    const byTitle = new Map(list.body.map((issue: { title: string }) => [issue.title, issue]));
+
+    expect(byTitle.get('Past due issue')).toMatchObject({ isOverdue: true });
+    expect(byTitle.get('Done past due issue')).toMatchObject({ isOverdue: false });
+    expect(byTitle.get('Future due issue')).toMatchObject({ isOverdue: false });
   });
 
   it('closes and reopens issues through workflow endpoints', async () => {
@@ -188,6 +233,20 @@ describe('issues API', () => {
       .send({ labels: [''] })
       .expect(400, {
         error: 'Invalid issue labels'
+      });
+
+    await request(app)
+      .post('/api/issues')
+      .send({ title: 'Bad due date', dueDate: '2026-02-30' })
+      .expect(400, {
+        error: 'Invalid issue due date'
+      });
+
+    await request(app)
+      .put(`/api/issues/${created.body.id}`)
+      .send({ dueDate: 'tomorrow' })
+      .expect(400, {
+        error: 'Invalid issue due date'
       });
   });
 

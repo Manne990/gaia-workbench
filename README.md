@@ -4,6 +4,28 @@
 
 A tiny issue tracker built by Gaia.
 
+## Local Development
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run the full local feedback loop:
+
+```bash
+npm run check
+```
+
+Start the app:
+
+```bash
+npm run start
+```
+
+The app runs at [http://127.0.0.1:3000](http://127.0.0.1:3000).
+
 ## Purpose
 
 TinyTracker exists for one reason:

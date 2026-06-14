@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { CommentRepository, createDatabase, IssueRepository, TABLE_NAMES } from '../src/db/index.js';
+import {
+  ActivityRepository,
+  CommentRepository,
+  createDatabase,
+  IssueRepository,
+  TABLE_NAMES
+} from '../src/db/index.js';
 
 describe('persistence layer', () => {
   it('initializes SQLite tables and persists issue updates', () => {
@@ -15,6 +21,7 @@ describe('persistence layer', () => {
         .all() as Array<{ name: string }>;
 
       expect(tableNames.map((row) => row.name)).toEqual([
+        TABLE_NAMES.activityEvents,
         TABLE_NAMES.commentEditHistory,
         TABLE_NAMES.comments,
         TABLE_NAMES.issues
@@ -61,6 +68,84 @@ describe('persistence layer', () => {
       });
 
       expect(secondRepository.list()).toHaveLength(1);
+    } finally {
+      database.close();
+    }
+  });
+
+  it('records issue activity events for creation and representative changes', () => {
+    const database = createDatabase(':memory:');
+    const issueRepository = new IssueRepository(database);
+    const activityRepository = new ActivityRepository(database);
+
+    try {
+      const issue = issueRepository.create({
+        title: 'Initial title',
+        description: 'Initial description',
+        status: 'todo',
+        priority: 'medium',
+        labels: ['ui'],
+        dueDate: '2999-12-31'
+      });
+
+      issueRepository.update(issue.id, {
+        title: 'Updated title',
+        description: 'Updated description',
+        status: 'review',
+        priority: 'high',
+        labels: ['api', 'docs'],
+        dueDate: '2000-01-01'
+      });
+
+      const activity = activityRepository.listByIssueId(issue.id);
+
+      expect(activity.map((event) => event.type)).toEqual([
+        'issue_created',
+        'issue_title_changed',
+        'issue_description_changed',
+        'issue_status_changed',
+        'issue_priority_changed',
+        'issue_due_date_changed',
+        'issue_labels_changed'
+      ]);
+      expect(activity[0].metadata).toEqual({ title: 'Initial title' });
+      expect(activity.find((event) => event.type === 'issue_status_changed')?.metadata).toEqual({
+        from: 'todo',
+        to: 'review'
+      });
+      expect(activity.find((event) => event.type === 'issue_labels_changed')?.metadata).toEqual({
+        from: ['ui'],
+        to: ['api', 'docs']
+      });
+    } finally {
+      database.close();
+    }
+  });
+
+  it('returns an empty activity list for legacy issues without activity history', () => {
+    const database = createDatabase(':memory:');
+    const activityRepository = new ActivityRepository(database);
+    const now = new Date().toISOString();
+
+    try {
+      database
+        .prepare(`
+          INSERT INTO issues (id, title, description, status, priority, labels, due_date, created_at, updated_at)
+          VALUES (@id, @title, @description, @status, @priority, @labels, @dueDate, @createdAt, @updatedAt)
+        `)
+        .run({
+          id: 'legacy-issue',
+          title: 'Legacy issue',
+          description: '',
+          status: 'todo',
+          priority: 'medium',
+          labels: '[]',
+          dueDate: null,
+          createdAt: now,
+          updatedAt: now
+        });
+
+      expect(activityRepository.listByIssueId('legacy-issue')).toEqual([]);
     } finally {
       database.close();
     }
@@ -267,6 +352,7 @@ describe('persistence layer', () => {
 
   it('persists comments and records edit history', () => {
     const database = createDatabase(':memory:');
+    const activityRepository = new ActivityRepository(database);
     const issueRepository = new IssueRepository(database);
     const commentRepository = new CommentRepository(database);
 
@@ -292,6 +378,23 @@ describe('persistence layer', () => {
         previousBody: 'Initial comment',
         newBody: 'Edited comment'
       });
+
+      expect(activityRepository.listByIssueId(issue.id).map((event) => event.type)).toEqual([
+        'issue_created',
+        'comment_added',
+        'comment_edited'
+      ]);
+
+      expect(commentRepository.update(comment.id, { body: '  Edited comment  ' })).toMatchObject({
+        id: comment.id,
+        body: 'Edited comment'
+      });
+      expect(commentRepository.getHistory(comment.id)).toHaveLength(1);
+      expect(activityRepository.listByIssueId(issue.id).map((event) => event.type)).toEqual([
+        'issue_created',
+        'comment_added',
+        'comment_edited'
+      ]);
     } finally {
       database.close();
     }

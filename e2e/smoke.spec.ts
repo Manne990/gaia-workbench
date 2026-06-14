@@ -49,10 +49,14 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   const detail = page.getByRole('region', { name: 'Edit issue from UI' });
 
   await expect(detail.getByRole('heading', { name: 'Edit issue from UI' })).toBeVisible();
-  await expect(detail.getByText('Updated through the dashboard form.')).toBeVisible();
+  await expect(detail.locator('.detail-description')).toHaveText('Updated through the dashboard form.');
   await expect(detail.getByLabel('Issue labels').getByText('docs')).toBeVisible();
   await expect(detail.getByLabel('Issue labels').getByText('api')).toBeVisible();
   await expect(detail.locator('.detail-overdue')).toHaveCount(0);
+  const activity = detail.getByLabel('Issue activity');
+  await expect(activity.getByText('Issue created')).toBeVisible();
+  await expect(activity.getByText('Status changed')).toBeVisible();
+  await expect(activity.getByText('Priority changed')).toBeVisible();
   await expect(detail.getByText('No comments yet.')).toBeVisible();
 
   const commentForm = page.getByRole('form', { name: 'Comment form' });
@@ -63,6 +67,7 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   await commentForm.getByLabel('New comment').fill('Initial detail comment');
   await commentForm.getByRole('button', { name: 'Add Comment' }).click();
   await expect(page.getByLabel('Issue comments').getByText('Initial detail comment')).toBeVisible();
+  await expect(activity.getByText('Comment added')).toBeVisible();
 
   await page.getByRole('button', { name: 'Edit comment Initial detail comment' }).click();
   const editCommentForm = page.getByRole('form', { name: 'Edit comment form' });
@@ -71,6 +76,7 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   await editCommentForm.getByRole('button', { name: 'Save Comment' }).click();
 
   await expect(page.getByLabel('Issue comments').getByText('Edited detail comment')).toBeVisible();
+  await expect(activity.getByText('Comment edited')).toBeVisible();
   await expect(page.getByText('1 edit')).toBeVisible();
   await expect(page.getByText('Previous: Initial detail comment')).toBeVisible();
 });

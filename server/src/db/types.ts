@@ -63,3 +63,33 @@ export interface CommentEditHistory {
   newBody: string;
   editedAt: string;
 }
+
+export type ActivityEventType =
+  | 'issue_created'
+  | 'issue_title_changed'
+  | 'issue_description_changed'
+  | 'issue_status_changed'
+  | 'issue_priority_changed'
+  | 'issue_due_date_changed'
+  | 'issue_labels_changed'
+  | 'comment_added'
+  | 'comment_edited';
+
+export type ActivityMetadataValue = string | string[] | null;
+
+export type ActivityMetadata = Record<string, ActivityMetadataValue>;
+
+export interface ActivityEvent {
+  id: string;
+  issueId: string;
+  type: ActivityEventType;
+  metadata: ActivityMetadata;
+  createdAt: string;
+}
+
+export interface NewActivityEvent {
+  issueId: string;
+  type: ActivityEventType;
+  metadata?: ActivityMetadata;
+  createdAt?: string;
+}

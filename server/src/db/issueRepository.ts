@@ -1,6 +1,15 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import { Issue, IssueListFilters, IssuePriority, IssueStatus, IssueUpdate, NewIssue } from './types.js';
+import { recordActivityEvent } from './activityRepository.js';
+import {
+  Issue,
+  IssueListFilters,
+  IssuePriority,
+  IssueStatus,
+  IssueUpdate,
+  NewActivityEvent,
+  NewIssue
+} from './types.js';
 
 const VALID_STATUSES: IssueStatus[] = ['todo', 'in_progress', 'review', 'done'];
 const VALID_PRIORITIES: IssuePriority[] = ['low', 'medium', 'high'];
@@ -119,6 +128,72 @@ function isIssueOverdue(dueDate: string | null, status: IssueStatus): boolean {
   return dueDate !== null && status !== 'done' && dueDate < todayLocalDate();
 }
 
+function labelsEqual(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((label, index) => label === right[index]);
+}
+
+function buildIssueChangeEvents(current: Issue, updated: Issue): NewActivityEvent[] {
+  const events: NewActivityEvent[] = [];
+  const issueId = updated.id;
+  const createdAt = updated.updatedAt;
+
+  if (current.title !== updated.title) {
+    events.push({
+      issueId,
+      type: 'issue_title_changed',
+      metadata: { from: current.title, to: updated.title },
+      createdAt
+    });
+  }
+
+  if (current.description !== updated.description) {
+    events.push({
+      issueId,
+      type: 'issue_description_changed',
+      metadata: { from: current.description, to: updated.description },
+      createdAt
+    });
+  }
+
+  if (current.status !== updated.status) {
+    events.push({
+      issueId,
+      type: 'issue_status_changed',
+      metadata: { from: current.status, to: updated.status },
+      createdAt
+    });
+  }
+
+  if (current.priority !== updated.priority) {
+    events.push({
+      issueId,
+      type: 'issue_priority_changed',
+      metadata: { from: current.priority, to: updated.priority },
+      createdAt
+    });
+  }
+
+  if (current.dueDate !== updated.dueDate) {
+    events.push({
+      issueId,
+      type: 'issue_due_date_changed',
+      metadata: { from: current.dueDate, to: updated.dueDate },
+      createdAt
+    });
+  }
+
+  if (!labelsEqual(current.labels, updated.labels)) {
+    events.push({
+      issueId,
+      type: 'issue_labels_changed',
+      metadata: { from: current.labels, to: updated.labels },
+      createdAt
+    });
+  }
+
+  return events;
+}
+
 function mapIssueRow(row: IssueRow): Issue {
   const dueDate = normalizeDueDate(row.due_date);
 
@@ -164,23 +239,33 @@ export class IssueRepository {
     assertValidPriority(issue.priority);
     issue.isOverdue = isIssueOverdue(issue.dueDate, issue.status);
 
-    this.database
-      .prepare(`
-        INSERT INTO issues (id, title, description, status, priority, labels, due_date, created_at, updated_at)
-        VALUES (@id, @title, @description, @status, @priority, @labels, @dueDate, @createdAt, @updatedAt)
-      `)
-      .run({
-        id: issue.id,
-        title: issue.title,
-        description: issue.description,
-        status: issue.status,
-        priority: issue.priority,
-        labels: JSON.stringify(issue.labels),
-        dueDate: issue.dueDate,
-        createdAt: issue.createdAt,
-        updatedAt: issue.updatedAt
-      });
+    const transaction = this.database.transaction(() => {
+      this.database
+        .prepare(`
+          INSERT INTO issues (id, title, description, status, priority, labels, due_date, created_at, updated_at)
+          VALUES (@id, @title, @description, @status, @priority, @labels, @dueDate, @createdAt, @updatedAt)
+        `)
+        .run({
+          id: issue.id,
+          title: issue.title,
+          description: issue.description,
+          status: issue.status,
+          priority: issue.priority,
+          labels: JSON.stringify(issue.labels),
+          dueDate: issue.dueDate,
+          createdAt: issue.createdAt,
+          updatedAt: issue.updatedAt
+        });
 
+      recordActivityEvent(this.database, {
+        issueId: issue.id,
+        type: 'issue_created',
+        metadata: { title: issue.title },
+        createdAt: issue.createdAt
+      });
+    });
+
+    transaction();
     return issue;
   }
 
@@ -283,19 +368,37 @@ export class IssueRepository {
     fields.push('updated_at = @updatedAt');
     values.updatedAt = updatedAt;
 
-    const result = this.database
-      .prepare(`
-        UPDATE issues
-        SET ${fields.join(', ')}
-        WHERE id = @id
-      `)
-      .run(values);
-
-    if (result.changes === 0) {
+    const current = this.getById(id);
+    if (!current) {
       return null;
     }
 
-    return this.getById(id);
+    const transaction = this.database.transaction(() => {
+      const result = this.database
+        .prepare(`
+          UPDATE issues
+          SET ${fields.join(', ')}
+          WHERE id = @id
+        `)
+        .run(values);
+
+      if (result.changes === 0) {
+        return null;
+      }
+
+      const updated = this.getById(id);
+      if (!updated) {
+        return null;
+      }
+
+      for (const event of buildIssueChangeEvents(current, updated)) {
+        recordActivityEvent(this.database, event);
+      }
+
+      return updated;
+    });
+
+    return transaction();
   }
 
   close(id: string): Issue | null {

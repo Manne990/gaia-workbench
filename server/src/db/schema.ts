@@ -34,6 +34,21 @@ const createCommentEditHistoryTable = `
   );
 `;
 
+const createActivityEventsTable = `
+  CREATE TABLE IF NOT EXISTS activity_events (
+    id TEXT PRIMARY KEY,
+    issue_id TEXT NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+    event_type TEXT NOT NULL,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+  );
+`;
+
+const createActivityEventsIssueIndex = `
+  CREATE INDEX IF NOT EXISTS idx_activity_events_issue_id_created_at
+  ON activity_events (issue_id, created_at);
+`;
+
 function ensureIssueColumn(database: Database.Database, columnName: string, definition: string): void {
   const columns = database.prepare('PRAGMA table_info(issues)').all() as Array<{ name: string }>;
   const hasColumn = columns.some((column) => column.name === columnName);
@@ -48,11 +63,14 @@ export function ensureTinyTrackerSchema(database: Database.Database): void {
   database.exec(createIssuesTable);
   ensureIssueColumn(database, 'labels', "labels TEXT NOT NULL DEFAULT '[]'");
   ensureIssueColumn(database, 'due_date', 'due_date TEXT DEFAULT NULL');
+  database.exec(createActivityEventsTable);
+  database.exec(createActivityEventsIssueIndex);
   database.exec(createCommentsTable);
   database.exec(createCommentEditHistoryTable);
 }
 
 export const TABLE_NAMES = {
+  activityEvents: 'activity_events',
   issues: 'issues',
   comments: 'comments',
   commentEditHistory: 'comment_edit_history'

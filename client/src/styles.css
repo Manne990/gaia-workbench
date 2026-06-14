@@ -36,6 +36,55 @@ body {
   gap: 24px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.primary-button {
+  padding: 0 14px;
+  background: #245d61;
+  color: #ffffff;
+}
+
+.secondary-button,
+.ghost-button {
+  border: 1px solid #cfd6dd;
+  background: #ffffff;
+  color: #30363d;
+}
+
+.secondary-button {
+  padding: 0 14px;
+}
+
+.ghost-button {
+  min-height: 32px;
+  padding: 0 11px;
+}
+
 .eyebrow {
   margin: 0 0 8px;
   color: #2f6f73;
@@ -111,6 +160,14 @@ h1 {
   overflow: hidden;
 }
 
+.form-panel {
+  margin-top: 24px;
+  border: 1px solid #d7dde3;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
 .panel-header {
   display: flex;
   align-items: center;
@@ -138,6 +195,73 @@ h2 {
   border-radius: 999px;
   background: #e8f1f2;
   color: #245d61;
+}
+
+.issue-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding: 20px;
+}
+
+.issue-form label,
+.issue-form label span {
+  display: block;
+}
+
+.issue-form label span {
+  margin-bottom: 7px;
+  color: #4c5661;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.issue-form input,
+.issue-form textarea,
+.issue-form select {
+  width: 100%;
+  border: 1px solid #cfd6dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #15181c;
+}
+
+.issue-form input,
+.issue-form select {
+  height: 40px;
+  padding: 0 11px;
+}
+
+.issue-form textarea {
+  min-height: 104px;
+  padding: 10px 11px;
+  resize: vertical;
+}
+
+.issue-form input:focus,
+.issue-form textarea:focus,
+.issue-form select:focus {
+  border-color: #2f6f73;
+  outline: 3px solid #d9ecee;
+}
+
+.full-span {
+  grid-column: 1 / -1;
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.form-error {
+  padding: 10px 12px;
+  border: 1px solid #e8c8c3;
+  border-radius: 8px;
+  background: #fff3f1;
+  color: #9a2f2f;
+  font-weight: 800;
 }
 
 .state-message {
@@ -251,6 +375,17 @@ td > span:not(.pill) {
     flex-direction: column;
   }
 
+  .header-actions,
+  .form-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .header-actions .primary-button,
+  .form-actions button {
+    width: 100%;
+  }
+
   .total-summary {
     text-align: left;
   }
@@ -261,6 +396,10 @@ td > span:not(.pill) {
 
   .status-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .issue-form {
+    grid-template-columns: 1fr;
   }
 
   th,

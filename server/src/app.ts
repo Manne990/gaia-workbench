@@ -1,7 +1,7 @@
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
-import { CommentRepository, createDatabase, IssueRepository } from './db/index.js';
+import { CommentRepository, createDatabase, IssueListFilters, IssueRepository } from './db/index.js';
 
 type AppConfig = {
   clientDir?: string;
@@ -17,6 +17,22 @@ const validationErrorMessages = new Set([
 
 function isValidationError(error: unknown): error is Error {
   return error instanceof Error && validationErrorMessages.has(error.message);
+}
+
+function getOptionalQueryString(value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (Array.isArray(value) && typeof value[0] === 'string') {
+    return value[0];
+  }
+
+  return undefined;
 }
 
 export function createApp(config: AppConfig = {}) {
@@ -36,8 +52,21 @@ export function createApp(config: AppConfig = {}) {
     res.json({ status: 'ok', service: 'TinyTracker' });
   });
 
-  app.get('/api/issues', (_req, res) => {
-    res.status(200).json(issueRepository.list());
+  app.get('/api/issues', (req, res) => {
+    const filters: IssueListFilters = {
+      status: getOptionalQueryString(req.query.status) as IssueListFilters['status'],
+      priority: getOptionalQueryString(req.query.priority) as IssueListFilters['priority'],
+      search: getOptionalQueryString(req.query.search)
+    };
+
+    try {
+      return res.status(200).json(issueRepository.list(filters));
+    } catch (error) {
+      if (isValidationError(error)) {
+        return res.status(400).json({ error: error.message });
+      }
+      throw error;
+    }
   });
 
   app.get('/api/issues/:id', (req, res) => {

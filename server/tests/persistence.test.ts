@@ -127,6 +127,41 @@ describe('persistence layer', () => {
     }
   });
 
+  it('searches and filters issues by status, priority, title, and description', () => {
+    const database = createDatabase(':memory:');
+    const issueRepository = new IssueRepository(database);
+
+    try {
+      const bug = issueRepository.create({
+        title: 'Fix login bug',
+        description: 'OAuth callback fails on retry',
+        status: 'todo',
+        priority: 'high'
+      });
+      const docs = issueRepository.create({
+        title: 'Write setup guide',
+        description: 'Document local startup and smoke checks',
+        status: 'review',
+        priority: 'medium'
+      });
+      issueRepository.create({
+        title: 'Polish empty state',
+        description: 'Improve dashboard copy',
+        status: 'done',
+        priority: 'low'
+      });
+
+      expect(issueRepository.list({ status: 'review' })).toEqual([docs]);
+      expect(issueRepository.list({ priority: 'high' })).toEqual([bug]);
+      expect(issueRepository.list({ search: 'oauth' })).toEqual([bug]);
+      expect(issueRepository.list({ search: 'SETUP' })).toEqual([docs]);
+      expect(issueRepository.list({ status: 'todo', priority: 'high', search: 'login' })).toEqual([bug]);
+      expect(issueRepository.list({ status: 'done', priority: 'high' })).toEqual([]);
+    } finally {
+      database.close();
+    }
+  });
+
   it('persists comments and records edit history', () => {
     const database = createDatabase(':memory:');
     const issueRepository = new IssueRepository(database);

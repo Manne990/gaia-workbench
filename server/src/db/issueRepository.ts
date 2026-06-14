@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import { Issue, IssuePriority, IssueStatus, IssueUpdate, NewIssue } from './types.js';
+import { Issue, IssueListFilters, IssuePriority, IssueStatus, IssueUpdate, NewIssue } from './types.js';
 
 const VALID_STATUSES: IssueStatus[] = ['todo', 'in_progress', 'review', 'done'];
 const VALID_PRIORITIES: IssuePriority[] = ['low', 'medium', 'high'];
@@ -49,6 +49,10 @@ function mapIssueRow(row: IssueRow): Issue {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
 }
 
 export class IssueRepository {
@@ -101,14 +105,37 @@ export class IssueRepository {
     return row ? mapIssueRow(row) : null;
   }
 
-  list(): Issue[] {
+  list(filters: IssueListFilters = {}): Issue[] {
+    const clauses: string[] = [];
+    const values: Record<string, string> = {};
+
+    if (filters.status !== undefined) {
+      assertValidStatus(filters.status);
+      clauses.push('status = @status');
+      values.status = filters.status;
+    }
+
+    if (filters.priority !== undefined) {
+      assertValidPriority(filters.priority);
+      clauses.push('priority = @priority');
+      values.priority = filters.priority;
+    }
+
+    const search = filters.search?.trim().toLowerCase();
+    if (search) {
+      clauses.push("(LOWER(title) LIKE @search ESCAPE '\\' OR LOWER(description) LIKE @search ESCAPE '\\')");
+      values.search = `%${escapeLikePattern(search)}%`;
+    }
+
+    const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
     const rows = this.database
       .prepare(`
         SELECT id, title, description, status, priority, created_at, updated_at
         FROM issues
+        ${whereClause}
         ORDER BY created_at DESC, id DESC
       `)
-      .all() as IssueRow[];
+      .all(values) as IssueRow[];
 
     return rows.map(mapIssueRow);
   }

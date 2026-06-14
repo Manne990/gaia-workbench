@@ -73,6 +73,15 @@ type ActiveForm = {
   issueId?: string;
 };
 
+type StatusFilter = 'all' | IssueStatus;
+type PriorityFilter = 'all' | IssuePriority;
+
+type ActiveFilterSummary = {
+  key: string;
+  label: string;
+  value: string;
+};
+
 const statusLabels: Record<IssueStatus, string> = {
   todo: 'Todo',
   in_progress: 'In Progress',
@@ -279,6 +288,9 @@ function activityDetail(event: ActivityEvent): string {
 export function App() {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loadState, setLoadState] = useState<LoadState>('loading');
+  const [searchFilter, setSearchFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [activeForm, setActiveForm] = useState<ActiveForm | null>(null);
   const [formValues, setFormValues] = useState<IssueFormValues>(emptyFormValues);
@@ -388,6 +400,50 @@ export function App() {
     return issues.find((issue) => issue.id === selectedIssueId) ?? null;
   }, [issues, selectedIssueId]);
 
+  const normalizedSearchFilter = searchFilter.trim().toLowerCase();
+
+  const filteredIssues = useMemo(() => {
+    return issues.filter((issue) => {
+      if (statusFilter !== 'all' && issue.status !== statusFilter) {
+        return false;
+      }
+
+      if (priorityFilter !== 'all' && issue.priority !== priorityFilter) {
+        return false;
+      }
+
+      if (!normalizedSearchFilter) {
+        return true;
+      }
+
+      return [issue.title, issue.description]
+        .join(' ')
+        .toLowerCase()
+        .includes(normalizedSearchFilter);
+    });
+  }, [issues, normalizedSearchFilter, priorityFilter, statusFilter]);
+
+  const activeFilterSummaries = useMemo(() => {
+    const filters: ActiveFilterSummary[] = [];
+    const search = searchFilter.trim();
+
+    if (search) {
+      filters.push({ key: 'search', label: 'Search', value: search });
+    }
+
+    if (statusFilter !== 'all') {
+      filters.push({ key: 'status', label: 'Status', value: statusLabels[statusFilter] });
+    }
+
+    if (priorityFilter !== 'all') {
+      filters.push({ key: 'priority', label: 'Priority', value: priorityLabels[priorityFilter] });
+    }
+
+    return filters;
+  }, [priorityFilter, searchFilter, statusFilter]);
+
+  const hasActiveFilters = activeFilterSummaries.length > 0;
+
   const statusCounts = useMemo(() => {
     return statusOrder.map((status) => ({
       status,
@@ -398,6 +454,10 @@ export function App() {
   const highPriorityCount = useMemo(() => {
     return issues.filter((issue) => issue.priority === 'high').length;
   }, [issues]);
+
+  const issueListSummary = hasActiveFilters
+    ? `${filteredIssues.length} of ${issues.length} shown`
+    : `${highPriorityCount} high priority`;
 
   function startCreate() {
     setActiveForm({ mode: 'create' });
@@ -436,6 +496,12 @@ export function App() {
     setEditingCommentId(null);
     setEditCommentBody('');
     setEditCommentError(null);
+  }
+
+  function clearFilters() {
+    setSearchFilter('');
+    setStatusFilter('all');
+    setPriorityFilter('all');
   }
 
   async function refreshActivity(issueId: string) {
@@ -760,10 +826,72 @@ export function App() {
           <div className="panel-header">
             <div>
               <h2 id="issue-list-heading">Issue List</h2>
-              <p>{highPriorityCount} high priority</p>
+              <p>{issueListSummary}</p>
             </div>
-            <span className="panel-count">{issues.length}</span>
+            <span className="panel-count">{filteredIssues.length}</span>
           </div>
+
+          <div className="filter-panel" aria-label="Issue filters">
+            <label className="filter-field" htmlFor="issue-search-filter">
+              <span>Search</span>
+              <input
+                id="issue-search-filter"
+                value={searchFilter}
+                onChange={(event) => setSearchFilter(event.target.value)}
+              />
+            </label>
+
+            <label className="filter-field" htmlFor="issue-status-filter">
+              <span>Status</span>
+              <select
+                id="issue-status-filter"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+              >
+                <option value="all">All statuses</option>
+                {statusOrder.map((status) => (
+                  <option key={status} value={status}>
+                    {statusLabels[status]}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="filter-field" htmlFor="issue-priority-filter">
+              <span>Priority</span>
+              <select
+                id="issue-priority-filter"
+                value={priorityFilter}
+                onChange={(event) => setPriorityFilter(event.target.value as PriorityFilter)}
+              >
+                <option value="all">All priorities</option>
+                {priorityOrder.map((priority) => (
+                  <option key={priority} value={priority}>
+                    {priorityLabels[priority]}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="filter-actions">
+              <button type="button" className="secondary-button" onClick={clearFilters} disabled={!hasActiveFilters}>
+                Clear Filters
+              </button>
+            </div>
+          </div>
+
+          {hasActiveFilters ? (
+            <div className="active-filter-summary" aria-label="Active filters">
+              <span>{filteredIssues.length} shown</span>
+              <div className="active-filter-list">
+                {activeFilterSummaries.map((filter) => (
+                  <span key={filter.key} className="active-filter-chip">
+                    {filter.label}: {filter.value}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {loadState === 'loading' ? (
             <div className="state-message" role="status">Loading issues...</div>
@@ -777,7 +905,16 @@ export function App() {
             <div className="state-message">No issues yet.</div>
           ) : null}
 
-          {loadState === 'loaded' && issues.length > 0 ? (
+          {loadState === 'loaded' && issues.length > 0 && filteredIssues.length === 0 ? (
+            <div className="state-message filtered-empty">
+              <strong>No issues match the active filters.</strong>
+              <button type="button" className="secondary-button" onClick={clearFilters}>
+                Clear Filters
+              </button>
+            </div>
+          ) : null}
+
+          {loadState === 'loaded' && filteredIssues.length > 0 ? (
             <div className="table-wrap">
               <table>
                 <thead>
@@ -791,7 +928,7 @@ export function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {issues.map((issue) => (
+                  {filteredIssues.map((issue) => (
                     <tr key={issue.id} className={issue.isOverdue ? 'overdue-row' : undefined}>
                       <td>
                         <strong>{issue.title}</strong>

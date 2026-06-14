@@ -316,6 +316,18 @@ export class IssueRepository {
     return rows.map(mapIssueRow);
   }
 
+  listForExport(): Issue[] {
+    const rows = this.database
+      .prepare(`
+        SELECT id, title, description, status, priority, labels, due_date, created_at, updated_at
+        FROM issues
+        ORDER BY created_at ASC, id ASC
+      `)
+      .all() as IssueRow[];
+
+    return rows.map(mapIssueRow);
+  }
+
   update(id: string, input: IssueUpdate): Issue | null {
     if (
       input.title === undefined &&

@@ -1,4 +1,11 @@
 import { expect, test } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+
+type ExportedIssue = {
+  title: string;
+  comments: Array<{ body: string; editHistory: Array<{ previousBody: string; newBody: string }> }>;
+  activityEvents: Array<{ type: string }>;
+};
 
 test('TinyTracker smoke creates lists updates and comments on an issue', async ({ page }) => {
   await page.goto('/');
@@ -102,4 +109,34 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   await expect(activity.getByText('Comment edited')).toBeVisible();
   await expect(page.getByText('1 edit')).toBeVisible();
   await expect(page.getByText('Previous: Initial detail comment')).toBeVisible();
+
+  const exportDownloadPromise = page.waitForEvent('download');
+  await page.getByRole('link', { name: 'Download JSON' }).click();
+  const exportDownload = await exportDownloadPromise;
+  const exportPath = await exportDownload.path();
+
+  expect(exportDownload.suggestedFilename()).toBe('tinytracker-export.json');
+  expect(exportPath).not.toBeNull();
+
+  const exportedData = JSON.parse(readFileSync(exportPath ?? '', 'utf8')) as {
+    exportVersion: number;
+    issues: ExportedIssue[];
+  };
+  const exportedIssue = exportedData.issues.find((issue) => issue.title === 'Edit issue from UI');
+
+  expect(exportedData.exportVersion).toBe(1);
+  expect(exportedIssue?.comments[0]).toMatchObject({
+    body: 'Edited detail comment',
+    editHistory: [
+      {
+        previousBody: 'Initial detail comment',
+        newBody: 'Edited detail comment'
+      }
+    ]
+  });
+  const exportedActivityTypes = exportedIssue?.activityEvents.map((event) => event.type);
+
+  expect(exportedActivityTypes).toContain('issue_created');
+  expect(exportedActivityTypes).toContain('comment_added');
+  expect(exportedActivityTypes).toContain('comment_edited');
 });

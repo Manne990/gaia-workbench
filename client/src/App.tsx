@@ -690,6 +690,9 @@ export function App() {
             <h1>Dashboard</h1>
           </div>
           <div className="header-actions">
+            <a className="button-link secondary-button" href="/api/export" download="tinytracker-export.json">
+              Download JSON
+            </a>
             <button type="button" className="primary-button" onClick={startCreate}>
               New Issue
             </button>

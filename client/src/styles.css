@@ -211,6 +211,90 @@ h3 {
   color: #245d61;
 }
 
+.filter-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 180px) minmax(150px, 180px) auto;
+  gap: 14px;
+  align-items: end;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e4e8ec;
+  background: #fbfcfd;
+}
+
+.filter-field,
+.filter-field span {
+  display: block;
+}
+
+.filter-field span {
+  margin-bottom: 7px;
+  color: #4c5661;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.filter-field input,
+.filter-field select {
+  width: 100%;
+  height: 40px;
+  padding: 0 11px;
+  border: 1px solid #cfd6dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #15181c;
+}
+
+.filter-field input:focus,
+.filter-field select:focus {
+  border-color: #2f6f73;
+  outline: 3px solid #d9ecee;
+}
+
+.filter-actions {
+  display: flex;
+  align-items: center;
+  justify-content: end;
+}
+
+.active-filter-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #e4e8ec;
+  background: #f6f1e8;
+}
+
+.active-filter-summary > span {
+  flex: 0 0 auto;
+  color: #5b4630;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.active-filter-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 7px;
+}
+
+.active-filter-chip {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 26px;
+  align-items: center;
+  padding: 4px 8px;
+  border: 1px solid #d7c7ac;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #5b4630;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
 .issue-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -292,6 +376,17 @@ h3 {
 
 .state-message.error {
   color: #9a2f2f;
+}
+
+.filtered-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.filtered-empty strong {
+  color: #30363d;
 }
 
 .table-wrap {
@@ -727,6 +822,32 @@ td > span:not(.pill) {
 
   .status-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filter-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-actions {
+    justify-content: stretch;
+  }
+
+  .filter-actions button {
+    width: 100%;
+  }
+
+  .active-filter-summary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .active-filter-list {
+    justify-content: start;
+  }
+
+  .filtered-empty {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .issue-form {

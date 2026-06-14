@@ -45,6 +45,29 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   await expect(updatedRow.locator('.overdue-pill')).toHaveCount(0);
   await expect(page.getByText('Create issue from UI')).toHaveCount(0);
 
+  const filters = page.getByLabel('Issue filters');
+  await filters.getByLabel('Search').fill('not in the tracker');
+  await expect(page.getByLabel('Active filters')).toContainText('Search: not in the tracker');
+  await expect(page.getByText('No issues match the active filters.')).toBeVisible();
+  await filters.getByRole('button', { name: 'Clear Filters' }).click();
+  await expect(updatedRow).toBeVisible();
+  await expect(page.getByLabel('Active filters')).toHaveCount(0);
+
+  await filters.getByLabel('Search').fill('Edit issue');
+  await filters.getByLabel('Status').selectOption('done');
+  await filters.getByLabel('Priority').selectOption('low');
+  await expect(page.getByLabel('Active filters')).toContainText('Search: Edit issue');
+  await expect(page.getByLabel('Active filters')).toContainText('Status: Done');
+  await expect(page.getByLabel('Active filters')).toContainText('Priority: Low');
+  await expect(updatedRow).toBeVisible();
+
+  await filters.getByLabel('Priority').selectOption('high');
+  await expect(filters.getByLabel('Search')).toHaveValue('Edit issue');
+  await expect(page.getByLabel('Active filters')).toContainText('Priority: High');
+  await expect(page.getByText('No issues match the active filters.')).toBeVisible();
+  await filters.getByRole('button', { name: 'Clear Filters' }).click();
+  await expect(updatedRow).toBeVisible();
+
   await page.getByRole('button', { name: 'Open Edit issue from UI' }).click();
   const detail = page.getByRole('region', { name: 'Edit issue from UI' });
 

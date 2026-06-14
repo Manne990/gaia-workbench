@@ -15,10 +15,12 @@
     "ci": "npm run typecheck && npm run test && npm run build && npm run test:e2e"
   },
   "dependencies": {
+    "better-sqlite3": "^12.10.1",
     "express": "^5.1.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.53.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.1",
     "@types/node": "^24.0.1",
     "@types/react": "^19.1.8",

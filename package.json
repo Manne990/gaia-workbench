@@ -9,6 +9,7 @@
     "dev": "vite --host 127.0.0.1",
     "start": "npm run build && node dist/server/index.js",
     "test": "vitest run",
+    "test:smoke": "playwright test tests/e2e/v1-smoke.spec.ts",
     "test:e2e": "playwright test",
     "check": "npm run build && npm test && npm run test:e2e"
   },

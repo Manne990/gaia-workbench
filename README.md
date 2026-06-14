@@ -6,15 +6,35 @@ A tiny issue tracker built by Gaia.
 
 ## Local Development
 
-Install dependencies:
+Use a clean install baseline for reproducible local work:
 
 ```bash
-npm install
+npm ci
+npm run check
 ```
 
-Run the full local feedback loop:
+Start the app from a clean install:
 
 ```bash
+npm run start
+```
+
+The app starts from a clean checkout on:
+
+http://127.0.0.1:3000
+
+Use these exact smoke-check commands for verification:
+
+```bash
+npm run start
+curl -sS http://127.0.0.1:3000/api/health
+npm run test:smoke
+```
+
+Run the full local feedback loop in one pass:
+
+```bash
+npm ci
 npm run check
 ```
 
@@ -25,14 +45,6 @@ npm run db:init
 ```
 
 By default, local SQLite data is stored at `data/tinytracker.sqlite`. Set `TINYTRACKER_DB_PATH` to use another path.
-
-Start the app:
-
-```bash
-npm run start
-```
-
-The app runs at [http://127.0.0.1:3000](http://127.0.0.1:3000).
 
 ## Purpose
 

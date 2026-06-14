@@ -168,30 +168,106 @@ npm run start
 
 ## Quick Start
 
-Install dependencies:
+Prerequisites:
+
+* Node.js 22
+* npm
+
+Install dependencies from a clean checkout:
 
 ```bash
 npm install
 ```
 
-Run local verification:
+Run the full local verification suite:
 
 ```bash
 npm run ci
 ```
 
-Start the built application:
+`npm run ci` performs:
+
+* TypeScript checks
+* Vitest tests
+* Production build
+* Playwright smoke verification
+
+Start TinyTracker:
 
 ```bash
-npm run build
 npm run start
 ```
 
-The application serves:
+`npm run start` builds the server and client, then starts the app at:
+
+```text
+http://127.0.0.1:3000
+```
+
+The default file-backed database is:
+
+```text
+data/tinytracker.sqlite
+```
+
+For disposable local runs, use an in-memory database:
+
+```bash
+DATABASE_PATH=:memory: npm run start
+```
+
+To use another port:
+
+```bash
+PORT=4173 npm run start
+```
+
+The started application serves:
 
 * `GET /health`
 * `GET /api/health`
-* the TinyTracker React shell from the built client
+* TinyTracker React UI at `/`
+* API routes under `/api`
+
+## Smoke Verification
+
+The Playwright smoke test starts TinyTracker with an in-memory SQLite database and verifies the V1 path:
+
+* Empty dashboard loads
+* Issue can be created
+* Created issue appears in the issue list
+* Issue can be updated
+* Issue detail view opens
+* Comment can be added
+* Comment can be edited
+* Comment edit history is shown
+
+Run it through the full CI command:
+
+```bash
+npm run ci
+```
+
+Or run only the browser smoke after dependencies are installed:
+
+```bash
+npm run test:e2e
+```
+
+## Known Limitations
+
+TinyTracker V1 intentionally does not include:
+
+* Authentication
+* User accounts or permissions
+* Notifications
+* Plugin support
+* Pagination
+* File attachments
+* Assignment workflows
+* External integrations
+
+Issue status transitions are intentionally unconstrained in V1. Any valid status can be selected directly.
 
 ---
 

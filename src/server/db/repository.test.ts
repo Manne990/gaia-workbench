@@ -72,6 +72,48 @@ describe("IssueRepository", () => {
     expect(repository.listComments(issue.id)).toEqual([first, second]);
   });
 
+  it("validates status and priority values for persistence operations", () => {
+    expect(() => {
+      repository.createIssue({
+        title: "Bad status",
+        status: "Not Real" as unknown as "Todo"
+      });
+    }).toThrow("status must be Todo, In Progress, Review, or Done.");
+
+    const issue = repository.createIssue({
+      title: "Valid issue",
+      priority: "High"
+    });
+
+    expect(() => {
+      repository.updateIssue(issue.id, {
+        status: "Very High" as unknown as "Todo"
+      });
+    }).toThrow("status must be Todo, In Progress, Review, or Done.");
+
+    expect(() => {
+      repository.updateIssue(issue.id, {
+        priority: "Urgent" as unknown as "Low"
+      });
+    }).toThrow("priority must be Low, Medium, or High.");
+  });
+
+  it("supports closing and reopening via explicit closed field", () => {
+    const issue = repository.createIssue({ title: "Close via repo" });
+
+    const closed = repository.updateIssue(issue.id, { closed: true });
+    expect(closed).toMatchObject({
+      id: issue.id,
+      status: "Done"
+    });
+
+    const reopened = repository.updateIssue(issue.id, { closed: false });
+    expect(reopened).toMatchObject({
+      id: issue.id,
+      status: "Todo"
+    });
+  });
+
   it("stores comment edit history when comments are updated", () => {
     const issue = repository.createIssue({
       title: "Comment history"

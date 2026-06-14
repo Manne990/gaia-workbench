@@ -61,6 +61,7 @@ export interface CreateIssueInput {
   description?: string;
   status?: IssueStatus;
   priority?: IssuePriority;
+  closed?: boolean;
 }
 
 export interface UpdateIssueInput {
@@ -68,6 +69,7 @@ export interface UpdateIssueInput {
   description?: string;
   status?: IssueStatus;
   priority?: IssuePriority;
+  closed?: boolean;
 }
 
 export interface AddCommentInput {
@@ -83,6 +85,12 @@ export class IssueRepository {
 
   createIssue(input: CreateIssueInput): Issue {
     const timestamp = this.now();
+    const status = resolveIssueStatus({
+      status: input.status,
+      closed: input.closed
+    });
+    const priority = resolveIssuePriority(input.priority);
+
     const result = this.db
       .prepare<{
         title: string;
@@ -100,8 +108,8 @@ export class IssueRepository {
       .run({
         title: input.title,
         description: input.description ?? "",
-        status: input.status ?? "Todo",
-        priority: input.priority ?? "Medium",
+        status,
+        priority,
         createdAt: timestamp,
         updatedAt: timestamp
       });
@@ -149,6 +157,13 @@ export class IssueRepository {
       return null;
     }
 
+    const status = resolveIssueStatus({
+      status: input.status,
+      closed: input.closed,
+      fallback: existing.status
+    });
+    const priority = resolveIssuePriority(input.priority ?? existing.priority);
+
     this.db
       .prepare<{
         id: number;
@@ -173,8 +188,8 @@ export class IssueRepository {
         id,
         title: input.title ?? existing.title,
         description: input.description ?? existing.description,
-        status: input.status ?? existing.status,
-        priority: input.priority ?? existing.priority,
+        status,
+        priority,
         updatedAt: this.now()
       });
 
@@ -302,6 +317,54 @@ export class IssueRepository {
       .all(commentId)
       .map(mapCommentEdit);
   }
+}
+
+const issueStatusMessage =
+  "status must be Todo, In Progress, Review, or Done.";
+const issuePriorityMessage =
+  "priority must be Low, Medium, or High.";
+
+function isIssueStatus(value: unknown): value is IssueStatus {
+  return typeof value === "string" && (issueStatuses as readonly string[]).includes(value);
+}
+
+function isIssuePriority(value: unknown): value is IssuePriority {
+  return typeof value === "string" && (issuePriorities as readonly string[]).includes(value);
+}
+
+function resolveIssueStatus(options: {
+  status?: IssueStatus | unknown;
+  closed?: unknown;
+  fallback?: IssueStatus;
+}) {
+  if (options.closed !== undefined) {
+    if (typeof options.closed !== "boolean") {
+      throw new Error("closed must be true or false.");
+    }
+    return options.closed ? "Done" : "Todo";
+  }
+
+  if (options.status === undefined) {
+    return options.fallback ?? "Todo";
+  }
+
+  if (!isIssueStatus(options.status)) {
+    throw new Error(issueStatusMessage);
+  }
+
+  return options.status;
+}
+
+function resolveIssuePriority(priority: unknown): IssuePriority {
+  if (priority === undefined) {
+    return "Medium";
+  }
+
+  if (!isIssuePriority(priority)) {
+    throw new Error(issuePriorityMessage);
+  }
+
+  return priority;
 }
 
 function mapIssue(row: IssueRow): Issue {

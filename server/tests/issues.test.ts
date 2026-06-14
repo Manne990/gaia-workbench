@@ -37,6 +37,57 @@ describe('issues API', () => {
     expect(titles).toEqual(expect.arrayContaining(['First issue', 'Second issue']));
   });
 
+  it('filters and searches listed issues', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'Fix export bug',
+        description: 'CSV output drops unicode names',
+        status: 'todo',
+        priority: 'high'
+      })
+      .expect(201);
+    await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'Review onboarding copy',
+        description: 'Tighten first-run dashboard language',
+        status: 'review',
+        priority: 'medium'
+      })
+      .expect(201);
+    await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'Archive completed cleanup',
+        description: 'Finished backlog cleanup',
+        status: 'done',
+        priority: 'low'
+      })
+      .expect(201);
+
+    const filtered = await request(app).get('/api/issues?status=review&priority=medium&search=dashboard').expect(200);
+
+    expect(filtered.body).toHaveLength(1);
+    expect(filtered.body[0]).toMatchObject({
+      title: 'Review onboarding copy',
+      status: 'review',
+      priority: 'medium'
+    });
+
+    const search = await request(app).get('/api/issues?search=unicode').expect(200);
+
+    expect(search.body).toHaveLength(1);
+    expect(search.body[0]).toMatchObject({
+      title: 'Fix export bug',
+      priority: 'high'
+    });
+
+    await request(app).get('/api/issues?status=done&priority=high').expect(200, []);
+  });
+
   it('updates issue fields', async () => {
     const app = createApp({ databasePath: ':memory:' });
 
@@ -106,6 +157,14 @@ describe('issues API', () => {
       .expect(400, {
         error: 'Invalid issue priority'
       });
+
+    await request(app).get('/api/issues?status=archived').expect(400, {
+      error: 'Invalid issue status'
+    });
+
+    await request(app).get('/api/issues?priority=urgent').expect(400, {
+      error: 'Invalid issue priority'
+    });
   });
 
   it('returns 404 for missing issues', async () => {

@@ -26,6 +26,12 @@ export interface IssueUpdate {
   priority?: IssuePriority;
 }
 
+export interface IssueListFilters {
+  status?: IssueStatus;
+  priority?: IssuePriority;
+  search?: string;
+}
+
 export interface Comment {
   id: string;
   issueId: string;

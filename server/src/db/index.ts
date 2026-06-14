@@ -7,6 +7,7 @@ export type {
   CommentEditHistory,
   CommentUpdate,
   Issue,
+  IssueListFilters,
   IssuePriority,
   IssueStatus,
   IssueUpdate,

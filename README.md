@@ -222,6 +222,31 @@ To use another port:
 PORT=4173 npm run start
 ```
 
+Seed representative demo data into the configured database:
+
+```bash
+npm run seed:demo
+```
+
+The seed command uses the same default database path as the app:
+
+```text
+data/tinytracker.sqlite
+```
+
+To seed another database, set `DATABASE_PATH`:
+
+```bash
+DATABASE_PATH=/tmp/tinytracker-demo.sqlite npm run seed:demo
+```
+
+The demo seed is non-destructive. It creates a small set of issues and comments
+covering statuses, priorities, labels, due dates, overdue state, comment edit
+history, and activity events. Re-running the command skips existing demo issues
+by title and existing demo comments by final body. It does not reset or reconcile
+changed demo rows, and it can add a skipped comment again if the original demo
+comment body was edited after seeding.
+
 The started application serves:
 
 * `GET /health`

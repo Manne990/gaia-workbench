@@ -18,6 +18,14 @@ Run the full local feedback loop:
 npm run check
 ```
 
+Initialize the local SQLite database:
+
+```bash
+npm run db:init
+```
+
+By default, local SQLite data is stored at `data/tinytracker.sqlite`. Set `TINYTRACKER_DB_PATH` to use another path.
+
 Start the app:
 
 ```bash

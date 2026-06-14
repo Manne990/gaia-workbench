@@ -29,6 +29,10 @@ textarea {
   font: inherit;
 }
 
+select {
+  font: inherit;
+}
+
 .app-shell {
   width: min(1120px, calc(100% - 32px));
   margin: 0 auto;
@@ -120,6 +124,104 @@ h2 {
   margin: 0 0 14px;
 }
 
+.panel--compact {
+  margin-bottom: 12px;
+}
+
+.issue-form,
+.issue-edit-form {
+  display: grid;
+  gap: 12px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.field label {
+  display: block;
+  font-size: 0.86rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: #3e4a43;
+}
+
+.field input,
+.field textarea,
+.field select {
+  width: 100%;
+  border: 1px solid #bfc9bd;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fff;
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.form-actions--inline {
+  justify-content: flex-start;
+}
+
+.form-message {
+  margin: 0;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 0.88rem;
+}
+
+.form-message--error {
+  color: #7a2020;
+  border: 1px solid #f2b6b6;
+  background: #fdeeee;
+}
+
+.form-message--compact {
+  margin-bottom: 8px;
+}
+
+.button {
+  appearance: none;
+  border: 1px solid #35514a;
+  background: #35514a;
+  color: #ffffff;
+  border-radius: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.button:hover:not(:disabled) {
+  background: #2c433d;
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.button--ghost {
+  background: #fff;
+  color: #33433d;
+}
+
+.button--ghost:hover:not(:disabled) {
+  background: #f0f5f2;
+}
+
 .state-message {
   margin: 0;
   min-height: 42px;
@@ -146,12 +248,16 @@ h2 {
 .issue-list-row {
   display: grid;
   align-items: center;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 0.8fr);
   gap: 12px;
   padding: 10px;
   border: 1px solid #dde4db;
   border-radius: 8px;
   background: #fff;
+}
+
+.issue-list-row--editing {
+  align-items: start;
 }
 
 .issue-list-head {
@@ -184,6 +290,10 @@ h2 {
 .issue-metadata span {
   color: #657066;
   font-size: 0.81rem;
+}
+
+.issue-list-row--editing .field {
+  margin: 0;
 }
 
 .badge {
@@ -246,6 +356,18 @@ h2 {
 
   .topbar {
     display: grid;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-actions {
+    justify-content: stretch;
+  }
+
+  .form-actions .button {
+    width: 100%;
   }
 
   .issue-list-wrapper,

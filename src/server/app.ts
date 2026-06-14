@@ -1,5 +1,10 @@
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
-import { IssueRepository, issuePriorities, issueStatuses, type UpdateIssueInput } from "./db/repository.js";
+import {
+  IssueRepository,
+  issuePriorities,
+  issueStatuses,
+  type UpdateIssueInput
+} from "./db/repository.js";
 import { openDatabase } from "./db/connection.js";
 
 export interface CreateAppOptions {
@@ -21,6 +26,16 @@ function parseIssueId(raw: string): number {
 
   if (!Number.isInteger(id) || id <= 0) {
     throw new Error("Invalid issue id.");
+  }
+
+  return id;
+}
+
+function parseCommentId(raw: string): number {
+  const id = Number(raw);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error("Invalid comment id.");
   }
 
   return id;
@@ -76,6 +91,45 @@ function parseCreateBody(body: unknown): {
     priority: priority as (typeof issuePriorities)[number] | undefined,
     closed
   };
+}
+
+function parseCreateCommentBody(body: unknown): { body: string } {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Request body must be an object.");
+  }
+
+  const typedBody = body as Record<string, unknown>;
+  const commentBody = typedBody.body;
+
+  if (typeof commentBody !== "string" || commentBody.trim().length === 0) {
+    throw new Error("body is required and must be a non-empty string.");
+  }
+
+  return { body: commentBody.trim() };
+}
+
+function parseCommentUpdateBody(body: unknown): { body: string } {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Request body must be an object.");
+  }
+
+  const typedBody = body as Record<string, unknown>;
+  const keys = Object.keys(typedBody);
+  const unknownKeys = keys.filter((key) => key !== "body");
+  if (unknownKeys.length > 0) {
+    throw new Error(`Unknown fields: ${unknownKeys.join(", ")}.`);
+  }
+
+  if (!("body" in typedBody)) {
+    throw new Error("body is required and must be a non-empty string.");
+  }
+
+  const commentBody = typedBody.body;
+  if (typeof commentBody !== "string" || commentBody.trim().length === 0) {
+    throw new Error("body must be a non-empty string.");
+  }
+
+  return { body: commentBody.trim() };
 }
 
 function parseUpdateBody(body: unknown): UpdateIssueInput {
@@ -253,6 +307,87 @@ export function createApp({ repository: providedRepository }: CreateAppOptions =
       }
       response.status(200).json(issue);
       return;
+    } catch (error) {
+      if (error instanceof Error) {
+        createValidationError(response, error.message);
+        return;
+      }
+      throw error;
+    }
+  });
+
+  app.post("/api/issues/:id/comments", (request, response) => {
+    try {
+      const issueId = parseIssueId(request.params.id);
+      if (!repository.getIssue(issueId)) {
+        response.status(404).json({ error: "Issue not found." });
+        return;
+      }
+
+      const comment = repository.addComment({
+        issueId,
+        ...parseCreateCommentBody(request.body)
+      });
+
+      response.status(201).json(comment);
+    } catch (error) {
+      if (error instanceof Error) {
+        createValidationError(response, error.message);
+        return;
+      }
+      throw error;
+    }
+  });
+
+  app.get("/api/issues/:id/comments", (request, response) => {
+    try {
+      const issueId = parseIssueId(request.params.id);
+      if (!repository.getIssue(issueId)) {
+        response.status(404).json({ error: "Issue not found." });
+        return;
+      }
+
+      const comments = repository.listComments(issueId);
+      response.status(200).json(comments);
+    } catch (error) {
+      if (error instanceof Error) {
+        createValidationError(response, error.message);
+        return;
+      }
+      throw error;
+    }
+  });
+
+  app.patch("/api/comments/:id", (request, response) => {
+    try {
+      const id = parseCommentId(request.params.id);
+      const comment = repository.updateComment(id, parseCommentUpdateBody(request.body).body);
+
+      if (!comment) {
+        response.status(404).json({ error: "Comment not found." });
+        return;
+      }
+
+      response.status(200).json(comment);
+    } catch (error) {
+      if (error instanceof Error) {
+        createValidationError(response, error.message);
+        return;
+      }
+      throw error;
+    }
+  });
+
+  app.get("/api/comments/:id/history", (request, response) => {
+    try {
+      const commentId = parseCommentId(request.params.id);
+      if (!repository.getComment(commentId)) {
+        response.status(404).json({ error: "Comment not found." });
+        return;
+      }
+
+      const edits = repository.listCommentEdits(commentId);
+      response.status(200).json(edits);
     } catch (error) {
       if (error instanceof Error) {
         createValidationError(response, error.message);

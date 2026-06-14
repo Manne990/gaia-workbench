@@ -72,6 +72,13 @@ export interface UpdateIssueInput {
   closed?: boolean;
 }
 
+export interface IssueListOptions {
+  status?: IssueStatus;
+  search?: string;
+  title?: string;
+  description?: string;
+}
+
 export interface AddCommentInput {
   issueId: number;
   body: string;
@@ -137,16 +144,48 @@ export class IssueRepository {
     return row ? mapIssue(row) : null;
   }
 
-  listIssues(): Issue[] {
+  listIssues(options: IssueListOptions = {}): Issue[] {
+    const whereClauses: string[] = [];
+    const params: Record<string, string> = {};
+
+    if (options.status !== undefined) {
+      whereClauses.push("status = @status");
+      params.status = options.status;
+    }
+
+    const titleFilter = options.title?.trim();
+    if (titleFilter !== undefined && titleFilter.length > 0) {
+      whereClauses.push("title LIKE @titleFilter");
+      params.titleFilter = `%${titleFilter}%`;
+    }
+
+    const descriptionFilter = options.description?.trim();
+    if (descriptionFilter !== undefined && descriptionFilter.length > 0) {
+      whereClauses.push("description LIKE @descriptionFilter");
+      params.descriptionFilter = `%${descriptionFilter}%`;
+    }
+
+    if (options.search !== undefined) {
+      const searchFilter = options.search.trim();
+      if (searchFilter.length > 0) {
+        whereClauses.push("(title LIKE @searchFilter OR description LIKE @searchFilter)");
+        params.searchFilter = `%${searchFilter}%`;
+      }
+    }
+
+    const whereSql =
+      whereClauses.length === 0 ? "" : `WHERE ${whereClauses.join(" AND ")}`;
+
     return this.db
-      .prepare<[], IssueRow>(
+      .prepare<Record<string, string>, IssueRow>(
         `
           SELECT id, title, description, status, priority, created_at, updated_at
           FROM issues
+          ${whereSql}
           ORDER BY created_at ASC, id ASC
         `
       )
-      .all()
+      .all(params)
       .map(mapIssue);
   }
 

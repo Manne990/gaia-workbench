@@ -1,0 +1,170 @@
+import Database from 'better-sqlite3';
+import { randomUUID } from 'node:crypto';
+import { Issue, IssuePriority, IssueStatus, IssueUpdate, NewIssue } from './types.js';
+
+const VALID_STATUSES: IssueStatus[] = ['todo', 'in_progress', 'review', 'done'];
+const VALID_PRIORITIES: IssuePriority[] = ['low', 'medium', 'high'];
+const DEFAULT_STATUS: IssueStatus = 'todo';
+const DEFAULT_PRIORITY: IssuePriority = 'medium';
+
+type IssueRow = {
+  id: string;
+  title: string;
+  description: string;
+  status: IssueStatus;
+  priority: IssuePriority;
+  created_at: string;
+  updated_at: string;
+};
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function assertNonEmptyString(value: unknown, field: string): asserts value is string {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`${field} is required`);
+  }
+}
+
+function assertValidStatus(value: unknown): asserts value is IssueStatus {
+  if (typeof value !== 'string' || !VALID_STATUSES.includes(value as IssueStatus)) {
+    throw new Error('Invalid issue status');
+  }
+}
+
+function assertValidPriority(value: unknown): asserts value is IssuePriority {
+  if (typeof value !== 'string' || !VALID_PRIORITIES.includes(value as IssuePriority)) {
+    throw new Error('Invalid issue priority');
+  }
+}
+
+function mapIssueRow(row: IssueRow): Issue {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    status: row.status,
+    priority: row.priority,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+export class IssueRepository {
+  constructor(private readonly database: Database.Database) {}
+
+  create(input: NewIssue): Issue {
+    assertNonEmptyString(input.title, 'title');
+
+    const now = nowIso();
+    const issue: Issue = {
+      id: randomUUID(),
+      title: input.title.trim(),
+      description: (input.description ?? '').trim(),
+      status: input.status ?? DEFAULT_STATUS,
+      priority: input.priority ?? DEFAULT_PRIORITY,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    assertValidStatus(issue.status);
+    assertValidPriority(issue.priority);
+
+    this.database
+      .prepare(`
+        INSERT INTO issues (id, title, description, status, priority, created_at, updated_at)
+        VALUES (@id, @title, @description, @status, @priority, @createdAt, @updatedAt)
+      `)
+      .run({
+        id: issue.id,
+        title: issue.title,
+        description: issue.description,
+        status: issue.status,
+        priority: issue.priority,
+        createdAt: issue.createdAt,
+        updatedAt: issue.updatedAt
+      });
+
+    return issue;
+  }
+
+  getById(id: string): Issue | null {
+    const row = this.database
+      .prepare(`
+        SELECT id, title, description, status, priority, created_at, updated_at
+        FROM issues
+        WHERE id = @id
+      `)
+      .get({ id }) as IssueRow | undefined;
+
+    return row ? mapIssueRow(row) : null;
+  }
+
+  list(): Issue[] {
+    const rows = this.database
+      .prepare(`
+        SELECT id, title, description, status, priority, created_at, updated_at
+        FROM issues
+        ORDER BY created_at DESC, id DESC
+      `)
+      .all() as IssueRow[];
+
+    return rows.map(mapIssueRow);
+  }
+
+  update(id: string, input: IssueUpdate): Issue | null {
+    if (
+      input.title === undefined &&
+      input.description === undefined &&
+      input.status === undefined &&
+      input.priority === undefined
+    ) {
+      return this.getById(id);
+    }
+
+    const fields: string[] = [];
+    const values: Record<string, string> = { id };
+
+    if (input.title !== undefined) {
+      assertNonEmptyString(input.title, 'title');
+      fields.push('title = @title');
+      values.title = input.title.trim();
+    }
+
+    if (input.description !== undefined) {
+      fields.push('description = @description');
+      values.description = input.description.trim();
+    }
+
+    if (input.status !== undefined) {
+      assertValidStatus(input.status);
+      fields.push('status = @status');
+      values.status = input.status;
+    }
+
+    if (input.priority !== undefined) {
+      assertValidPriority(input.priority);
+      fields.push('priority = @priority');
+      values.priority = input.priority;
+    }
+
+    const updatedAt = nowIso();
+    fields.push('updated_at = @updatedAt');
+    values.updatedAt = updatedAt;
+
+    const result = this.database
+      .prepare(`
+        UPDATE issues
+        SET ${fields.join(', ')}
+        WHERE id = @id
+      `)
+      .run(values);
+
+    if (result.changes === 0) {
+      return null;
+    }
+
+    return this.getById(id);
+  }
+}

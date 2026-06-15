@@ -355,7 +355,7 @@ export function App() {
 
     if (commandId === 'clear-active-filters') {
       closeCommandPalette({ restoreFocus: false });
-      handleClearFilters();
+      handleClearFilters({ restoreFocus: true });
       return;
     }
 
@@ -589,7 +589,7 @@ export function App() {
     commitDashboardFilterRoute(nextFilters, 'push');
   }
 
-  function handleClearFilters() {
+  function handleClearFilters(options: { restoreFocus?: boolean } = {}) {
     dashboardFiltersRef.current = defaultDashboardFilters;
     clearFilters();
     writeRouteState(null, defaultDashboardFilters, 'replace');
@@ -597,6 +597,10 @@ export function App() {
     setSelectedIssue(null);
     setSelectedIssueLoadState('idle');
     detailReturnFocusRef.current = null;
+
+    if (options.restoreFocus) {
+      restoreFocus(null, () => issueListHeadingRef.current);
+    }
   }
 
   function upsertSavedView(view: SavedFilterView) {

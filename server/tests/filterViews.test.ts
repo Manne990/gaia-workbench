@@ -13,6 +13,7 @@ describe('saved filter views API', () => {
         search: 'api',
         status: 'review',
         priority: 'high',
+        label: 'api',
         includeArchived: true,
         blockedOnly: true,
         staleOnly: true,
@@ -26,6 +27,7 @@ describe('saved filter views API', () => {
       search: 'api',
       status: 'review',
       priority: 'high',
+      label: 'api',
       includeArchived: true,
       blockedOnly: true,
       staleOnly: true,
@@ -47,6 +49,7 @@ describe('saved filter views API', () => {
         search: 'ops',
         status: 'all',
         priority: 'medium',
+        label: 'ops',
         includeArchived: false,
         blockedOnly: true,
         staleOnly: false,
@@ -60,6 +63,7 @@ describe('saved filter views API', () => {
       search: 'ops',
       status: 'all',
       priority: 'medium',
+      label: 'ops',
       includeArchived: false,
       blockedOnly: true,
       staleOnly: false,
@@ -85,6 +89,7 @@ describe('saved filter views API', () => {
       search: '',
       status: 'all',
       priority: 'all',
+      label: '',
       includeArchived: false,
       blockedOnly: false,
       staleOnly: false,
@@ -116,6 +121,10 @@ describe('saved filter views API', () => {
 
     await request(app).post('/api/filter-views').send({ name: 'Bad priority', priority: 'urgent' }).expect(400, {
       error: 'Invalid saved view priority'
+    });
+
+    await request(app).post('/api/filter-views').send({ name: 'Bad label', label: true }).expect(400, {
+      error: 'Invalid saved view label'
     });
 
     await request(app)

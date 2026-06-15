@@ -30,6 +30,8 @@ type IssueListPanelProps = {
   onStatusFilterChange: (value: StatusFilter) => void;
   priorityFilter: PriorityFilter;
   onPriorityFilterChange: (value: PriorityFilter) => void;
+  labelFilter: string;
+  onLabelFilterChange: (value: string) => void;
   includeArchived: boolean;
   onIncludeArchivedChange: (value: boolean) => void;
   blockedOnly: boolean;
@@ -90,6 +92,8 @@ export function IssueListPanel({
   onStatusFilterChange,
   priorityFilter,
   onPriorityFilterChange,
+  labelFilter,
+  onLabelFilterChange,
   includeArchived,
   onIncludeArchivedChange,
   blockedOnly,
@@ -232,6 +236,15 @@ export function IssueListPanel({
               </option>
             ))}
           </select>
+        </label>
+
+        <label className="filter-field" htmlFor="issue-label-filter">
+          <span>Label</span>
+          <input
+            id="issue-label-filter"
+            value={labelFilter}
+            onChange={(event) => onLabelFilterChange(event.target.value)}
+          />
         </label>
 
         <label className="filter-toggle" htmlFor="issue-include-archived-filter">

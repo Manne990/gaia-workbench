@@ -20,6 +20,7 @@ type SavedFilterViewRow = {
   search: string;
   status: SavedFilterStatus;
   priority: SavedFilterPriority;
+  label: string;
   include_archived: 0 | 1;
   blocked_only: 0 | 1;
   stale_only: 0 | 1;
@@ -92,6 +93,24 @@ function normalizePriority(value: unknown): SavedFilterPriority {
   return value as SavedFilterPriority;
 }
 
+function normalizeLabel(value: unknown): string {
+  if (value === undefined) {
+    return '';
+  }
+
+  if (typeof value !== 'string') {
+    throw new Error('Invalid saved view label');
+  }
+
+  const label = value.trim();
+
+  if (label.length > 32) {
+    throw new Error('Invalid saved view label');
+  }
+
+  return label;
+}
+
 function normalizeIncludeArchived(value: unknown): boolean {
   if (value === undefined) {
     return false;
@@ -147,6 +166,7 @@ function mapSavedFilterViewRow(row: SavedFilterViewRow): SavedFilterView {
     search: row.search,
     status: row.status,
     priority: row.priority,
+    label: row.label,
     includeArchived: row.include_archived === 1,
     blockedOnly: row.blocked_only === 1,
     staleOnly: row.stale_only === 1,
@@ -163,7 +183,7 @@ export class SavedFilterViewRepository {
     const rows = this.database
       .prepare(
         `
-        SELECT id, name, search, status, priority, include_archived, blocked_only, stale_only, page_size, created_at, updated_at
+        SELECT id, name, search, status, priority, label, include_archived, blocked_only, stale_only, page_size, created_at, updated_at
         FROM saved_filter_views
         ORDER BY updated_at DESC, name COLLATE NOCASE ASC, id ASC
       `
@@ -177,7 +197,7 @@ export class SavedFilterViewRepository {
     const row = this.database
       .prepare(
         `
-        SELECT id, name, search, status, priority, include_archived, blocked_only, stale_only, page_size, created_at, updated_at
+        SELECT id, name, search, status, priority, label, include_archived, blocked_only, stale_only, page_size, created_at, updated_at
         FROM saved_filter_views
         WHERE id = @id
       `
@@ -195,6 +215,7 @@ export class SavedFilterViewRepository {
       search: normalizeSearch(input.search),
       status: normalizeStatus(input.status),
       priority: normalizePriority(input.priority),
+      label: normalizeLabel(input.label),
       includeArchived: normalizeIncludeArchived(input.includeArchived),
       blockedOnly: normalizeBlockedOnly(input.blockedOnly),
       staleOnly: normalizeStaleOnly(input.staleOnly),
@@ -209,10 +230,10 @@ export class SavedFilterViewRepository {
       .prepare(
         `
         INSERT INTO saved_filter_views (
-          id, name, search, status, priority, include_archived, blocked_only, stale_only, page_size, created_at, updated_at
+          id, name, search, status, priority, label, include_archived, blocked_only, stale_only, page_size, created_at, updated_at
         )
         VALUES (
-          @id, @name, @search, @status, @priority, @includeArchived, @blockedOnly, @staleOnly, @pageSize, @createdAt, @updatedAt
+          @id, @name, @search, @status, @priority, @label, @includeArchived, @blockedOnly, @staleOnly, @pageSize, @createdAt, @updatedAt
         )
       `
       )
@@ -222,6 +243,7 @@ export class SavedFilterViewRepository {
         search: view.search,
         status: view.status,
         priority: view.priority,
+        label: view.label,
         includeArchived: view.includeArchived ? 1 : 0,
         blockedOnly: view.blockedOnly ? 1 : 0,
         staleOnly: view.staleOnly ? 1 : 0,
@@ -246,6 +268,7 @@ export class SavedFilterViewRepository {
       search: input.search === undefined ? current.search : normalizeSearch(input.search),
       status: input.status === undefined ? current.status : normalizeStatus(input.status),
       priority: input.priority === undefined ? current.priority : normalizePriority(input.priority),
+      label: input.label === undefined ? current.label : normalizeLabel(input.label),
       includeArchived:
         input.includeArchived === undefined ? current.includeArchived : normalizeIncludeArchived(input.includeArchived),
       blockedOnly: input.blockedOnly === undefined ? current.blockedOnly : normalizeBlockedOnly(input.blockedOnly),
@@ -267,6 +290,7 @@ export class SavedFilterViewRepository {
           search = @search,
           status = @status,
           priority = @priority,
+          label = @label,
           include_archived = @includeArchived,
           blocked_only = @blockedOnly,
           stale_only = @staleOnly,
@@ -281,6 +305,7 @@ export class SavedFilterViewRepository {
         search: next.search,
         status: next.status,
         priority: next.priority,
+        label: next.label,
         includeArchived: next.includeArchived ? 1 : 0,
         blockedOnly: next.blockedOnly ? 1 : 0,
         staleOnly: next.staleOnly ? 1 : 0,

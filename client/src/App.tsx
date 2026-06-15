@@ -110,6 +110,8 @@ export function App() {
     setStatusFilter,
     priorityFilter,
     setPriorityFilter,
+    labelFilter,
+    setLabelFilter,
     includeArchived,
     setIncludeArchived,
     blockedOnly,
@@ -202,6 +204,7 @@ export function App() {
     search: searchFilter,
     status: statusFilter,
     priority: priorityFilter,
+    label: labelFilter,
     includeArchived,
     blockedOnly,
     staleOnly,
@@ -519,6 +522,13 @@ export function App() {
     writeDashboardRoute(nextFilters, 'push');
   }
 
+  function handleLabelFilterChange(value: string) {
+    const nextFilters = { ...dashboardFilters, label: value };
+
+    setLabelFilter(value);
+    writeDashboardRoute(nextFilters, 'replace');
+  }
+
   function handleIncludeArchivedChange(value: boolean) {
     const nextFilters = { ...dashboardFilters, includeArchived: value };
 
@@ -612,6 +622,7 @@ export function App() {
         search: view.search,
         status: view.status,
         priority: view.priority,
+        label: view.label,
         includeArchived: view.includeArchived,
         blockedOnly: view.blockedOnly,
         staleOnly: view.staleOnly,
@@ -1551,6 +1562,8 @@ export function App() {
           onStatusFilterChange={handleStatusFilterChange}
           priorityFilter={priorityFilter}
           onPriorityFilterChange={handlePriorityFilterChange}
+          labelFilter={labelFilter}
+          onLabelFilterChange={handleLabelFilterChange}
           includeArchived={includeArchived}
           onIncludeArchivedChange={handleIncludeArchivedChange}
           blockedOnly={blockedOnly}

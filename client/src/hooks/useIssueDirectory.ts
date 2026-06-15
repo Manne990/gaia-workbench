@@ -37,6 +37,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
   const [searchFilter, setSearchFilter] = useState(initialFilters.search);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialFilters.status);
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>(initialFilters.priority);
+  const [labelFilter, setLabelFilter] = useState(initialFilters.label);
   const [includeArchived, setIncludeArchived] = useState(initialFilters.includeArchived);
   const [blockedOnly, setBlockedOnly] = useState(initialFilters.blockedOnly);
   const [staleOnly, setStaleOnly] = useState(initialFilters.staleOnly);
@@ -56,6 +57,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
             search: searchFilter,
             status: statusFilter,
             priority: priorityFilter,
+            label: labelFilter,
             includeArchived,
             blockedOnly,
             staleOnly,
@@ -101,6 +103,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     blockedOnly,
     currentPage,
     includeArchived,
+    labelFilter,
     pageSize,
     priorityFilter,
     reloadToken,
@@ -125,6 +128,11 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
       filters.push({ key: 'priority', label: 'Priority', value: priorityLabels[priorityFilter] });
     }
 
+    const label = labelFilter.trim();
+    if (label) {
+      filters.push({ key: 'label', label: 'Label', value: label });
+    }
+
     if (includeArchived) {
       filters.push({ key: 'includeArchived', label: 'Archived', value: 'Included' });
     }
@@ -142,7 +150,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     }
 
     return filters;
-  }, [blockedOnly, includeArchived, pageSize, priorityFilter, searchFilter, staleOnly, statusFilter]);
+  }, [blockedOnly, includeArchived, labelFilter, pageSize, priorityFilter, searchFilter, staleOnly, statusFilter]);
 
   const hasActiveFilters = activeFilterSummaries.length > 0;
 
@@ -167,6 +175,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     setSearchFilter('');
     setStatusFilter('all');
     setPriorityFilter('all');
+    setLabelFilter('');
     setIncludeArchived(false);
     setBlockedOnly(false);
     setStaleOnly(false);
@@ -178,6 +187,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     setSearchFilter(filters.search);
     setStatusFilter(filters.status);
     setPriorityFilter(filters.priority);
+    setLabelFilter(filters.label);
     setIncludeArchived(filters.includeArchived);
     setBlockedOnly(filters.blockedOnly);
     setStaleOnly(filters.staleOnly);
@@ -197,6 +207,11 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
 
   function setPriorityFilterAndResetPage(value: PriorityFilter) {
     setPriorityFilter(value);
+    setCurrentPage(1);
+  }
+
+  function setLabelFilterAndResetPage(value: string) {
+    setLabelFilter(value);
     setCurrentPage(1);
   }
 
@@ -246,6 +261,8 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     setStatusFilter: setStatusFilterAndResetPage,
     priorityFilter,
     setPriorityFilter: setPriorityFilterAndResetPage,
+    labelFilter,
+    setLabelFilter: setLabelFilterAndResetPage,
     includeArchived,
     setIncludeArchived: setIncludeArchivedAndResetPage,
     blockedOnly,

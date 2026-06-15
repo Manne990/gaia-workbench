@@ -107,7 +107,8 @@ describe('issues API', () => {
         title: 'Fix export bug',
         description: 'CSV output drops unicode names',
         status: 'todo',
-        priority: 'high'
+        priority: 'high',
+        labels: ['api', 'bug']
       })
       .expect(201);
     await request(app)
@@ -116,7 +117,8 @@ describe('issues API', () => {
         title: 'Review onboarding copy',
         description: 'Tighten first-run dashboard language',
         status: 'review',
-        priority: 'medium'
+        priority: 'medium',
+        labels: ['docs']
       })
       .expect(201);
     await request(app)
@@ -125,7 +127,8 @@ describe('issues API', () => {
         title: 'Archive completed cleanup',
         description: 'Finished backlog cleanup',
         status: 'done',
-        priority: 'low'
+        priority: 'low',
+        labels: ['cleanup']
       })
       .expect(201);
 
@@ -151,6 +154,25 @@ describe('issues API', () => {
       title: 'Fix export bug',
       priority: 'high'
     });
+
+    const label = await request(app).get('/api/issues?label=%20api%20&status=todo&priority=high').expect(200);
+
+    expect(label.body.items).toHaveLength(1);
+    expect(label.body.pagination).toMatchObject({
+      page: 1,
+      limit: 25,
+      total: 1,
+      totalPages: 1
+    });
+    expect(label.body.items[0]).toMatchObject({
+      title: 'Fix export bug',
+      labels: ['api', 'bug']
+    });
+
+    const missingLabel = await request(app).get('/api/issues?label=missing').expect(200);
+
+    expect(missingLabel.body.items).toEqual([]);
+    expect(missingLabel.body.pagination.total).toBe(0);
 
     const noMatches = await request(app).get('/api/issues?status=done&priority=high').expect(200);
 

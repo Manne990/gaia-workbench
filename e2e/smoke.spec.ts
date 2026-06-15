@@ -185,18 +185,30 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   await expect(page.getByLabel('Active filter count')).toHaveCount(0);
 
   await filters.getByLabel('Search').fill('Edit issue');
+  await filters.getByLabel('Label').fill('docs');
   await filters.getByLabel('Status').selectOption('done');
   await filters.getByLabel('Priority').selectOption('low');
   await expect(page.getByLabel('Active filters')).toContainText('Search: Edit issue');
+  await expect(page.getByLabel('Active filters')).toContainText('Label: docs');
   await expect(page.getByLabel('Active filters')).toContainText('Status: Done');
   await expect(page.getByLabel('Active filters')).toContainText('Priority: Low');
-  await expect(page.getByLabel('Active filter count')).toHaveText('3 active filters');
+  await expect(page.getByLabel('Active filter count')).toHaveText('4 active filters');
+  await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('docs');
+  await expect(updatedRow).toBeVisible();
+
+  await filters.getByLabel('Label').fill('missing');
+  await expect(page.getByLabel('Active filters')).toContainText('Label: missing');
+  await expect(page.getByText('No issues match the active filters.')).toBeVisible();
+
+  await filters.getByLabel('Label').fill('api');
+  await expect(page.getByLabel('Active filters')).toContainText('Label: api');
   await expect(updatedRow).toBeVisible();
 
   await filters.getByLabel('Priority').selectOption('high');
   await expect(filters.getByLabel('Search')).toHaveValue('Edit issue');
+  await expect(filters.getByLabel('Label')).toHaveValue('api');
   await expect(page.getByLabel('Active filters')).toContainText('Priority: High');
-  await expect(page.getByLabel('Active filter count')).toHaveText('3 active filters');
+  await expect(page.getByLabel('Active filter count')).toHaveText('4 active filters');
   await expect(page.getByText('No issues match the active filters.')).toBeVisible();
   await filters.getByRole('button', { name: 'Clear Filters' }).click();
   await expect(updatedRow).toBeVisible();
@@ -1435,13 +1447,15 @@ test('saved filter views persist restore and compose with detail routes', async 
     title: 'Saved view target',
     description: 'Archived issue restored by saved view.',
     status: 'review',
-    priority: 'high'
+    priority: 'high',
+    labels: ['archive']
   });
   await createIssueThroughApi(page, {
     title: 'Saved view active other',
     description: 'Should not match the saved filter.',
     status: 'todo',
-    priority: 'low'
+    priority: 'low',
+    labels: ['other']
   });
   const archiveResponse = await page.request.post(`/api/issues/${targetIssue.id}/archive`);
 
@@ -1454,6 +1468,7 @@ test('saved filter views persist restore and compose with detail routes', async 
   let savedViews = settings.getByLabel('Saved filter views');
 
   await filters.getByLabel('Search').fill('Saved view target');
+  await filters.getByLabel('Label').fill('archive');
   await filters.getByLabel('Status').selectOption('review');
   await filters.getByLabel('Priority').selectOption('high');
   await filters.getByLabel('Include archived').check();
@@ -1462,22 +1477,28 @@ test('saved filter views persist restore and compose with detail routes', async 
   await savedViews.getByRole('button', { name: 'Save View' }).click();
 
   await expect(savedViews.getByLabel('Saved views')).toContainText('Review archive view');
+  await expect(page.getByLabel('Active filters')).toContainText('Label: archive');
   await expect(page.getByLabel('Active filters')).toContainText('Page size: 50');
   await expect(page.getByRole('row', { name: /Saved view target.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Saved view active other.*Todo.*Low/ })).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('archive');
   await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('50');
 
   await filters.getByRole('button', { name: 'Clear Filters' }).click();
   await expect(filters.getByLabel('Search')).toHaveValue('');
+  await expect(filters.getByLabel('Label')).toHaveValue('');
   await expect(settings.getByLabel('Page size')).toHaveValue('25');
   await expect(page).toHaveURL('/');
 
   await savedViews.getByRole('button', { name: 'Apply View' }).click();
   await expect(filters.getByLabel('Search')).toHaveValue('Saved view target');
+  await expect(filters.getByLabel('Label')).toHaveValue('archive');
   await expect(filters.getByLabel('Status')).toHaveValue('review');
   await expect(filters.getByLabel('Priority')).toHaveValue('high');
   await expect(filters.getByLabel('Include archived')).toBeChecked();
   await expect(settings.getByLabel('Page size')).toHaveValue('50');
   await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Saved view target');
+  await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('archive');
   await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('50');
 
   await page.reload();
@@ -1485,6 +1506,7 @@ test('saved filter views persist restore and compose with detail routes', async 
   savedViews = settings.getByLabel('Saved filter views');
   await expect(savedViews.getByLabel('Saved views')).toContainText('Review archive view');
   await expect(filters.getByLabel('Search')).toHaveValue('Saved view target');
+  await expect(filters.getByLabel('Label')).toHaveValue('archive');
 
   await savedViews.getByLabel('Saved views').selectOption({ label: 'Review archive view' });
   await savedViews.getByLabel('View name').fill('Renamed archive view');
@@ -1497,6 +1519,7 @@ test('saved filter views persist restore and compose with detail routes', async 
   await savedViews.getByRole('button', { name: 'Apply View' }).click();
   await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${targetIssue.id}`);
   await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Saved view target');
+  await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('archive');
   await expect(page.getByRole('region', { name: targetIssue.title })).toBeVisible();
 
   await savedViews.getByRole('button', { name: 'Delete' }).click();

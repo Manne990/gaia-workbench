@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 
 // Add future migrations to MIGRATIONS in version order and bump this value.
 // Existing file-backed databases may start at user_version 0.
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 const createIssuesTable = `
   CREATE TABLE IF NOT EXISTS issues (
@@ -76,6 +76,7 @@ const createSavedFilterViewsTable = `
     search TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'all' CHECK (status IN ('all', 'todo', 'in_progress', 'review', 'done')),
     priority TEXT NOT NULL DEFAULT 'all' CHECK (priority IN ('all', 'low', 'medium', 'high')),
+    label TEXT NOT NULL DEFAULT '',
     include_archived INTEGER NOT NULL DEFAULT 0 CHECK (include_archived IN (0, 1)),
     blocked_only INTEGER NOT NULL DEFAULT 0 CHECK (blocked_only IN (0, 1)),
     stale_only INTEGER NOT NULL DEFAULT 0 CHECK (stale_only IN (0, 1)),
@@ -186,6 +187,10 @@ function runSavedFilterViewsStaleOnlyMigration(database: Database.Database): voi
   );
 }
 
+function runSavedFilterViewsLabelMigration(database: Database.Database): void {
+  ensureColumn(database, TABLE_NAMES.savedFilterViews, 'label', "label TEXT NOT NULL DEFAULT ''");
+}
+
 export const TABLE_NAMES = {
   activityEvents: 'activity_events',
   issues: 'issues',
@@ -238,6 +243,7 @@ const REQUIRED_COLUMNS_BY_TABLE: Record<(typeof REQUIRED_TABLES)[number], readon
     'search',
     'status',
     'priority',
+    'label',
     'include_archived',
     'blocked_only',
     'stale_only',
@@ -272,6 +278,11 @@ const MIGRATIONS: Migration[] = [
     version: 5,
     name: '005_add_saved_filter_view_stale_only',
     up: runSavedFilterViewsStaleOnlyMigration
+  },
+  {
+    version: 6,
+    name: '006_add_saved_filter_view_label',
+    up: runSavedFilterViewsLabelMigration
   }
 ];
 

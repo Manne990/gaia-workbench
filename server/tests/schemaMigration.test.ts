@@ -71,6 +71,7 @@ function expectCurrentSchema(database: Database.Database): void {
       'search',
       'status',
       'priority',
+      'label',
       'include_archived',
       'blocked_only',
       'stale_only',
@@ -405,7 +406,7 @@ describe('schema migrations', () => {
     });
   });
 
-  it('upgrades existing saved filter views with a default stale-only flag', async () => {
+  it('upgrades existing saved filter views with default stale-only and label filters', async () => {
     await withTempDatabasePath((databasePath) => {
       createVersionFourDatabaseWithoutStaleFilter(databasePath);
 
@@ -421,6 +422,7 @@ describe('schema migrations', () => {
             search: 'legacy',
             status: 'review',
             priority: 'high',
+            label: '',
             includeArchived: true,
             blockedOnly: true,
             staleOnly: false,

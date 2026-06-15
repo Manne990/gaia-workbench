@@ -548,6 +548,56 @@ describe('tracker import API', () => {
     expect(afterImport.body).toEqual(beforeImport.body);
   });
 
+  it('rejects mixed-valid multi-error payloads without partial writes or activity drift', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+
+    const baseline = await request(app).post('/api/issues').send({ title: 'Keep import rollback intact' }).expect(201);
+    await request(app)
+      .post(`/api/issues/${baseline.body.id}/comments`)
+      .send({ body: 'Existing activity must remain unchanged' })
+      .expect(201);
+    const beforeImport = await request(app).get('/api/export').expect(200);
+    const beforeActivity = await request(app).get(`/api/issues/${baseline.body.id}/activity`).expect(200);
+
+    const malformed = cloneExport(payload);
+    const issueWithCommentsIndex = malformed.issues.findIndex((issue) => issue.comments.length > 0);
+    const issueWithActivityIndex = malformed.issues.findIndex((issue) => issue.activityEvents.length > 0);
+
+    expect(issueWithCommentsIndex).toBeGreaterThanOrEqual(0);
+    expect(issueWithActivityIndex).toBeGreaterThanOrEqual(0);
+
+    malformed.issues[0].status = 'blocked';
+    malformed.issues[issueWithCommentsIndex].comments[0].issueId = 'missing-parent';
+    malformed.issues[issueWithActivityIndex].activityEvents[0].createdAt = '2024-02-31T00:00:00.000Z';
+
+    const response = await request(app).post('/api/import/apply').send(malformed).expect(400);
+    const afterImport = await request(app).get('/api/export').expect(200);
+    const afterActivity = await request(app).get(`/api/issues/${baseline.body.id}/activity`).expect(200);
+
+    expect(response.body.valid).toBe(false);
+    expect(response.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'invalid_status',
+          path: '$.issues[0].status'
+        }),
+        expect.objectContaining({
+          code: 'dangling_reference',
+          path: `$.issues[${issueWithCommentsIndex}].comments[0].issueId`
+        }),
+        expect.objectContaining({
+          code: 'invalid_timestamp',
+          path: `$.issues[${issueWithActivityIndex}].activityEvents[0].createdAt`
+        })
+      ])
+    );
+    expect(afterImport.body).toEqual(beforeImport.body);
+    expect(afterActivity.body).toEqual(beforeActivity.body);
+
+    await request(app).get(`/api/issues/${payload.issues[0].id}`).expect(404);
+  });
+
   it('rejects invalid archivedAt values without mutating existing data', async () => {
     const app = createApp({ databasePath: ':memory:' });
     const payload = await createExportFixture();

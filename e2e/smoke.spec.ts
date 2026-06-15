@@ -976,6 +976,43 @@ test('dependency links show and clear blocked issue visibility', async ({ page }
   await expect(archivedBlockerItem.getByText('Blocking')).toHaveCount(0);
   await expect(detail.getByText('Waiting on at least one active dependency.')).toHaveCount(0);
 
+  await page.request.post(`/api/issues/${blocker.id}/unarchive`);
+  await page.reload();
+
+  const unarchivedBlockerItem = blockersSection.getByRole('listitem').filter({ hasText: blocker.title });
+
+  await expect(unarchivedBlockerItem.getByText('Archived')).toHaveCount(0);
+  await expect(unarchivedBlockerItem.locator('.blocked-pill')).toHaveText('Blocking');
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
+
+  await page.request.post(`/api/issues/${blocker.id}/close`);
+  await page.reload();
+
+  const closedBlockerItem = blockersSection.getByRole('listitem').filter({ hasText: blocker.title });
+
+  await expect(closedBlockerItem.getByText('Done')).toBeVisible();
+  await expect(closedBlockerItem.locator('.blocked-pill')).toHaveCount(0);
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toHaveCount(0);
+  await expect(blockedRow.locator('.blocked-pill')).toHaveCount(0);
+
+  await page.request.post(`/api/issues/${blocker.id}/reopen`);
+  await page.reload();
+
+  const reopenedBlockerItem = blockersSection.getByRole('listitem').filter({ hasText: blocker.title });
+
+  await expect(reopenedBlockerItem.locator('.blocked-pill')).toHaveText('Blocking');
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
+
+  await page.request.post(`/api/issues/${blocker.id}/archive`);
+  await page.reload();
+
+  await expect(
+    blockersSection.getByRole('listitem').filter({ hasText: blocker.title }).getByText('Archived')
+  ).toBeVisible();
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toHaveCount(0);
+
   await dependencyForm.getByLabel('Add blocker issue ID').fill(blockerAfterArchive.id);
   await dependencyForm.getByRole('button', { name: 'Add Dependency' }).click();
 

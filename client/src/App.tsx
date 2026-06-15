@@ -843,7 +843,7 @@ export function App() {
 
       const selectedIssueIdAtApply = selectedIssueIdRef.current;
       if (importPlanTouchesIssue(plan, selectedIssueIdAtApply)) {
-        await refreshSelectedIssueAfterImport(selectedIssueIdAtApply);
+        await refreshSelectedIssueDetail(selectedIssueIdAtApply);
       }
     } catch {
       setImportError('Import apply failed.');
@@ -1120,7 +1120,7 @@ export function App() {
     }
   }
 
-  async function refreshSelectedIssueAfterImport(issueId: string) {
+  async function refreshSelectedIssueDetail(issueId: string) {
     try {
       const refreshedIssue = await fetchIssue(issueId);
 
@@ -1337,21 +1337,13 @@ export function App() {
       const changedCount = result.updated.length;
       const unchangedCount = result.unchangedIds.length;
       const duplicateCount = result.duplicateIds.length;
-      const changedSelectedIssue = selectedIssueId
-        ? result.updated.some((issue) => issue.id === selectedIssueId)
-        : false;
+      const selectedIssueIdAfterMutation = selectedIssueIdRef.current;
 
       setSelectedBulkIssueIds([]);
       refreshIssues();
 
-      if (changedSelectedIssue && selectedIssueId) {
-        const refreshedIssue = await fetchIssue(selectedIssueId);
-
-        if (refreshedIssue) {
-          setSelectedIssue(refreshedIssue);
-          setSelectedIssueLoadState('loaded');
-          await refreshActivity(refreshedIssue.id);
-        }
+      if (selectedIssueIdAfterMutation) {
+        await refreshSelectedIssueDetail(selectedIssueIdAfterMutation);
       }
 
       setBulkStatusMessage(

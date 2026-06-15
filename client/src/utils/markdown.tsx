@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 
 const allowedLinkProtocols = new Set(['http:', 'https:', 'mailto:']);
 const maxLinkLength = 2048;
@@ -18,7 +18,15 @@ function hasInlineMarkupCharacters(value: string): boolean {
 }
 
 function hasControlOrWhitespace(value: string): boolean {
-  return /[\u0000-\u001F\u007F\s]/.test(value);
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+
+    if (code <= 31 || code === 127 || /\s/.test(char)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function isBoundary(value: string | undefined): boolean {
@@ -145,9 +153,7 @@ function renderInlineWithBreaks(lines: string[], keyPrefix: string): ReactNode[]
   return lines.flatMap((line, lineIndex) => {
     const renderedLine = renderInline(line, `${keyPrefix}-line-${lineIndex}`);
 
-    return lineIndex === 0
-      ? renderedLine
-      : [<br key={`${keyPrefix}-br-${lineIndex}`} />, ...renderedLine];
+    return lineIndex === 0 ? renderedLine : [<br key={`${keyPrefix}-br-${lineIndex}`} />, ...renderedLine];
   });
 }
 
@@ -165,9 +171,7 @@ export function renderMarkdownLite(source: string, options: RenderOptions = {}):
 
     const blockIndex = blocks.length;
     blocks.push(
-      <p key={`paragraph-${blockIndex}`}>
-        {renderInlineWithBreaks(paragraphLines, `paragraph-${blockIndex}`)}
-      </p>
+      <p key={`paragraph-${blockIndex}`}>{renderInlineWithBreaks(paragraphLines, `paragraph-${blockIndex}`)}</p>
     );
     paragraphLines = [];
   }

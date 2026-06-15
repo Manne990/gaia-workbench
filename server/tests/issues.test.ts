@@ -93,9 +93,7 @@ describe('issues API', () => {
       hasPrevious: true
     });
     expect(new Set(firstPage.body.items.map((issue: { id: string }) => issue.id)).size).toBe(2);
-    expect(firstPage.body.items.map((issue: { id: string }) => issue.id)).not.toContain(
-      secondPage.body.items[0].id
-    );
+    expect(firstPage.body.items.map((issue: { id: string }) => issue.id)).not.toContain(secondPage.body.items[0].id);
   });
 
   it('filters and searches listed issues', async () => {
@@ -307,9 +305,7 @@ describe('issues API', () => {
       .send({ body: 'Comment stays visible after archive' })
       .expect(201);
 
-    const archived = await request(app)
-      .post(`/api/issues/${archivedCandidate.body.id}/archive`)
-      .expect(200);
+    const archived = await request(app).post(`/api/issues/${archivedCandidate.body.id}/archive`).expect(200);
 
     expect(archived.body).toMatchObject({
       id: archivedCandidate.body.id,
@@ -340,13 +336,9 @@ describe('issues API', () => {
     expect(includeArchivedList.body.summary.totalHighPriority).toBe(1);
 
     await request(app).get(`/api/issues/${archivedCandidate.body.id}`).expect(200, archived.body);
-    await request(app).get(`/api/issues/${archivedCandidate.body.id}/comments`).expect(200, [
-      comment.body
-    ]);
+    await request(app).get(`/api/issues/${archivedCandidate.body.id}/comments`).expect(200, [comment.body]);
 
-    const archivedActivity = await request(app)
-      .get(`/api/issues/${archivedCandidate.body.id}/activity`)
-      .expect(200);
+    const archivedActivity = await request(app).get(`/api/issues/${archivedCandidate.body.id}/activity`).expect(200);
 
     expect(archivedActivity.body.map((event: { type: string }) => event.type)).toEqual([
       'issue_created',
@@ -354,18 +346,12 @@ describe('issues API', () => {
       'issue_archived'
     ]);
 
-    const archivedAgain = await request(app)
-      .post(`/api/issues/${archivedCandidate.body.id}/archive`)
-      .expect(200);
+    const archivedAgain = await request(app).post(`/api/issues/${archivedCandidate.body.id}/archive`).expect(200);
 
     expect(archivedAgain.body).toEqual(archived.body);
-    await request(app)
-      .get(`/api/issues/${archivedCandidate.body.id}/activity`)
-      .expect(200, archivedActivity.body);
+    await request(app).get(`/api/issues/${archivedCandidate.body.id}/activity`).expect(200, archivedActivity.body);
 
-    const unarchived = await request(app)
-      .post(`/api/issues/${archivedCandidate.body.id}/unarchive`)
-      .expect(200);
+    const unarchived = await request(app).post(`/api/issues/${archivedCandidate.body.id}/unarchive`).expect(200);
 
     expect(unarchived.body).toMatchObject({
       id: archivedCandidate.body.id,
@@ -375,9 +361,7 @@ describe('issues API', () => {
     const restoredList = await request(app).get('/api/issues').expect(200);
     expect(restoredList.body.pagination.total).toBe(2);
 
-    const finalActivity = await request(app)
-      .get(`/api/issues/${archivedCandidate.body.id}/activity`)
-      .expect(200);
+    const finalActivity = await request(app).get(`/api/issues/${archivedCandidate.body.id}/activity`).expect(200);
 
     expect(finalActivity.body.map((event: { type: string }) => event.type)).toEqual([
       'issue_created',
@@ -396,12 +380,9 @@ describe('issues API', () => {
 
     const created = await request(app).post('/api/issues').send({ title: 'Valid issue' }).expect(201);
 
-    await request(app)
-      .put(`/api/issues/${created.body.id}`)
-      .send({ status: 'done', priority: 'urgent' })
-      .expect(400, {
-        error: 'Invalid issue priority'
-      });
+    await request(app).put(`/api/issues/${created.body.id}`).send({ status: 'done', priority: 'urgent' }).expect(400, {
+      error: 'Invalid issue priority'
+    });
 
     await request(app).get('/api/issues?status=archived').expect(400, {
       error: 'Invalid issue status'
@@ -438,19 +419,13 @@ describe('issues API', () => {
         error: 'Invalid issue labels'
       });
 
-    await request(app)
-      .post('/api/issues')
-      .send({ title: 'Bad due date', dueDate: '2026-02-30' })
-      .expect(400, {
-        error: 'Invalid issue due date'
-      });
+    await request(app).post('/api/issues').send({ title: 'Bad due date', dueDate: '2026-02-30' }).expect(400, {
+      error: 'Invalid issue due date'
+    });
 
-    await request(app)
-      .put(`/api/issues/${created.body.id}`)
-      .send({ dueDate: 'tomorrow' })
-      .expect(400, {
-        error: 'Invalid issue due date'
-      });
+    await request(app).put(`/api/issues/${created.body.id}`).send({ dueDate: 'tomorrow' }).expect(400, {
+      error: 'Invalid issue due date'
+    });
   });
 
   it('returns 404 for missing issues', async () => {

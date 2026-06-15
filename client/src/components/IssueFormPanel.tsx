@@ -27,9 +27,7 @@ export function IssueFormPanel({
     <section className="form-panel" aria-labelledby="issue-form-heading">
       <div className="panel-header">
         <div>
-          <h2 id="issue-form-heading">
-            {activeForm.mode === 'create' ? 'Create Issue' : 'Edit Issue'}
-          </h2>
+          <h2 id="issue-form-heading">{activeForm.mode === 'create' ? 'Create Issue' : 'Edit Issue'}</h2>
           <p>{activeForm.mode === 'create' ? 'New tracker item' : 'Update tracker item'}</p>
         </div>
       </div>
@@ -86,9 +84,7 @@ export function IssueFormPanel({
           <select
             id="issue-status"
             value={formValues.status}
-            onChange={(event) =>
-              setFormValues({ ...formValues, status: event.target.value as IssueStatus })
-            }
+            onChange={(event) => setFormValues({ ...formValues, status: event.target.value as IssueStatus })}
             disabled={isSubmitting}
           >
             {statusOrder.map((status) => (
@@ -104,9 +100,7 @@ export function IssueFormPanel({
           <select
             id="issue-priority"
             value={formValues.priority}
-            onChange={(event) =>
-              setFormValues({ ...formValues, priority: event.target.value as IssuePriority })
-            }
+            onChange={(event) => setFormValues({ ...formValues, priority: event.target.value as IssuePriority })}
             disabled={isSubmitting}
           >
             {priorityOrder.map((priority) => (

@@ -176,9 +176,7 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   await commentForm.getByLabel('New comment').fill('Initial detail comment');
   await commentForm.getByRole('button', { name: 'Add Comment' }).click();
   const commentsList = page.getByLabel('Issue comments');
-  const initialCommentItem = commentsList
-    .getByRole('listitem')
-    .filter({ hasText: 'Initial detail comment' });
+  const initialCommentItem = commentsList.getByRole('listitem').filter({ hasText: 'Initial detail comment' });
 
   await expect(initialCommentItem.getByText('Initial detail comment')).toBeVisible();
   await expect(activity.getByText('Comment added')).toBeVisible();
@@ -361,7 +359,8 @@ test('markdown-lite renders safe formatting and keeps unsafe input inert', async
     '',
     'Unsafe text: <script>window.__tinytrackerXss = true</script> and [bad](javascript:alert(1)).'
   ].join('\n');
-  const rawComment = 'Comment has **strong comment** and [bad](data:text/html,alert) plus <img src=x onerror=alert(1)>.';
+  const rawComment =
+    'Comment has **strong comment** and [bad](data:text/html,alert) plus <img src=x onerror=alert(1)>.';
   const issue = await createIssueThroughApi(page, {
     title: 'Markdown render issue',
     description: rawDescription
@@ -396,7 +395,9 @@ test('markdown-lite renders safe formatting and keeps unsafe input inert', async
   await expect(detail.locator('img')).toHaveCount(0);
   await expect(detail.locator('a[href^="javascript:"]')).toHaveCount(0);
   await expect(detail.locator('a[href^="data:"]')).toHaveCount(0);
-  expect(await page.evaluate(() => (window as Window & { __tinytrackerXss?: boolean }).__tinytrackerXss)).toBeUndefined();
+  expect(
+    await page.evaluate(() => (window as Window & { __tinytrackerXss?: boolean }).__tinytrackerXss)
+  ).toBeUndefined();
 
   const commentItem = detail.getByLabel('Issue comments').getByRole('listitem').filter({ hasText: 'Comment has' });
 
@@ -484,9 +485,7 @@ test('keyboard users can create open comment edit and close an issue', async ({ 
   await page.keyboard.press('Enter');
 
   const keyboardCommentsList = detail.getByLabel('Issue comments');
-  const keyboardCommentItem = keyboardCommentsList
-    .getByRole('listitem')
-    .filter({ hasText: 'Keyboard comment one' });
+  const keyboardCommentItem = keyboardCommentsList.getByRole('listitem').filter({ hasText: 'Keyboard comment one' });
 
   await expect(keyboardCommentItem.getByText('Keyboard comment one')).toBeVisible();
 
@@ -612,7 +611,7 @@ test('dashboard filters hydrate from URL and compose with issue detail routes', 
     status: 'review',
     priority: 'high'
   });
-  const otherIssue = await createIssueThroughApi(page, {
+  await createIssueThroughApi(page, {
     title: 'URL filter other',
     description: 'Should be hidden by composed filters.',
     status: 'todo',
@@ -735,9 +734,7 @@ test('large issue lists remain filterable and can open detail', async ({ page })
 
   await expect(pagedDetail.getByRole('heading', { name: secondPageTarget.title })).toBeVisible();
   await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${secondPageTarget.id}`);
-  await pagedDetail
-    .getByRole('button', { name: `Close issue detail for ${secondPageTarget.title}` })
-    .click();
+  await pagedDetail.getByRole('button', { name: `Close issue detail for ${secondPageTarget.title}` }).click();
 
   const filterStartedAt = Date.now();
   await filters.getByLabel('Search').fill(targetIssue.title);

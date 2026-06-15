@@ -12,12 +12,7 @@ import {
   IssueListFilters,
   IssueRepository
 } from './db/index.js';
-import {
-  applyTrackerImport,
-  ImportValidationError,
-  previewTrackerImport,
-  type ImportPlan
-} from './trackerImport.js';
+import { applyTrackerImport, ImportValidationError, previewTrackerImport, type ImportPlan } from './trackerImport.js';
 
 type AppConfig = {
   clientDir?: string;
@@ -127,11 +122,7 @@ function getOptionalQueryString(value: unknown): string | undefined {
   return undefined;
 }
 
-function parsePositiveIntegerQuery(
-  value: unknown,
-  defaultValue: number,
-  errorMessage: string
-): number {
+function parsePositiveIntegerQuery(value: unknown, defaultValue: number, errorMessage: string): number {
   const queryValue = getOptionalQueryString(value);
 
   if (queryValue === undefined) {
@@ -146,16 +137,8 @@ function parsePositiveIntegerQuery(
 }
 
 function getIssueListPagination(query: { page?: unknown; limit?: unknown }) {
-  const page = parsePositiveIntegerQuery(
-    query.page,
-    DEFAULT_ISSUE_PAGE,
-    'Invalid page parameter'
-  );
-  const limit = parsePositiveIntegerQuery(
-    query.limit,
-    DEFAULT_ISSUE_LIMIT,
-    'Invalid limit parameter'
-  );
+  const page = parsePositiveIntegerQuery(query.page, DEFAULT_ISSUE_PAGE, 'Invalid page parameter');
+  const limit = parsePositiveIntegerQuery(query.limit, DEFAULT_ISSUE_LIMIT, 'Invalid limit parameter');
 
   if (limit > MAX_ISSUE_LIMIT) {
     throw new Error('Invalid limit parameter');
@@ -212,10 +195,7 @@ function buildTrackerExport(
     commentRepository.getHistoryByCommentIds(comments.map((comment) => comment.id)),
     (history) => history.commentId
   );
-  const activityByIssueId = groupBy(
-    activityRepository.listByIssueIds(issueIds),
-    (event) => event.issueId
-  );
+  const activityByIssueId = groupBy(activityRepository.listByIssueIds(issueIds), (event) => event.issueId);
 
   return {
     exportVersion: 1,

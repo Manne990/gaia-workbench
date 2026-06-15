@@ -76,10 +76,7 @@ describe('comments API', () => {
       .post(`/api/issues/${issue.body.id}/comments`)
       .send({ body: 'Activity comment' })
       .expect(201);
-    await request(app)
-      .put(`/api/comments/${comment.body.id}`)
-      .send({ body: 'Edited activity comment' })
-      .expect(200);
+    await request(app).put(`/api/comments/${comment.body.id}`).send({ body: 'Edited activity comment' }).expect(200);
 
     const activity = await request(app).get(`/api/issues/${issue.body.id}/activity`).expect(200);
 

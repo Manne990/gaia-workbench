@@ -35,25 +35,19 @@ function createRawDatabase(databasePath: string): Database.Database {
 }
 
 function getTableNames(database: Database.Database): string[] {
-  return (
-    database
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
-      .all() as NameRow[]
-  ).map((row) => row.name);
+  return (database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as NameRow[]).map(
+    (row) => row.name
+  );
 }
 
 function getIndexNames(database: Database.Database): string[] {
-  return (
-    database
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'index' ORDER BY name")
-      .all() as NameRow[]
-  ).map((row) => row.name);
+  return (database.prepare("SELECT name FROM sqlite_master WHERE type = 'index' ORDER BY name").all() as NameRow[]).map(
+    (row) => row.name
+  );
 }
 
 function getColumnNames(database: Database.Database, tableName: string): string[] {
-  return (database.prepare(`PRAGMA table_info(${tableName})`).all() as NameRow[]).map(
-    (row) => row.name
-  );
+  return (database.prepare(`PRAGMA table_info(${tableName})`).all() as NameRow[]).map((row) => row.name);
 }
 
 function expectCurrentSchema(database: Database.Database): void {
@@ -83,7 +77,8 @@ function createLegacyIssuesOnlyDatabase(databasePath: string): void {
 
   try {
     database
-      .prepare(`
+      .prepare(
+        `
         CREATE TABLE issues (
           id TEXT PRIMARY KEY,
           title TEXT NOT NULL,
@@ -93,13 +88,16 @@ function createLegacyIssuesOnlyDatabase(databasePath: string): void {
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
-      `)
+      `
+      )
       .run();
     database
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO issues (id, title, description, status, priority, created_at, updated_at)
         VALUES (@id, @title, @description, @status, @priority, @createdAt, @updatedAt)
-      `)
+      `
+      )
       .run({
         id: 'legacy-issue',
         title: 'Legacy issue',
@@ -139,10 +137,12 @@ function createLegacyCommentsDatabase(databasePath: string): void {
       );
     `);
     database
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO issues (id, title, description, status, priority, created_at, updated_at)
         VALUES (@id, @title, @description, @status, @priority, @createdAt, @updatedAt)
-      `)
+      `
+      )
       .run({
         id: 'legacy-comment-issue',
         title: 'Legacy comment issue',
@@ -153,10 +153,12 @@ function createLegacyCommentsDatabase(databasePath: string): void {
         updatedAt: now
       });
     database
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO comments (id, issue_id, body, created_at, updated_at)
         VALUES (@id, @issueId, @body, @createdAt, @updatedAt)
-      `)
+      `
+      )
       .run({
         id: 'legacy-comment',
         issueId: 'legacy-comment-issue',
@@ -187,10 +189,12 @@ function createPartialIssueColumnDatabase(databasePath: string): void {
       );
     `);
     database
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO issues (id, title, description, status, priority, labels, created_at, updated_at)
         VALUES (@id, @title, @description, @status, @priority, @labels, @createdAt, @updatedAt)
-      `)
+      `
+      )
       .run({
         id: 'partial-column-issue',
         title: 'Partial issue columns',
@@ -383,9 +387,7 @@ describe('schema migrations', () => {
       `);
       database.close();
 
-      expect(() => createDatabase(databasePath)).toThrow(
-        'TinyTracker schema is missing required issues columns'
-      );
+      expect(() => createDatabase(databasePath)).toThrow('TinyTracker schema is missing required issues columns');
 
       const reopened = createRawDatabase(databasePath);
 

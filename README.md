@@ -197,10 +197,35 @@ npm run ci
 
 `npm run ci` performs:
 
+* Formatting check
+* ESLint check
 * TypeScript checks
 * Vitest tests
 * Production build
 * Playwright smoke verification
+
+Run only the quality gate:
+
+```bash
+npm run lint
+```
+
+Format and lint checks can be run separately:
+
+```bash
+npm run lint:format:check
+npm run lint:code
+```
+
+Use the fix commands for local cleanup:
+
+```bash
+npm run lint:format
+npm run lint:code:fix
+```
+
+CI runs lint first and fails on any formatting mismatch, ESLint error, or ESLint
+warning before continuing to typecheck, tests, build, and browser smoke.
 
 Start TinyTracker:
 

@@ -125,10 +125,7 @@ function normalizeDueDate(value: unknown): string | null {
 
   const [year, month, day] = value.split('-').map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
-  const isRealDate =
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day;
+  const isRealDate = date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 
   if (!isRealDate) {
     throw new Error('Invalid issue due date');
@@ -291,10 +288,12 @@ export class IssueRepository {
 
     const transaction = this.database.transaction(() => {
       this.database
-        .prepare(`
+        .prepare(
+          `
           INSERT INTO issues (id, title, description, status, priority, labels, due_date, archived_at, created_at, updated_at)
           VALUES (@id, @title, @description, @status, @priority, @labels, @dueDate, @archivedAt, @createdAt, @updatedAt)
-        `)
+        `
+        )
         .run({
           id: issue.id,
           title: issue.title,
@@ -322,40 +321,43 @@ export class IssueRepository {
 
   getById(id: string): Issue | null {
     const row = this.database
-      .prepare(`
+      .prepare(
+        `
         SELECT id, title, description, status, priority, labels, due_date, archived_at, created_at, updated_at
         FROM issues
         WHERE id = @id
-      `)
+      `
+      )
       .get({ id }) as IssueRow | undefined;
 
     return row ? mapIssueRow(row) : null;
   }
 
-  list(
-    filters: IssueListFilters = {},
-    pagination: IssueListPaginationInput = { page: 1, limit: 25 }
-  ): IssueListResult {
+  list(filters: IssueListFilters = {}, pagination: IssueListPaginationInput = { page: 1, limit: 25 }): IssueListResult {
     const { whereClause, values } = buildIssueListWhereClause(filters);
     const total = (
       this.database
-        .prepare(`
+        .prepare(
+          `
           SELECT COUNT(*) AS count
           FROM issues
           ${whereClause}
-        `)
+        `
+        )
         .get(values) as CountRow
     ).count;
     const totalPages = total === 0 ? 0 : Math.ceil(total / pagination.limit);
     const offset = (pagination.page - 1) * pagination.limit;
     const rows = this.database
-      .prepare(`
+      .prepare(
+        `
         SELECT id, title, description, status, priority, labels, due_date, archived_at, created_at, updated_at
         FROM issues
         ${whereClause}
         ORDER BY created_at DESC, id DESC
         LIMIT @limit OFFSET @offset
-      `)
+      `
+      )
       .all({ ...values, limit: pagination.limit, offset }) as IssueRow[];
 
     return {
@@ -378,11 +380,13 @@ export class IssueRepository {
 
   listForExport(): Issue[] {
     const rows = this.database
-      .prepare(`
+      .prepare(
+        `
         SELECT id, title, description, status, priority, labels, due_date, archived_at, created_at, updated_at
         FROM issues
         ORDER BY created_at ASC, id ASC
-      `)
+      `
+      )
       .all() as IssueRow[];
 
     return rows.map(mapIssueRow);
@@ -397,12 +401,14 @@ export class IssueRepository {
     };
     const archiveWhereClause = includeArchived ? '' : 'WHERE archived_at IS NULL';
     const statusRows = this.database
-      .prepare(`
+      .prepare(
+        `
         SELECT status, COUNT(*) AS count
         FROM issues
         ${archiveWhereClause}
         GROUP BY status
-      `)
+      `
+      )
       .all() as StatusCountRow[];
 
     for (const row of statusRows) {
@@ -411,12 +417,14 @@ export class IssueRepository {
 
     const totalHighPriority = (
       this.database
-        .prepare(`
+        .prepare(
+          `
           SELECT COUNT(*) AS count
           FROM issues
           WHERE priority = 'high'
           ${includeArchived ? '' : 'AND archived_at IS NULL'}
-        `)
+        `
+        )
         .get() as CountRow
     ).count;
 
@@ -485,11 +493,13 @@ export class IssueRepository {
 
     const transaction = this.database.transaction(() => {
       const result = this.database
-        .prepare(`
+        .prepare(
+          `
           UPDATE issues
           SET ${fields.join(', ')}
           WHERE id = @id
-        `)
+        `
+        )
         .run(values);
 
       if (result.changes === 0) {
@@ -525,11 +535,13 @@ export class IssueRepository {
     const archivedAt = nowIso();
     const transaction = this.database.transaction(() => {
       const result = this.database
-        .prepare(`
+        .prepare(
+          `
           UPDATE issues
           SET archived_at = @archivedAt, updated_at = @archivedAt
           WHERE id = @id
-        `)
+        `
+        )
         .run({ id, archivedAt });
 
       if (result.changes === 0) {
@@ -563,11 +575,13 @@ export class IssueRepository {
     const updatedAt = nowIso();
     const transaction = this.database.transaction(() => {
       const result = this.database
-        .prepare(`
+        .prepare(
+          `
           UPDATE issues
           SET archived_at = NULL, updated_at = @updatedAt
           WHERE id = @id
-        `)
+        `
+        )
         .run({ id, updatedAt });
 
       if (result.changes === 0) {

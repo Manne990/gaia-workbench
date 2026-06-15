@@ -1,13 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import {
-  CommentRepository,
-  createDatabase,
-  IssueRepository,
-  type IssueUpdate,
-  type NewIssue
-} from './db/index.js';
+import { CommentRepository, createDatabase, IssueRepository, type IssueUpdate, type NewIssue } from './db/index.js';
 
 type DemoComment = {
   body: string;
@@ -161,9 +155,7 @@ export function seedDemoData(databasePath = resolveDemoSeedDatabasePath()): Demo
         }
       }
 
-      const existingCommentBodies = new Set(
-        commentRepository.listByIssueId(issue.id).map((comment) => comment.body)
-      );
+      const existingCommentBodies = new Set(commentRepository.listByIssueId(issue.id).map((comment) => comment.body));
 
       for (const comment of demoIssue.comments) {
         if (existingCommentBodies.has(comment.body)) {

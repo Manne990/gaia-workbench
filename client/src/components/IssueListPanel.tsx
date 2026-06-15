@@ -151,11 +151,15 @@ export function IssueListPanel({
       ) : null}
 
       {loadState === 'loading' ? (
-        <div className="state-message" role="status">Loading issues...</div>
+        <div className="state-message" role="status">
+          Loading issues...
+        </div>
       ) : null}
 
       {loadState === 'error' ? (
-        <div className="state-message error" role="alert">Unable to load issues.</div>
+        <div className="state-message error" role="alert">
+          Unable to load issues.
+        </div>
       ) : null}
 
       {loadState === 'loaded' && issues.length === 0 ? (
@@ -203,10 +207,11 @@ export function IssueListPanel({
                 {filteredIssues.map((issue) => (
                   <tr
                     key={issue.id}
-                    className={[
-                      issue.isOverdue ? 'overdue-row' : '',
-                      issue.archivedAt ? 'archived-row' : ''
-                    ].filter(Boolean).join(' ') || undefined}
+                    className={
+                      [issue.isOverdue ? 'overdue-row' : '', issue.archivedAt ? 'archived-row' : '']
+                        .filter(Boolean)
+                        .join(' ') || undefined
+                    }
                   >
                     <td>
                       <strong>{issue.title}</strong>
@@ -300,12 +305,7 @@ export function IssueListPanel({
               Showing {(pagination.page - 1) * pagination.limit + 1}-
               {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
             </span>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={onNextPage}
-              disabled={!pagination.hasMore}
-            >
+            <button type="button" className="secondary-button" onClick={onNextPage} disabled={!pagination.hasMore}>
               Next
             </button>
           </nav>

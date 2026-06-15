@@ -1312,6 +1312,33 @@ describe('issues API', () => {
     });
   });
 
+  it('returns standard JSON parse errors for issue and dependency mutations', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const issue = await request(app).post('/api/issues').send({ title: 'Malformed issue contract' }).expect(201);
+
+    await request(app)
+      .put(`/api/issues/${issue.body.id}`)
+      .set('Content-Type', 'application/json')
+      .send('{')
+      .expect(400)
+      .expect((response) => {
+        expect(response.body).toEqual({ error: 'Request body must be valid JSON.' });
+        expect(response.body).not.toHaveProperty('valid');
+        expect(response.body).not.toHaveProperty('errors');
+      });
+
+    await request(app)
+      .post(`/api/issues/${issue.body.id}/dependencies`)
+      .set('Content-Type', 'application/json')
+      .send('{')
+      .expect(400)
+      .expect((response) => {
+        expect(response.body).toEqual({ error: 'Request body must be valid JSON.' });
+        expect(response.body).not.toHaveProperty('valid');
+        expect(response.body).not.toHaveProperty('errors');
+      });
+  });
+
   it('returns blockers and dependents for issue dependency detail and hydrates archived blockers', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

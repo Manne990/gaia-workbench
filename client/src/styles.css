@@ -841,6 +841,29 @@ h3 {
   font-weight: 700;
 }
 
+.import-warnings {
+  display: grid;
+  gap: 10px;
+}
+
+.import-warnings ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.import-warnings li {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #dae6d7;
+  border-radius: 8px;
+  background: #f6faf3;
+  color: #3f5a36;
+}
+
 .state-message {
   padding: 32px 20px;
   color: #59636e;

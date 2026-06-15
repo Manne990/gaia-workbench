@@ -604,6 +604,48 @@ export function App() {
     }
   }
 
+  function downloadTextFile(fileName: string, text: string) {
+    const blob = new Blob([text], { type: 'application/json; charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = fileName;
+    link.rel = 'noopener';
+    document.body.append(link);
+    link.click();
+    link.remove();
+
+    window.setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 0);
+  }
+
+  function sanitizeFilePart(fileName: string | null): string {
+    return (
+      (fileName ?? 'import')
+        .replace(/\.json$/i, '')
+        .replace(/[^a-zA-Z0-9._-]/g, '-')
+        .replace(/-{2,}/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 80) || 'import'
+    );
+  }
+
+  function downloadImportReport() {
+    if (!importPlan) {
+      return;
+    }
+
+    const report = {
+      ...importPlan,
+      sourceFileName: importFileName,
+      generatedAt: new Date().toISOString()
+    };
+
+    downloadTextFile(`${sanitizeFilePart(importFileName)}-import-preview-report.json`, JSON.stringify(report, null, 2));
+  }
+
   function clearImportState() {
     setImportPayload(null);
     setImportFileName(null);
@@ -1250,6 +1292,7 @@ export function App() {
             isApplying={isImportApplying}
             canApply={canApplyImport}
             onPolicyChange={changeImportPolicy}
+            onDownloadReport={downloadImportReport}
             onApply={submitImport}
             onCancel={clearImportState}
           />

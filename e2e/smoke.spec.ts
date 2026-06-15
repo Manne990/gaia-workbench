@@ -13,6 +13,10 @@ type CreatedIssue = {
   description: string;
 };
 
+const largeIssueStatuses = ['todo', 'in_progress', 'review', 'done'] as const;
+const largeIssuePriorities = ['low', 'medium', 'high'] as const;
+const largeIssueCount = 500;
+
 async function isFocused(locator: Locator): Promise<boolean> {
   return locator.evaluate((element) => element === document.activeElement).catch(() => false);
 }
@@ -38,6 +42,36 @@ async function createIssueThroughApi(
   expect(response.ok()).toBe(true);
 
   return (await response.json()) as CreatedIssue;
+}
+
+async function createLargeIssueSet(page: Page, count: number): Promise<CreatedIssue[]> {
+  const issues: CreatedIssue[] = [];
+  const batchSize = 25;
+
+  for (let offset = 0; offset < count; offset += batchSize) {
+    const batch = Array.from({ length: Math.min(batchSize, count - offset) }, async (_, batchIndex) => {
+      const index = offset + batchIndex;
+      const title = `Large issue ${String(index).padStart(4, '0')}`;
+      const response = await page.request.post('/api/issues', {
+        data: {
+          title,
+          description: `Large-list guardrail item ${String(index).padStart(4, '0')}`,
+          status: largeIssueStatuses[index % largeIssueStatuses.length],
+          priority: largeIssuePriorities[index % largeIssuePriorities.length],
+          labels: ['bulk', `group-${index % 10}`],
+          dueDate: index % 5 === 0 ? '2999-12-31' : null
+        }
+      });
+
+      expect(response.ok()).toBe(true);
+
+      return (await response.json()) as CreatedIssue;
+    });
+
+    issues.push(...(await Promise.all(batch)));
+  }
+
+  return issues;
 }
 
 test('TinyTracker smoke creates lists updates and comments on an issue', async ({ page }) => {
@@ -334,4 +368,46 @@ test('dashboard issue open updates the URL and unknown issue links can return to
   await missingIssue.getByRole('button', { name: 'Back to issue list' }).click();
   await expect(missingIssue).toHaveCount(0);
   await expect(page).toHaveURL('/');
+});
+
+test('large issue lists remain filterable and can open detail', async ({ page }) => {
+  test.setTimeout(60_000);
+
+  const issues = await createLargeIssueSet(page, largeIssueCount);
+  const targetIssue = issues[420];
+  const listRequestStartedAt = Date.now();
+  const listResponse = await page.request.get('/api/issues?search=Large%20issue');
+  const listRequestElapsedMs = Date.now() - listRequestStartedAt;
+
+  expect(listResponse.ok()).toBe(true);
+  expect(listRequestElapsedMs).toBeLessThan(1000);
+  expect(await listResponse.json()).toHaveLength(largeIssueCount);
+
+  await page.goto(`/issues/${targetIssue.id}`);
+  const directDetail = page.getByRole('region', { name: targetIssue.title });
+  await expect(directDetail.getByRole('heading', { name: targetIssue.title })).toBeVisible();
+  await expect(directDetail.locator('.detail-description')).toHaveText('Large-list guardrail item 0420');
+  await expect(page).toHaveURL(new RegExp(`/issues/${targetIssue.id}$`));
+
+  await page.goto('/');
+
+  const filters = page.getByLabel('Issue filters');
+  await filters.getByLabel('Search').fill('Large issue');
+  await expect(page.getByLabel('Active filters')).toContainText(`${largeIssueCount} shown`);
+  await expect(page.getByLabel(`${largeIssueCount} issues shown`)).toBeVisible();
+
+  const filterStartedAt = Date.now();
+  await filters.getByLabel('Search').fill(targetIssue.title);
+  await expect(page.getByLabel('Active filters')).toContainText('1 shown');
+  expect(Date.now() - filterStartedAt).toBeLessThan(1000);
+
+  const targetRow = page.getByRole('row', { name: /Large issue 0420.*Todo.*Low/ });
+  await expect(targetRow).toBeVisible();
+
+  await page.getByRole('button', { name: `Open ${targetIssue.title}` }).click();
+  const detail = page.getByRole('region', { name: targetIssue.title });
+
+  await expect(detail.getByRole('heading', { name: targetIssue.title })).toBeVisible();
+  await expect(detail.locator('.detail-description')).toHaveText('Large-list guardrail item 0420');
+  await expect(page).toHaveURL(new RegExp(`/issues/${targetIssue.id}$`));
 });

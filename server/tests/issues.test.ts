@@ -547,6 +547,69 @@ describe('issues API', () => {
     });
   });
 
+  it('keeps stale timestamps and activity unchanged for no-op issue updates', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const staleIssueId = '00000000-0000-4000-8000-000000000174';
+    const staleUpdatedAt = '2026-04-01T00:00:00.000Z';
+
+    await request(app)
+      .post('/api/import/apply')
+      .send({
+        exportVersion: 1,
+        issues: [
+          {
+            id: staleIssueId,
+            title: 'No-op stale issue',
+            description: 'Saving unchanged normalized fields should not refresh this issue.',
+            status: 'todo',
+            priority: 'medium',
+            labels: ['stale'],
+            dueDate: null,
+            isOverdue: false,
+            isBlocked: false,
+            dependsOnIssueIds: [],
+            archivedAt: null,
+            createdAt: staleUpdatedAt,
+            updatedAt: staleUpdatedAt,
+            comments: [],
+            activityEvents: [
+              {
+                id: '00000000-0000-4000-8000-000000000175',
+                issueId: staleIssueId,
+                type: 'issue_created',
+                metadata: { title: 'No-op stale issue' },
+                createdAt: staleUpdatedAt
+              }
+            ]
+          }
+        ]
+      })
+      .expect(200);
+
+    const beforeUpdate = await request(app).get(`/api/issues/${staleIssueId}`).expect(200);
+    const beforeActivity = await request(app).get(`/api/issues/${staleIssueId}/activity`).expect(200);
+
+    const noOpUpdate = await request(app)
+      .put(`/api/issues/${staleIssueId}`)
+      .send({
+        title: '  No-op stale issue  ',
+        description: 'Saving unchanged normalized fields should not refresh this issue.',
+        status: 'todo',
+        priority: 'medium',
+        labels: ['stale', 'stale'],
+        dueDate: null
+      })
+      .expect(200);
+
+    const staleOnly = await request(app).get('/api/issues?staleOnly=true').expect(200);
+    const afterActivity = await request(app).get(`/api/issues/${staleIssueId}/activity`).expect(200);
+
+    expect(noOpUpdate.body).toEqual(beforeUpdate.body);
+    expect(noOpUpdate.body.updatedAt).toBe(staleUpdatedAt);
+    expect(staleOnly.body.items.map((issue: { id: string }) => issue.id)).toEqual([staleIssueId]);
+    expect(afterActivity.body).toEqual(beforeActivity.body);
+  });
+
   it('returns empty pages with stable metadata when requested page is out of range', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

@@ -187,6 +187,125 @@ describe('issues API', () => {
     });
   });
 
+  it('keeps large filtered lists paginated consistently after status changes', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const statuses = ['todo', 'in_progress', 'review', 'done'] as const;
+    const priorities = ['low', 'medium', 'high'] as const;
+    type ListedIssue = { id: string; title: string; status: string; priority: string; labels: string[] };
+    const assertLargeFilteredIssues = (issues: ListedIssue[]) => {
+      for (const issue of issues) {
+        expect(issue.title).toMatch(/^Large API guard \d{3}$/);
+        expect(issue.status).toBe('review');
+        expect(issue.priority).toBe('high');
+        expect(issue.labels).toEqual(expect.arrayContaining(['large-api', 'group-2']));
+      }
+    };
+
+    for (let index = 0; index < 120; index += 1) {
+      await request(app)
+        .post('/api/issues')
+        .send({
+          title: `Large API guard ${String(index).padStart(3, '0')}`,
+          description: `Deterministic large-list fixture ${index}`,
+          status: statuses[index % statuses.length],
+          priority: priorities[index % priorities.length],
+          labels: ['large-api', `group-${index % 6}`]
+        })
+        .expect(201);
+    }
+
+    const filteredQuery = '/api/issues?search=Large%20API%20guard&status=review&priority=high&label=group-2';
+    const firstPage = await request(app).get(`${filteredQuery}&limit=4&page=1`).expect(200);
+    const secondPage = await request(app).get(`${filteredQuery}&limit=4&page=2`).expect(200);
+    const thirdPage = await request(app).get(`${filteredQuery}&limit=4&page=3`).expect(200);
+    const firstPageIds = firstPage.body.items.map((issue: ListedIssue) => issue.id);
+    const secondPageIds = secondPage.body.items.map((issue: ListedIssue) => issue.id);
+    const thirdPageIds = thirdPage.body.items.map((issue: ListedIssue) => issue.id);
+    const allFilteredPageIds = [...firstPageIds, ...secondPageIds, ...thirdPageIds];
+
+    expect(firstPage.body.items).toHaveLength(4);
+    expect(secondPage.body.items).toHaveLength(4);
+    expect(thirdPage.body.items).toHaveLength(2);
+    expect(new Set(allFilteredPageIds).size).toBe(10);
+    assertLargeFilteredIssues(firstPage.body.items);
+    assertLargeFilteredIssues(secondPage.body.items);
+    assertLargeFilteredIssues(thirdPage.body.items);
+    expect(firstPage.body.pagination).toMatchObject({
+      page: 1,
+      limit: 4,
+      total: 10,
+      totalPages: 3,
+      hasMore: true,
+      hasPrevious: false
+    });
+    expect(secondPage.body.pagination).toMatchObject({
+      page: 2,
+      limit: 4,
+      total: 10,
+      totalPages: 3,
+      hasMore: true,
+      hasPrevious: true
+    });
+    expect(thirdPage.body.pagination).toMatchObject({
+      page: 3,
+      limit: 4,
+      total: 10,
+      totalPages: 3,
+      hasMore: false,
+      hasPrevious: true
+    });
+    expect(firstPage.body.summary).toMatchObject({
+      totalByStatus: {
+        todo: 30,
+        in_progress: 30,
+        review: 30,
+        done: 30
+      },
+      totalHighPriority: 40
+    });
+
+    const bulkResponse = await request(app)
+      .post('/api/issues/bulk-status')
+      .send({ status: 'done', issueIds: firstPageIds })
+      .expect(200);
+    const updatedIds = bulkResponse.body.updated.map((issue: ListedIssue) => issue.id);
+    const reviewAfterBulk = await request(app).get(`${filteredQuery}&limit=4&page=1`).expect(200);
+    const doneAfterBulk = await request(app)
+      .get('/api/issues?search=Large%20API%20guard&status=done&priority=high&label=group-2&limit=25&page=1')
+      .expect(200);
+
+    expect(updatedIds).toEqual(firstPageIds);
+    expect(reviewAfterBulk.body.pagination).toMatchObject({
+      page: 1,
+      limit: 4,
+      total: 6,
+      totalPages: 2,
+      hasMore: true,
+      hasPrevious: false
+    });
+    assertLargeFilteredIssues(reviewAfterBulk.body.items);
+    expect(reviewAfterBulk.body.summary).toMatchObject({
+      totalByStatus: {
+        todo: 30,
+        in_progress: 30,
+        review: 26,
+        done: 34
+      },
+      totalHighPriority: 40
+    });
+    expect(doneAfterBulk.body.pagination).toMatchObject({
+      page: 1,
+      limit: 25,
+      total: 4,
+      totalPages: 1,
+      hasMore: false,
+      hasPrevious: false
+    });
+    expect(doneAfterBulk.body.items.map((issue: ListedIssue) => issue.id)).toEqual(
+      expect.arrayContaining(firstPageIds)
+    );
+  });
+
   it('returns an audit summary matching list filter semantics', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

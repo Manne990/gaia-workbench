@@ -1,6 +1,6 @@
 import './styles.css';
 import type { ChangeEvent, FormEvent } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   addIssueDependency,
   applyImport,
@@ -25,6 +25,7 @@ import { IssueDetailPanel } from './components/IssueDetailPanel';
 import { IssueFormPanel } from './components/IssueFormPanel';
 import { IssueListPanel } from './components/IssueListPanel';
 import { IssueStatusSummary } from './components/IssueStatusSummary';
+import { CommandPalette } from './components/CommandPalette';
 import { emptyFormValues } from './constants';
 import { useIssueDirectory } from './hooks/useIssueDirectory';
 import type {
@@ -144,6 +145,8 @@ export function App() {
   const [serviceHealthState, setServiceHealthState] = useState<ServiceHealthState>('checking');
   const newIssueButtonRef = useRef<HTMLButtonElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const issueSearchInputRef = useRef<HTMLInputElement>(null);
+  const commandPaletteInputRef = useRef<HTMLInputElement>(null);
   const issueListHeadingRef = useRef<HTMLHeadingElement>(null);
   const issueTitleInputRef = useRef<HTMLInputElement>(null);
   const issueDetailHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -153,6 +156,9 @@ export function App() {
   const formReturnFocusRef = useRef<HTMLElement | null>(null);
   const detailReturnFocusRef = useRef<HTMLElement | null>(null);
   const commentEditReturnFocusRef = useRef<HTMLElement | null>(null);
+  const commandPaletteFocusReturnRef = useRef<HTMLElement | null>(null);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [commandPaletteQuery, setCommandPaletteQuery] = useState('');
   const didCanonicalizeInitialRouteRef = useRef(false);
 
   const dashboardFilters: DashboardFilters = {
@@ -163,6 +169,46 @@ export function App() {
     blockedOnly,
     pageSize
   };
+  const commandPaletteCommands = useMemo(
+    () => [
+      {
+        id: 'new-issue',
+        label: 'New issue',
+        description: 'Create a new issue',
+        commandHint: 'N',
+        disabled: false
+      },
+      {
+        id: 'focus-issue-search',
+        label: 'Focus issue search',
+        description: 'Jump to the issue list search box',
+        commandHint: 'S',
+        disabled: false
+      },
+      {
+        id: 'open-first-visible-issue',
+        label: 'Open first visible issue',
+        description: 'Open the first issue in the current list',
+        commandHint: 'Enter',
+        disabled: filteredIssues.length === 0
+      },
+      {
+        id: 'clear-active-filters',
+        label: 'Clear active filters',
+        description: 'Reset search and all dashboard filters',
+        commandHint: 'C',
+        disabled: !hasActiveFilters
+      },
+      {
+        id: 'close-issue-detail',
+        label: 'Close issue detail',
+        description: 'Close issue detail panel',
+        commandHint: 'Esc',
+        disabled: !selectedIssueId
+      }
+    ],
+    [filteredIssues.length, hasActiveFilters, selectedIssueId]
+  );
 
   const isIssueDetailLoading = Boolean(selectedIssueId && selectedIssueLoadState === 'loading' && !selectedIssue);
   const isIssueDetailError = Boolean(selectedIssueId && selectedIssueLoadState === 'error' && !selectedIssue);
@@ -171,6 +217,74 @@ export function App() {
     importFileName || importPlan || importError || isImportPreviewing || importMessage
   );
   const canApplyImport = Boolean(importPayload && importPlan?.valid && !isImportApplying);
+
+  function openCommandPalette(trigger?: HTMLElement | null) {
+    if (isCommandPaletteOpen) {
+      return;
+    }
+
+    setCommandPaletteQuery('');
+    commandPaletteFocusReturnRef.current = trigger ?? (document.activeElement as HTMLElement | null);
+    setIsCommandPaletteOpen(true);
+  }
+
+  function closeCommandPalette(options: { restoreFocus?: boolean } = {}) {
+    const { restoreFocus = true } = options;
+
+    setIsCommandPaletteOpen(false);
+    setCommandPaletteQuery('');
+
+    if (restoreFocus) {
+      restoreFocusRef(commandPaletteFocusReturnRef.current);
+    }
+
+    commandPaletteFocusReturnRef.current = null;
+  }
+
+  function restoreFocusRef(element: HTMLElement | null) {
+    restoreFocus(element, () => newIssueButtonRef.current ?? issueListHeadingRef.current);
+  }
+
+  function runCommandPaletteAction(commandId: string) {
+    if (commandId === 'new-issue') {
+      closeCommandPalette({ restoreFocus: false });
+      startCreate();
+      return;
+    }
+
+    if (commandId === 'focus-issue-search') {
+      closeCommandPalette({ restoreFocus: false });
+      issueSearchInputRef.current?.focus();
+      return;
+    }
+
+    if (commandId === 'open-first-visible-issue') {
+      const firstIssue = filteredIssues[0];
+
+      if (!firstIssue) {
+        closeCommandPalette();
+        return;
+      }
+
+      closeCommandPalette({ restoreFocus: false });
+      openIssue(firstIssue);
+      return;
+    }
+
+    if (commandId === 'clear-active-filters') {
+      closeCommandPalette({ restoreFocus: false });
+      handleClearFilters();
+      return;
+    }
+
+    if (commandId === 'close-issue-detail' && selectedIssueId) {
+      closeCommandPalette({ restoreFocus: false });
+      closeIssueDetail();
+      return;
+    }
+
+    closeCommandPalette();
+  }
 
   useEffect(() => {
     if (activeForm) {
@@ -195,6 +309,58 @@ export function App() {
       editCommentTextareaRef.current?.focus();
     }
   }, [editingCommentId]);
+
+  useEffect(() => {
+    if (!isCommandPaletteOpen) {
+      return;
+    }
+
+    const focusTimer = window.setTimeout(() => {
+      commandPaletteInputRef.current?.focus();
+    }, 0);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [isCommandPaletteOpen]);
+
+  useEffect(() => {
+    function handlePaletteShortcut(event: globalThis.KeyboardEvent) {
+      if (!((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k')) {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      const isEditableTarget =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target?.isContentEditable ||
+        target?.contentEditable === 'true';
+
+      if (isEditableTarget) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (isCommandPaletteOpen) {
+        setIsCommandPaletteOpen(false);
+        setCommandPaletteQuery('');
+        restoreFocusRef(commandPaletteFocusReturnRef.current);
+        commandPaletteFocusReturnRef.current = null;
+        return;
+      }
+
+      setCommandPaletteQuery('');
+      commandPaletteFocusReturnRef.current = target ?? (document.activeElement as HTMLElement | null);
+      setIsCommandPaletteOpen(true);
+    }
+
+    window.addEventListener('keydown', handlePaletteShortcut);
+
+    return () => {
+      window.removeEventListener('keydown', handlePaletteShortcut);
+    };
+  }, [isCommandPaletteOpen]);
 
   useEffect(() => {
     if (didCanonicalizeInitialRouteRef.current) {
@@ -1026,6 +1192,17 @@ export function App() {
           importInputRef={importInputRef}
           onCreateIssue={startCreate}
           onChooseImportFile={handleChooseImportFile}
+          onOpenCommandPalette={(trigger) => openCommandPalette(trigger)}
+        />
+
+        <CommandPalette
+          isOpen={isCommandPaletteOpen}
+          searchQuery={commandPaletteQuery}
+          onSearchQueryChange={setCommandPaletteQuery}
+          searchInputRef={commandPaletteInputRef}
+          onRunCommand={runCommandPaletteAction}
+          onClose={() => closeCommandPalette()}
+          commands={commandPaletteCommands}
         />
 
         <IssueStatusSummary statusCounts={statusCounts} />
@@ -1102,6 +1279,7 @@ export function App() {
           onApplySavedView={handleApplySavedView}
           onRenameSavedView={handleRenameSavedView}
           onDeleteSavedView={handleDeleteSavedView}
+          issueSearchInputRef={issueSearchInputRef}
           issueListHeadingRef={issueListHeadingRef}
           onClearFilters={handleClearFilters}
           onPreviousPage={goToPreviousPage}

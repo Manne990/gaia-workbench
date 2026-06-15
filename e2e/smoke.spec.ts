@@ -47,6 +47,10 @@ async function pressTabUntilFocused(page: Page, locator: Locator, maxTabs = 40):
   throw new Error('Expected target to receive focus through keyboard tab navigation.');
 }
 
+function commandPaletteShortcutKey(): string {
+  return process.platform === 'darwin' ? 'Meta+K' : 'Control+K';
+}
+
 async function expandDashboardSettings(page: Page): Promise<Locator> {
   const settings = page.locator('details.secondary-controls');
 
@@ -241,6 +245,42 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   expect(exportedActivityTypes).toContain('issue_created');
   expect(exportedActivityTypes).toContain('comment_added');
   expect(exportedActivityTypes).toContain('comment_edited');
+});
+
+test('command palette opens with keyboard shortcut, restores focus, and runs commands', async ({ page }) => {
+  await page.goto('/');
+
+  const quickActionsButton = page.getByRole('button', { name: 'Quick Actions' });
+  const issueForm = page.getByRole('form', { name: 'Issue form' });
+  const commandPalette = page.getByRole('dialog', { name: 'Command palette' });
+  const commandSearch = page.getByLabel('Search commands');
+  const commandList = page.getByRole('list', { name: 'Available commands' });
+
+  await quickActionsButton.focus();
+  await expect(quickActionsButton).toBeFocused();
+  await page.keyboard.press(commandPaletteShortcutKey());
+
+  await expect(commandPalette).toBeVisible();
+  await expect(commandSearch).toBeVisible();
+  await expect(commandSearch).toBeFocused();
+  await expect(commandSearch).toHaveAttribute('aria-label', 'Search commands');
+  await expect(commandList).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(commandPalette).toHaveCount(0);
+  await expect(quickActionsButton).toBeFocused();
+
+  await page.keyboard.press(commandPaletteShortcutKey());
+  await expect(commandSearch).toBeVisible();
+  await commandSearch.fill('new issue');
+  await page.keyboard.press('Enter');
+
+  await expect(commandPalette).toHaveCount(0);
+  await expect(issueForm).toBeVisible();
+  await expect(issueForm.getByLabel('Title')).toBeFocused();
+
+  await issueForm.getByRole('button', { name: 'Cancel' }).click();
+  await expect(issueForm).toHaveCount(0);
 });
 
 test('imports tracker JSON through preview and apply', async ({ page }, testInfo) => {

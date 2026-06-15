@@ -1,0 +1,120 @@
+import { type ChangeEvent, type FormEvent, type KeyboardEvent, type RefObject, useMemo } from 'react';
+
+type CommandDefinition = {
+  id: string;
+  label: string;
+  description: string;
+  commandHint: string;
+  disabled?: boolean;
+};
+
+type CommandPaletteProps = {
+  isOpen: boolean;
+  searchQuery: string;
+  onSearchQueryChange: (value: string) => void;
+  searchInputRef: RefObject<HTMLInputElement | null>;
+  onRunCommand: (commandId: string) => void;
+  onClose: () => void;
+  commands: CommandDefinition[];
+};
+
+export function CommandPalette({
+  isOpen,
+  searchQuery,
+  onSearchQueryChange,
+  searchInputRef,
+  onRunCommand,
+  onClose,
+  commands
+}: CommandPaletteProps) {
+  const filteredCommands = useMemo(() => {
+    const normalized = searchQuery.toLowerCase().trim();
+
+    if (!normalized) {
+      return commands;
+    }
+
+    return commands.filter((command) => {
+      const haystack = `${command.label} ${command.description} ${command.commandHint}`.toLowerCase();
+      return haystack.includes(normalized);
+    });
+  }, [commands, searchQuery]);
+
+  if (!isOpen) {
+    return null;
+  }
+
+  function handleDialogKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      onClose();
+    }
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextCommand = filteredCommands.find((command) => !command.disabled);
+
+    if (nextCommand) {
+      onRunCommand(nextCommand.id);
+    }
+  }
+
+  return (
+    <div className="command-palette-backdrop" onClick={onClose}>
+      <section
+        className="command-palette"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
+        onKeyDown={handleDialogKeyDown}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <form className="command-search-form" onSubmit={handleSubmit}>
+          <label className="sr-only" htmlFor="command-palette-search">
+            Search commands
+          </label>
+          <input
+            id="command-palette-search"
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => onSearchQueryChange(event.target.value)}
+            className="command-search-input"
+            placeholder="Search commands"
+            aria-label="Search commands"
+          />
+          <button type="submit" className="sr-only" aria-label="Run first matching command">
+            Run command
+          </button>
+        </form>
+
+        <ul className="command-list" aria-label="Available commands">
+          {filteredCommands.length === 0 ? (
+            <li className="command-empty" role="status">
+              No matching commands.
+            </li>
+          ) : (
+            filteredCommands.map((command) => (
+              <li key={command.id}>
+                <button
+                  type="button"
+                  className="command-item"
+                  disabled={command.disabled}
+                  onClick={() => onRunCommand(command.id)}
+                  aria-label={`${command.label}. ${command.description}`}
+                >
+                  <span className="command-item-label">{command.label}</span>
+                  <span className="command-item-hint" aria-hidden="true">
+                    {command.commandHint}
+                  </span>
+                  <span className="command-item-description">{command.description}</span>
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      </section>
+    </div>
+  );
+}

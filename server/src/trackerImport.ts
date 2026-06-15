@@ -301,7 +301,13 @@ function isValidDateOnly(value: string): boolean {
 }
 
 function isValidTimestamp(value: string): boolean {
-  return value.trim().length > 0 && !Number.isNaN(Date.parse(value));
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
+    return false;
+  }
+
+  const timestamp = Date.parse(value);
+
+  return !Number.isNaN(timestamp) && new Date(timestamp).toISOString() === value;
 }
 
 function validateMetadataValue(

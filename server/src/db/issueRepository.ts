@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { recordActivityEvent } from './activityRepository.js';
 import { attachIssueDependencyState } from './issueDependencyRepository.js';
 import {
+  BulkIssueStatusUpdateInput,
+  BulkIssueStatusUpdateResult,
   Issue,
   IssueListFilters,
   IssueListPaginationInput,
@@ -22,6 +24,15 @@ const DEFAULT_STATUS: IssueStatus = 'todo';
 const DEFAULT_PRIORITY: IssuePriority = 'medium';
 export const STALE_ISSUE_THRESHOLD_DAYS = 30;
 const STALE_ISSUE_THRESHOLD_MS = STALE_ISSUE_THRESHOLD_DAYS * 24 * 60 * 60 * 1000;
+
+export class BulkIssueStatusNotFoundError extends Error {
+  constructor(
+    readonly notFoundIds: string[],
+    readonly duplicateIds: string[]
+  ) {
+    super('Issue not found');
+  }
+}
 
 type IssueRow = {
   id: string;
@@ -210,6 +221,41 @@ function buildIssueChangeEvents(current: Issue, updated: Issue): NewActivityEven
   }
 
   return events;
+}
+
+function normalizeBulkIssueIds(issueIds: unknown): {
+  uniqueIds: string[];
+  duplicateIds: string[];
+} {
+  if (!Array.isArray(issueIds) || issueIds.length === 0) {
+    throw new Error('Invalid bulk issue ids');
+  }
+
+  const uniqueIds: string[] = [];
+  const duplicateIds: string[] = [];
+  const seen = new Set<string>();
+  const reportedDuplicates = new Set<string>();
+
+  for (const issueId of issueIds) {
+    if (typeof issueId !== 'string' || issueId.trim().length === 0) {
+      throw new Error('Invalid bulk issue ids');
+    }
+
+    const normalizedIssueId = issueId.trim();
+
+    if (seen.has(normalizedIssueId)) {
+      if (!reportedDuplicates.has(normalizedIssueId)) {
+        duplicateIds.push(normalizedIssueId);
+        reportedDuplicates.add(normalizedIssueId);
+      }
+      continue;
+    }
+
+    uniqueIds.push(normalizedIssueId);
+    seen.add(normalizedIssueId);
+  }
+
+  return { uniqueIds, duplicateIds };
 }
 
 function mapIssueRow(row: IssueRow): Issue {
@@ -725,6 +771,98 @@ export class IssueRepository {
     });
 
     return transaction();
+  }
+
+  bulkUpdateStatus(input: BulkIssueStatusUpdateInput): BulkIssueStatusUpdateResult {
+    assertValidStatus(input.status);
+    const { uniqueIds, duplicateIds } = normalizeBulkIssueIds(input.issueIds);
+    const placeholders = uniqueIds.map(() => '?').join(', ');
+    const rows = this.database
+      .prepare(
+        `
+        SELECT id, title, description, status, priority, labels, due_date, archived_at, created_at, updated_at
+        FROM issues
+        WHERE id IN (${placeholders})
+      `
+      )
+      .all(...uniqueIds) as IssueRow[];
+    const rowsById = new Map(rows.map((row) => [row.id, row]));
+    const notFoundIds = uniqueIds.filter((id) => !rowsById.has(id));
+
+    if (notFoundIds.length > 0) {
+      throw new BulkIssueStatusNotFoundError(notFoundIds, duplicateIds);
+    }
+
+    const unchangedIds: string[] = [];
+    const changedRows: IssueRow[] = [];
+
+    for (const issueId of uniqueIds) {
+      const row = rowsById.get(issueId);
+
+      if (!row) {
+        continue;
+      }
+
+      if (row.status === input.status) {
+        unchangedIds.push(issueId);
+      } else {
+        changedRows.push(row);
+      }
+    }
+
+    if (changedRows.length === 0) {
+      return {
+        status: input.status,
+        updated: [],
+        unchangedIds,
+        duplicateIds,
+        notFoundIds: []
+      };
+    }
+
+    const updatedAt = nowIso();
+    const transaction = this.database.transaction(() => {
+      const updateStatus = this.database.prepare(
+        `
+        UPDATE issues
+        SET status = @status, updated_at = @updatedAt
+        WHERE id = @id
+      `
+      );
+
+      for (const row of changedRows) {
+        updateStatus.run({
+          id: row.id,
+          status: input.status,
+          updatedAt
+        });
+
+        recordActivityEvent(this.database, {
+          issueId: row.id,
+          type: 'issue_status_changed',
+          metadata: { from: row.status, to: input.status },
+          createdAt: updatedAt
+        });
+      }
+    });
+
+    transaction();
+
+    const updatedIssues = changedRows.map((row) =>
+      mapIssueRow({
+        ...row,
+        status: input.status,
+        updated_at: updatedAt
+      })
+    );
+
+    return {
+      status: input.status,
+      updated: attachIssueDependencyState(this.database, updatedIssues),
+      unchangedIds,
+      duplicateIds,
+      notFoundIds: []
+    };
   }
 
   archive(id: string): Issue | null {

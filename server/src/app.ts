@@ -9,6 +9,7 @@ import {
   CommentRepository,
   createDatabase,
   DuplicateSavedFilterViewNameError,
+  BulkIssueStatusNotFoundError,
   type Issue,
   IssueDependencyConflictError,
   IssueDependencyNotFoundError,
@@ -102,6 +103,7 @@ const validationErrorMessages = new Set([
   'Invalid includeArchived parameter',
   'Invalid blockedOnly parameter',
   'Invalid staleOnly parameter',
+  'Invalid bulk issue ids',
   'Saved view name is required',
   'Invalid saved view name',
   'Invalid saved view search',
@@ -459,6 +461,33 @@ export function createApp(config: AppConfig = {}) {
       if (isValidationError(error)) {
         return res.status(400).json({ error: error.message });
       }
+      throw error;
+    }
+  });
+
+  app.post('/api/issues/bulk-status', (req, res) => {
+    try {
+      const body = (req.body ?? {}) as { status?: unknown; issueIds?: unknown };
+
+      return res.status(200).json(
+        issueRepository.bulkUpdateStatus({
+          status: body.status as never,
+          issueIds: body.issueIds as never
+        })
+      );
+    } catch (error) {
+      if (error instanceof BulkIssueStatusNotFoundError) {
+        return res.status(404).json({
+          error: error.message,
+          notFoundIds: error.notFoundIds,
+          duplicateIds: error.duplicateIds
+        });
+      }
+
+      if (isValidationError(error)) {
+        return res.status(400).json({ error: error.message });
+      }
+
       throw error;
     }
   });

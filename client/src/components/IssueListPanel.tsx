@@ -5,6 +5,7 @@ import type {
   DashboardDensity,
   Issue,
   IssueListPagination,
+  IssueStatus,
   LoadState,
   PriorityFilter,
   SavedFilterView,
@@ -62,6 +63,16 @@ type IssueListPanelProps = {
   recentlyArchivedIssue: { id: string; title: string } | null;
   onUndoArchiveIssue: (trigger: HTMLElement) => void;
   onDismissArchiveRecovery: () => void;
+  selectedBulkIssueIds: string[];
+  bulkStatus: IssueStatus;
+  bulkStatusMessage: string | null;
+  bulkStatusError: string | null;
+  isBulkStatusSubmitting: boolean;
+  onBulkStatusChange: (value: IssueStatus) => void;
+  onToggleIssueSelection: (issueId: string, selected: boolean) => void;
+  onSelectAllVisibleIssues: () => void;
+  onClearBulkSelection: () => void;
+  onApplyBulkStatus: () => void;
 };
 
 export function IssueListPanel({
@@ -111,8 +122,21 @@ export function IssueListPanel({
   onUnarchiveIssue,
   recentlyArchivedIssue,
   onUndoArchiveIssue,
-  onDismissArchiveRecovery
+  onDismissArchiveRecovery,
+  selectedBulkIssueIds,
+  bulkStatus,
+  bulkStatusMessage,
+  bulkStatusError,
+  isBulkStatusSubmitting,
+  onBulkStatusChange,
+  onToggleIssueSelection,
+  onSelectAllVisibleIssues,
+  onClearBulkSelection,
+  onApplyBulkStatus
 }: IssueListPanelProps) {
+  const selectedIssueIdSet = new Set(selectedBulkIssueIds);
+  const selectedCount = selectedBulkIssueIds.length;
+
   return (
     <section className="issue-panel" aria-labelledby="issue-list-heading" aria-busy={loadState === 'loading'}>
       {recentlyArchivedIssue ? (
@@ -349,6 +373,66 @@ export function IssueListPanel({
         </div>
       ) : null}
 
+      {loadState === 'loaded' && filteredIssues.length > 0 ? (
+        <div className="bulk-status-bar" aria-label="Bulk status actions">
+          <div className="bulk-status-summary">
+            <strong>{selectedCount} selected</strong>
+            <span>Current page only</span>
+          </div>
+          <div className="bulk-status-controls">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={onSelectAllVisibleIssues}
+              disabled={selectedCount === filteredIssues.length || isBulkStatusSubmitting}
+            >
+              Select all visible
+            </button>
+            <label className="bulk-status-field" htmlFor="bulk-status-select">
+              <span>Status</span>
+              <select
+                id="bulk-status-select"
+                value={bulkStatus}
+                onChange={(event) => onBulkStatusChange(event.target.value as IssueStatus)}
+                disabled={isBulkStatusSubmitting}
+              >
+                {statusOrder.map((status) => (
+                  <option key={status} value={status}>
+                    {statusLabels[status]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onApplyBulkStatus}
+              disabled={selectedCount === 0 || isBulkStatusSubmitting}
+            >
+              Change Status
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={onClearBulkSelection}
+              disabled={selectedCount === 0 || isBulkStatusSubmitting}
+            >
+              Clear
+            </button>
+          </div>
+          {bulkStatusMessage ? (
+            <p className="bulk-status-feedback" role="status">
+              {bulkStatusMessage}
+            </p>
+          ) : null}
+          {bulkStatusError ? (
+            <p className="bulk-status-feedback error" role="alert">
+              {bulkStatusError}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       {loadState === 'loading' ? (
         <div className="state-message" role="status">
           Loading issues...
@@ -394,6 +478,7 @@ export function IssueListPanel({
             <table>
               <thead>
                 <tr>
+                  <th scope="col">Select</th>
                   <th scope="col">Issue</th>
                   <th scope="col">Status</th>
                   <th scope="col">Priority</th>
@@ -405,12 +490,14 @@ export function IssueListPanel({
               <tbody>
                 {filteredIssues.map((issue) => {
                   const issueIsStale = isIssueStale(issue.updatedAt);
+                  const isSelected = selectedIssueIdSet.has(issue.id);
 
                   return (
                     <tr
                       key={issue.id}
                       className={
                         [
+                          isSelected ? 'selected-row' : '',
                           issue.isOverdue ? 'overdue-row' : '',
                           issue.isBlocked ? 'blocked-row' : '',
                           issue.archivedAt ? 'archived-row' : '',
@@ -420,6 +507,14 @@ export function IssueListPanel({
                           .join(' ') || undefined
                       }
                     >
+                      <td className="selection-cell">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(event) => onToggleIssueSelection(issue.id, event.target.checked)}
+                          aria-label={`Select ${issue.title}`}
+                        />
+                      </td>
                       <td>
                         <strong>{issue.title}</strong>
                         {issue.archivedAt ? <span className="archived-pill">Archived</span> : null}

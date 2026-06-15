@@ -7,7 +7,10 @@ import {
   CommentEditHistory,
   Issue,
   IssuePriority,
-  IssueStatus
+  IssueStatus,
+  SavedFilterPriority,
+  SavedFilterStatus,
+  SavedFilterView
 } from './db/index.js';
 
 type ExportedComment = Comment & {
@@ -22,9 +25,10 @@ type ExportedIssue = Issue & {
 type TrackerExport = {
   exportVersion: 1;
   issues: ExportedIssue[];
+  savedFilterViews: SavedFilterView[];
 };
 
-type ImportEntity = 'issue' | 'comment' | 'commentEditHistory' | 'activityEvent';
+type ImportEntity = 'issue' | 'comment' | 'commentEditHistory' | 'activityEvent' | 'savedFilterView';
 export type ImportConflictPolicy = 'skip-conflicts' | 'replace-conflicts';
 type ImportDecisionType = 'import' | 'skip-existing' | 'replace-existing' | 'reject';
 type ImportMatchType = 'new' | 'exact' | 'changed';
@@ -35,6 +39,7 @@ type ImportCounts = {
   comments: number;
   editHistory: number;
   activityEvents: number;
+  savedFilterViews: number;
 };
 
 export type ImportDecision = {
@@ -89,6 +94,8 @@ const DEFAULT_IMPORT_CONFLICT_POLICY: ImportConflictPolicy = 'skip-conflicts';
 const VALID_IMPORT_CONFLICT_POLICIES: ImportConflictPolicy[] = ['skip-conflicts', 'replace-conflicts'];
 const VALID_STATUSES: IssueStatus[] = ['todo', 'in_progress', 'review', 'done'];
 const VALID_PRIORITIES: IssuePriority[] = ['low', 'medium', 'high'];
+const VALID_SAVED_FILTER_STATUSES: SavedFilterStatus[] = ['all', ...VALID_STATUSES];
+const VALID_SAVED_FILTER_PRIORITIES: SavedFilterPriority[] = ['all', ...VALID_PRIORITIES];
 const VALID_ACTIVITY_TYPES: ActivityEventType[] = [
   'issue_created',
   'issue_title_changed',
@@ -109,7 +116,8 @@ const emptyCounts = (): ImportCounts => ({
   issues: 0,
   comments: 0,
   editHistory: 0,
-  activityEvents: 0
+  activityEvents: 0,
+  savedFilterViews: 0
 });
 
 type ExistingIssueRow = {
@@ -152,6 +160,21 @@ type ExistingActivityRow = {
 type ExistingDependencyRow = {
   issue_id: string;
   depends_on_issue_id: string;
+};
+
+type ExistingSavedFilterViewRow = {
+  id: string;
+  name: string;
+  search: string;
+  status: SavedFilterStatus;
+  priority: SavedFilterPriority;
+  label: string;
+  include_archived: 0 | 1;
+  blocked_only: 0 | 1;
+  stale_only: 0 | 1;
+  page_size: number;
+  created_at: string;
+  updated_at: string;
 };
 
 function pushError(errors: ImportErrorDetail[], code: string, path: string, message: string, value?: unknown) {
@@ -252,6 +275,17 @@ function readBoolean(value: Record<string, unknown>, key: string, path: string, 
   if (typeof field !== 'boolean') {
     pushError(errors, 'invalid_type', `${path}.${key}`, `Field "${key}" must be a boolean.`, field);
     return false;
+  }
+
+  return field;
+}
+
+function readInteger(value: Record<string, unknown>, key: string, path: string, errors: ImportErrorDetail[]): number {
+  const field = value[key];
+
+  if (typeof field !== 'number' || !Number.isInteger(field)) {
+    pushError(errors, 'invalid_type', `${path}.${key}`, `Field "${key}" must be an integer.`, field);
+    return 0;
   }
 
   return field;
@@ -616,6 +650,17 @@ function existingDependenciesByIssueId(database: Database.Database, issueIds: st
   return dependenciesByIssueId;
 }
 
+function existingSavedFilterViewRows(database: Database.Database): ExistingSavedFilterViewRow[] {
+  return database
+    .prepare(
+      `
+      SELECT id, name, search, status, priority, label, include_archived, blocked_only, stale_only, page_size, created_at, updated_at
+      FROM saved_filter_views
+    `
+    )
+    .all() as ExistingSavedFilterViewRow[];
+}
+
 function arraysEqual(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
@@ -709,6 +754,22 @@ function activityMatchType(event: ActivityEvent, existingActivity: Map<string, E
     : 'changed';
 }
 
+function savedFilterViewMatchesRow(view: SavedFilterView, existing: ExistingSavedFilterViewRow): boolean {
+  return (
+    existing.name === view.name &&
+    existing.search === view.search &&
+    existing.status === view.status &&
+    existing.priority === view.priority &&
+    existing.label === view.label &&
+    (existing.include_archived === 1) === view.includeArchived &&
+    (existing.blocked_only === 1) === view.blockedOnly &&
+    (existing.stale_only === 1) === view.staleOnly &&
+    existing.page_size === view.pageSize &&
+    existing.created_at === view.createdAt &&
+    existing.updated_at === view.updatedAt
+  );
+}
+
 function countInput(exportData: TrackerExport | null): ImportCounts {
   const counts = emptyCounts();
 
@@ -717,6 +778,7 @@ function countInput(exportData: TrackerExport | null): ImportCounts {
   }
 
   counts.issues = exportData.issues.length;
+  counts.savedFilterViews = exportData.savedFilterViews.length;
 
   for (const issue of exportData.issues) {
     counts.comments += issue.comments.length;
@@ -734,7 +796,7 @@ function validateTrackerExport(input: unknown): ValidationResult {
   const errors: ImportErrorDetail[] = [];
   const decisions: ImportDecision[] = [];
   const seen = new Map<ImportEntity, Set<string>>();
-  const root = validateObject(input, '$', ['exportVersion', 'issues'], errors, ['conflictPolicy']);
+  const root = validateObject(input, '$', ['exportVersion', 'issues'], errors, ['conflictPolicy', 'savedFilterViews']);
 
   if (!root) {
     return {
@@ -754,7 +816,11 @@ function validateTrackerExport(input: unknown): ValidationResult {
   }
 
   const issuesInput = readArray(root, 'issues', '$', errors);
+  const savedFilterViewsInput =
+    root.savedFilterViews === undefined ? [] : readArray(root, 'savedFilterViews', '$', errors);
   const issues: ExportedIssue[] = [];
+  const savedFilterViews: SavedFilterView[] = [];
+  const savedFilterViewNames = new Map<string, number>();
 
   issuesInput.forEach((issueInput, issueIndex) => {
     const issuePath = `$.issues[${issueIndex}]`;
@@ -1071,13 +1137,119 @@ function validateTrackerExport(input: unknown): ValidationResult {
     });
   });
 
+  savedFilterViewsInput.forEach((viewInput, viewIndex) => {
+    const viewPath = `$.savedFilterViews[${viewIndex}]`;
+    const viewObject = validateObject(
+      viewInput,
+      viewPath,
+      [
+        'id',
+        'name',
+        'search',
+        'status',
+        'priority',
+        'label',
+        'includeArchived',
+        'blockedOnly',
+        'staleOnly',
+        'pageSize',
+        'createdAt',
+        'updatedAt'
+      ],
+      errors
+    );
+
+    if (!viewObject) {
+      decisions.push({
+        entity: 'savedFilterView',
+        sourceId: null,
+        sourceIndex: viewIndex,
+        decision: 'reject',
+        reasons: ['invalid saved filter view object']
+      });
+      return;
+    }
+
+    const viewId = readString(viewObject, 'id', viewPath, errors, { nonEmpty: true });
+    const name = readString(viewObject, 'name', viewPath, errors, { nonEmpty: true, maxLength: 120 });
+    const search = readString(viewObject, 'search', viewPath, errors);
+    const status = readString(viewObject, 'status', viewPath, errors) as SavedFilterStatus;
+    const priority = readString(viewObject, 'priority', viewPath, errors) as SavedFilterPriority;
+    const label = readString(viewObject, 'label', viewPath, errors, { maxLength: 32 });
+    const includeArchived = readBoolean(viewObject, 'includeArchived', viewPath, errors);
+    const blockedOnly = readBoolean(viewObject, 'blockedOnly', viewPath, errors);
+    const staleOnly = readBoolean(viewObject, 'staleOnly', viewPath, errors);
+    const pageSize = readInteger(viewObject, 'pageSize', viewPath, errors);
+    const createdAt = readString(viewObject, 'createdAt', viewPath, errors, { nonEmpty: true });
+    const updatedAt = readString(viewObject, 'updatedAt', viewPath, errors, { nonEmpty: true });
+
+    if (viewId) {
+      validateUniqueId(viewId, 'savedFilterView', `${viewPath}.id`, seen, errors);
+    }
+
+    if (name.trim().length === 0) {
+      pushError(errors, 'invalid_value', `${viewPath}.name`, 'Saved view name must not be empty.', name);
+    } else {
+      const normalizedName = name.toLocaleLowerCase();
+      const previousIndex = savedFilterViewNames.get(normalizedName);
+
+      if (previousIndex !== undefined) {
+        pushError(
+          errors,
+          'duplicate_name',
+          `${viewPath}.name`,
+          `Duplicate saved view name in import payload; first seen at $.savedFilterViews[${previousIndex}].name.`,
+          name
+        );
+      } else {
+        savedFilterViewNames.set(normalizedName, viewIndex);
+      }
+    }
+
+    if (!VALID_SAVED_FILTER_STATUSES.includes(status)) {
+      pushError(errors, 'invalid_status', `${viewPath}.status`, 'Invalid saved view status.', status);
+    }
+
+    if (!VALID_SAVED_FILTER_PRIORITIES.includes(priority)) {
+      pushError(errors, 'invalid_priority', `${viewPath}.priority`, 'Invalid saved view priority.', priority);
+    }
+
+    if (pageSize < 1 || pageSize > 100) {
+      pushError(errors, 'invalid_value', `${viewPath}.pageSize`, 'Invalid saved view pageSize.', pageSize);
+    }
+
+    if (!isValidTimestamp(createdAt)) {
+      pushError(errors, 'invalid_timestamp', `${viewPath}.createdAt`, 'Invalid createdAt timestamp.', createdAt);
+    }
+
+    if (!isValidTimestamp(updatedAt)) {
+      pushError(errors, 'invalid_timestamp', `${viewPath}.updatedAt`, 'Invalid updatedAt timestamp.', updatedAt);
+    }
+
+    savedFilterViews.push({
+      id: viewId,
+      name,
+      search,
+      status,
+      priority,
+      label,
+      includeArchived,
+      blockedOnly,
+      staleOnly,
+      pageSize,
+      createdAt,
+      updatedAt
+    });
+  });
+
   validateIssueDependencyGraph(issues, errors);
 
   const exportData: TrackerExport | null =
     exportVersion === 1
       ? {
           exportVersion: 1,
-          issues
+          issues,
+          savedFilterViews
         }
       : null;
 
@@ -1098,8 +1270,10 @@ function incrementCount(counts: ImportCounts, entity: ImportEntity) {
     counts.comments += 1;
   } else if (entity === 'commentEditHistory') {
     counts.editHistory += 1;
-  } else {
+  } else if (entity === 'activityEvent') {
     counts.activityEvents += 1;
+  } else {
+    counts.savedFilterViews += 1;
   }
 }
 
@@ -1154,6 +1328,9 @@ function collectImportDecisions(
   const existingHistories = existingHistoryRowsById(database, historyIds);
   const existingActivity = existingActivityRowsById(database, activityIds);
   const dependenciesByIssueId = existingDependenciesByIssueId(database, issueIds);
+  const savedFilterViewRows = existingSavedFilterViewRows(database);
+  const savedFilterViewsById = rowsById(savedFilterViewRows);
+  const savedFilterViewsByName = new Map(savedFilterViewRows.map((view) => [view.name.toLocaleLowerCase(), view]));
   const decisions: ImportDecision[] = [];
 
   exportData.issues.forEach((issue, issueIndex) => {
@@ -1249,6 +1426,39 @@ function collectImportDecisions(
     });
   });
 
+  exportData.savedFilterViews.forEach((view, viewIndex) => {
+    const existingById = savedFilterViewsById.get(view.id);
+    const existingByName = savedFilterViewsByName.get(view.name.toLocaleLowerCase());
+    const nameCollision = existingByName && existingByName.id !== view.id;
+    const matchType: ImportMatchType = existingById
+      ? savedFilterViewMatchesRow(view, existingById)
+        ? 'exact'
+        : 'changed'
+      : nameCollision
+        ? 'changed'
+        : 'new';
+    const replaceView =
+      conflictPolicy === 'replace-conflicts' && Boolean(existingById) && matchType === 'changed' && !nameCollision;
+    const importView = matchType === 'new' && !nameCollision;
+
+    decisions.push({
+      entity: 'savedFilterView',
+      sourceId: view.id,
+      sourceIndex: viewIndex,
+      decision: importView ? 'import' : replaceView ? 'replace-existing' : 'skip-existing',
+      matchType,
+      policyDecision: importView ? 'import' : replaceView ? 'replace' : 'skip',
+      reasons: [
+        ...(matchType === 'exact' ? ['saved view id already exists with identical data'] : []),
+        ...(Boolean(existingById) && matchType === 'changed' && !replaceView
+          ? ['changed saved view id already exists']
+          : []),
+        ...(replaceView ? ['changed saved view id already exists and replace-conflicts is selected'] : []),
+        ...(nameCollision ? ['saved view name already exists with a different id'] : [])
+      ]
+    });
+  });
+
   return decisions;
 }
 
@@ -1316,6 +1526,8 @@ export function applyTrackerImport(database: Database.Database, input: unknown):
   const commentIdsToImport = decisionSet(plan, 'comment');
   const historyIdsToImport = decisionSet(plan, 'commentEditHistory');
   const activityIdsToImport = decisionSet(plan, 'activityEvent');
+  const savedFilterViewIdsToImport = decisionSet(plan, 'savedFilterView');
+  const savedFilterViewIdsToReplace = decisionSet(plan, 'savedFilterView', 'replace-existing');
   const issues = validation.exportData.issues.filter((issue) => issueIdsToImport.has(issue.id)).sort(byCreatedAtThenId);
   const issuesToReplace = validation.exportData.issues
     .filter((issue) => issueIdsToReplace.has(issue.id))
@@ -1338,6 +1550,12 @@ export function applyTrackerImport(database: Database.Database, input: unknown):
   const activityEvents = validation.exportData.issues
     .flatMap((issue) => issue.activityEvents)
     .filter((event) => activityIdsToImport.has(event.id));
+  const savedFilterViews = validation.exportData.savedFilterViews.filter((view) =>
+    savedFilterViewIdsToImport.has(view.id)
+  );
+  const savedFilterViewsToReplace = validation.exportData.savedFilterViews.filter((view) =>
+    savedFilterViewIdsToReplace.has(view.id)
+  );
 
   const transaction = database.transaction(() => {
     const insertIssue = database.prepare(`
@@ -1376,6 +1594,29 @@ export function applyTrackerImport(database: Database.Database, input: unknown):
     const insertActivity = database.prepare(`
       INSERT INTO activity_events (id, issue_id, event_type, metadata, created_at)
       VALUES (@id, @issueId, @type, @metadata, @createdAt)
+    `);
+    const insertSavedFilterView = database.prepare(`
+      INSERT INTO saved_filter_views (
+        id, name, search, status, priority, label, include_archived, blocked_only, stale_only, page_size, created_at, updated_at
+      )
+      VALUES (
+        @id, @name, @search, @status, @priority, @label, @includeArchived, @blockedOnly, @staleOnly, @pageSize, @createdAt, @updatedAt
+      )
+    `);
+    const updateSavedFilterView = database.prepare(`
+      UPDATE saved_filter_views
+      SET name = @name,
+          search = @search,
+          status = @status,
+          priority = @priority,
+          label = @label,
+          include_archived = @includeArchived,
+          blocked_only = @blockedOnly,
+          stale_only = @staleOnly,
+          page_size = @pageSize,
+          created_at = @createdAt,
+          updated_at = @updatedAt
+      WHERE id = @id
     `);
 
     for (const issue of issues) {
@@ -1428,6 +1669,40 @@ export function applyTrackerImport(database: Database.Database, input: unknown):
         type: event.type,
         metadata: JSON.stringify(event.metadata),
         createdAt: event.createdAt
+      });
+    }
+
+    for (const view of savedFilterViews) {
+      insertSavedFilterView.run({
+        id: view.id,
+        name: view.name,
+        search: view.search,
+        status: view.status,
+        priority: view.priority,
+        label: view.label,
+        includeArchived: view.includeArchived ? 1 : 0,
+        blockedOnly: view.blockedOnly ? 1 : 0,
+        staleOnly: view.staleOnly ? 1 : 0,
+        pageSize: view.pageSize,
+        createdAt: view.createdAt,
+        updatedAt: view.updatedAt
+      });
+    }
+
+    for (const view of savedFilterViewsToReplace) {
+      updateSavedFilterView.run({
+        id: view.id,
+        name: view.name,
+        search: view.search,
+        status: view.status,
+        priority: view.priority,
+        label: view.label,
+        includeArchived: view.includeArchived ? 1 : 0,
+        blockedOnly: view.blockedOnly ? 1 : 0,
+        staleOnly: view.staleOnly ? 1 : 0,
+        pageSize: view.pageSize,
+        createdAt: view.createdAt,
+        updatedAt: view.updatedAt
       });
     }
   });

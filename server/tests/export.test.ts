@@ -19,9 +19,25 @@ type ExportedIssue = IssueSnapshot & {
   activityEvents: Array<{ type: string }>;
 };
 
+type SavedFilterView = {
+  id: string;
+  name: string;
+  search: string;
+  status: string;
+  priority: string;
+  label: string;
+  includeArchived: boolean;
+  blockedOnly: boolean;
+  staleOnly: boolean;
+  pageSize: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type TrackerExport = {
   exportVersion: number;
   issues: ExportedIssue[];
+  savedFilterViews: SavedFilterView[];
 };
 
 function getCsvLines(csv: string): string[] {
@@ -148,6 +164,21 @@ describe('tracker export API', () => {
       .send({ body: 'Second issue comment' })
       .expect(201);
 
+    await request(app)
+      .post('/api/filter-views')
+      .send({
+        name: 'Export review view',
+        search: 'export',
+        status: 'review',
+        priority: 'high',
+        label: 'api',
+        includeArchived: true,
+        blockedOnly: true,
+        staleOnly: true,
+        pageSize: 50
+      })
+      .expect(201);
+
     const issueBefore = await request(app).get(`/api/issues/${createdFirst.body.id}`).expect(200);
     const secondIssueBefore = await request(app).get(`/api/issues/${createdSecond.body.id}`).expect(200);
     const emptyIssueBefore = await request(app).get(`/api/issues/${createdEmpty.body.id}`).expect(200);
@@ -164,6 +195,7 @@ describe('tracker export API', () => {
       .get(`/api/issues/${createdSecond.body.id}/activity`)
       .expect(200);
     const emptyIssueActivityBefore = await request(app).get(`/api/issues/${createdEmpty.body.id}/activity`).expect(200);
+    const savedFilterViewsBefore = await request(app).get('/api/filter-views').expect(200);
 
     const firstExport = await request(app).get('/api/export').expect(200);
     const secondExport = await request(app).get('/api/export').expect(200);
@@ -177,7 +209,7 @@ describe('tracker export API', () => {
     const exportedEmptyIssue = exportedById.get(emptyIssueBefore.body.id);
 
     expect(firstExport.headers['content-type']).toContain('application/json');
-    expect(Object.keys(firstExport.body).sort()).toEqual(['exportVersion', 'issues']);
+    expect(Object.keys(firstExport.body).sort()).toEqual(['exportVersion', 'issues', 'savedFilterViews']);
     expect(firstExport.body).not.toHaveProperty('generatedAt');
     expect(firstExport.body).not.toHaveProperty('items');
     expect(firstExport.body).not.toHaveProperty('pagination');
@@ -241,6 +273,18 @@ describe('tracker export API', () => {
     expect(exportedSecondIssue?.activityEvents).toEqual(secondIssueActivityBefore.body);
     expect(exportedEmptyIssue?.comments).toEqual([]);
     expect(exportedEmptyIssue?.activityEvents).toEqual(emptyIssueActivityBefore.body);
+    expect(exported.savedFilterViews).toEqual(savedFilterViewsBefore.body);
+    expect(exported.savedFilterViews[0]).toMatchObject({
+      name: 'Export review view',
+      search: 'export',
+      status: 'review',
+      priority: 'high',
+      label: 'api',
+      includeArchived: true,
+      blockedOnly: true,
+      staleOnly: true,
+      pageSize: 50
+    });
     expect(secondExport.body).toEqual(firstExport.body);
 
     await request(app).get(`/api/issues/${createdFirst.body.id}`).expect(200, issueBefore.body);
@@ -255,6 +299,7 @@ describe('tracker export API', () => {
     await request(app).get(`/api/issues/${createdFirst.body.id}/activity`).expect(200, activityBefore.body);
     await request(app).get(`/api/issues/${createdSecond.body.id}/activity`).expect(200, secondIssueActivityBefore.body);
     await request(app).get(`/api/issues/${createdEmpty.body.id}/activity`).expect(200, emptyIssueActivityBefore.body);
+    await request(app).get('/api/filter-views').expect(200, savedFilterViewsBefore.body);
   });
 
   it('exports filtered issues to CSV with deterministic headers', async () => {

@@ -7,6 +7,22 @@ type ImportCounts = {
   comments: number;
   editHistory: number;
   activityEvents: number;
+  savedFilterViews: number;
+};
+
+type SavedFilterView = {
+  id: string;
+  name: string;
+  search: string;
+  status: string;
+  priority: string;
+  label: string;
+  includeArchived: boolean;
+  blockedOnly: boolean;
+  staleOnly: boolean;
+  pageSize: number;
+  createdAt: string;
+  updatedAt: string;
 };
 
 type ExportedComment = {
@@ -45,6 +61,7 @@ type ExportedIssue = {
 type TrackerExport = {
   exportVersion: number;
   issues: ExportedIssue[];
+  savedFilterViews: SavedFilterView[];
 };
 
 const cloneExport = (payload: TrackerExport): TrackerExport => JSON.parse(JSON.stringify(payload));
@@ -58,7 +75,8 @@ function countExport(payload: TrackerExport): ImportCounts {
         total + issue.comments.reduce((commentTotal, comment) => commentTotal + comment.editHistory.length, 0),
       0
     ),
-    activityEvents: payload.issues.reduce((total, issue) => total + issue.activityEvents.length, 0)
+    activityEvents: payload.issues.reduce((total, issue) => total + issue.activityEvents.length, 0),
+    savedFilterViews: payload.savedFilterViews.length
   };
 }
 
@@ -122,6 +140,20 @@ async function createExportFixture(): Promise<TrackerExport> {
     .put(`/api/comments/${firstComment.body.id}`)
     .send({ body: 'Import comment after second edit' })
     .expect(200);
+  await request(app)
+    .post('/api/filter-views')
+    .send({
+      name: 'Import roundtrip view',
+      search: 'import',
+      status: 'review',
+      priority: 'high',
+      label: 'verified',
+      includeArchived: true,
+      blockedOnly: true,
+      staleOnly: true,
+      pageSize: 50
+    })
+    .expect(201);
 
   const exported = await request(app).get('/api/export').expect(200);
 
@@ -171,7 +203,8 @@ describe('tracker import API', () => {
           issues: 0,
           comments: 0,
           editHistory: 0,
-          activityEvents: 0
+          activityEvents: 0,
+          savedFilterViews: 0
         },
         reject: 0
       },
@@ -179,7 +212,7 @@ describe('tracker import API', () => {
       warnings: []
     });
     expect(preview.body.decisions).toHaveLength(
-      counts.issues + counts.comments + counts.editHistory + counts.activityEvents
+      counts.issues + counts.comments + counts.editHistory + counts.activityEvents + counts.savedFilterViews
     );
     expect(issuesAfterPreview.body.pagination.total).toBe(0);
   });
@@ -201,7 +234,8 @@ describe('tracker import API', () => {
           issues: 0,
           comments: 0,
           editHistory: 0,
-          activityEvents: 0
+          activityEvents: 0,
+          savedFilterViews: 0
         },
         reject: 0
       }
@@ -242,6 +276,122 @@ describe('tracker import API', () => {
     expect(exportedAfterImport.body).toEqual(payload.body);
     expect(importedIssue?.description).toBe(rawDescription);
     expect(importedIssue?.comments[0].body).toBe(rawComment);
+  });
+
+  it('roundtrips saved filter views with preserved ids timestamps and filters', async () => {
+    const targetApp = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const [sourceView] = payload.savedFilterViews;
+
+    expect(sourceView).toMatchObject({
+      name: 'Import roundtrip view',
+      search: 'import',
+      status: 'review',
+      priority: 'high',
+      label: 'verified',
+      includeArchived: true,
+      blockedOnly: true,
+      staleOnly: true,
+      pageSize: 50
+    });
+
+    const preview = await request(targetApp).post('/api/import/preview').send(payload).expect(200);
+
+    expect(preview.body.summary.toCreate.savedFilterViews).toBe(1);
+    expect(preview.body.decisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity: 'savedFilterView',
+          sourceId: sourceView.id,
+          decision: 'import',
+          matchType: 'new'
+        })
+      ])
+    );
+
+    await request(targetApp).post('/api/import/apply').send(payload).expect(200);
+
+    const importedViews = await request(targetApp).get('/api/filter-views').expect(200);
+    const exportedAfterImport = await request(targetApp).get('/api/export').expect(200);
+
+    expect(importedViews.body).toEqual(payload.savedFilterViews);
+    expect(exportedAfterImport.body).toEqual(payload);
+  });
+
+  it('rejects duplicate saved filter view names before import writes', async () => {
+    const targetApp = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const duplicated = cloneExport(payload);
+
+    duplicated.savedFilterViews.push({
+      ...duplicated.savedFilterViews[0],
+      id: 'duplicate-saved-filter-view-id',
+      name: duplicated.savedFilterViews[0].name.toLocaleUpperCase()
+    });
+
+    const preview = await request(targetApp).post('/api/import/preview').send(duplicated).expect(400);
+    const afterPreview = await request(targetApp).get('/api/filter-views').expect(200);
+    const applied = await request(targetApp).post('/api/import/apply').send(duplicated).expect(400);
+    const afterApply = await request(targetApp).get('/api/filter-views').expect(200);
+
+    expect(preview.body.valid).toBe(false);
+    expect(preview.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'duplicate_name',
+          path: '$.savedFilterViews[1].name'
+        })
+      ])
+    );
+    expect(applied.body.errors).toEqual(preview.body.errors);
+    expect(afterPreview.body).toEqual([]);
+    expect(afterApply.body).toEqual([]);
+  });
+
+  it('skips saved filter view replace when the new name belongs to a different view', async () => {
+    const targetApp = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const [sourceView] = payload.savedFilterViews;
+
+    await request(targetApp).post('/api/import/apply').send(payload).expect(200);
+    const collision = await request(targetApp).post('/api/filter-views').send({ name: 'Collision view' }).expect(201);
+
+    const changed = cloneExport(payload);
+    changed.savedFilterViews[0] = {
+      ...sourceView,
+      name: collision.body.name,
+      updatedAt: '2999-12-31T00:00:00.000Z'
+    };
+
+    const preview = await request(targetApp)
+      .post('/api/import/preview')
+      .send({ ...changed, conflictPolicy: 'replace-conflicts' })
+      .expect(200);
+    const decision = preview.body.decisions.find(
+      (item: { entity: string; sourceId?: string }) =>
+        item.entity === 'savedFilterView' && item.sourceId === sourceView.id
+    );
+
+    expect(preview.body.summary.changed.savedFilterViews).toBe(1);
+    expect(preview.body.summary.toReplace.savedFilterViews).toBe(0);
+    expect(preview.body.summary.skip.savedFilterViews).toBe(1);
+    expect(decision).toMatchObject({
+      decision: 'skip-existing',
+      matchType: 'changed',
+      policyDecision: 'skip',
+      reasons: expect.arrayContaining(['saved view name already exists with a different id'])
+    });
+
+    await request(targetApp)
+      .post('/api/import/apply')
+      .send({ ...changed, conflictPolicy: 'replace-conflicts' })
+      .expect(200);
+
+    const viewsAfterApply = await request(targetApp).get('/api/filter-views').expect(200);
+    const viewsById = new Map(viewsAfterApply.body.map((view: SavedFilterView) => [view.id, view]));
+
+    expect(viewsById.get(sourceView.id)).toMatchObject({ name: sourceView.name, updatedAt: sourceView.updatedAt });
+    expect(viewsById.get(collision.body.id)).toMatchObject({ name: collision.body.name });
   });
 
   it('applies archived issues and keeps them hidden from the default list', async () => {
@@ -317,7 +467,8 @@ describe('tracker import API', () => {
           issues: 0,
           comments: 0,
           editHistory: 0,
-          activityEvents: 0
+          activityEvents: 0,
+          savedFilterViews: 0
         },
         skip: counts,
         reject: 0
@@ -343,13 +494,15 @@ describe('tracker import API', () => {
           issues: 0,
           comments: 0,
           editHistory: 0,
-          activityEvents: 0
+          activityEvents: 0,
+          savedFilterViews: 0
         },
         toCreate: {
           issues: 0,
           comments: 0,
           editHistory: 0,
-          activityEvents: 0
+          activityEvents: 0,
+          savedFilterViews: 0
         },
         skip: counts
       }

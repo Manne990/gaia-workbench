@@ -19,11 +19,12 @@ const entityLabels: Array<{ key: keyof ImportCounts; label: string }> = [
   { key: 'issues', label: 'Issues' },
   { key: 'comments', label: 'Comments' },
   { key: 'editHistory', label: 'Edits' },
-  { key: 'activityEvents', label: 'Activity' }
+  { key: 'activityEvents', label: 'Activity' },
+  { key: 'savedFilterViews', label: 'Saved Views' }
 ];
 
 function totalCounts(counts: ImportCounts): number {
-  return counts.issues + counts.comments + counts.editHistory + counts.activityEvents;
+  return counts.issues + counts.comments + counts.editHistory + counts.activityEvents + counts.savedFilterViews;
 }
 
 function ImportCountRow({

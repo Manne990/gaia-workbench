@@ -111,7 +111,7 @@ export type ActivityEvent = {
   createdAt: string;
 };
 
-export type ImportEntity = 'issue' | 'comment' | 'commentEditHistory' | 'activityEvent';
+export type ImportEntity = 'issue' | 'comment' | 'commentEditHistory' | 'activityEvent' | 'savedFilterView';
 export type ImportConflictPolicy = 'skip-conflicts' | 'replace-conflicts';
 export type ImportDecisionType = 'import' | 'skip-existing' | 'replace-existing' | 'reject';
 export type ImportMatchType = 'new' | 'exact' | 'changed';
@@ -122,6 +122,7 @@ export type ImportCounts = {
   comments: number;
   editHistory: number;
   activityEvents: number;
+  savedFilterViews: number;
 };
 
 export type ImportSummary = {

@@ -348,6 +348,37 @@ test('shareable issue detail URLs support direct load refresh and history', asyn
   await expect(page).toHaveURL('/');
 });
 
+test('direct issue detail URLs hydrate before the full issue list finishes loading', async ({ page }) => {
+  const issue = await createIssueThroughApi(page, {
+    title: 'List-independent detail issue',
+    description: 'Loaded through the direct issue endpoint.'
+  });
+  let releaseIssueList: () => void = () => undefined;
+  const issueListDelay = new Promise<void>((resolve) => {
+    releaseIssueList = resolve;
+  });
+
+  await page.route('**/api/issues', async (route) => {
+    const url = new URL(route.request().url());
+
+    if (route.request().method() === 'GET' && url.pathname === '/api/issues') {
+      await issueListDelay;
+    }
+
+    await route.continue();
+  });
+
+  await page.goto(`/issues/${issue.id}`);
+
+  const detail = page.getByRole('region', { name: issue.title });
+  await expect(detail.getByRole('heading', { name: issue.title })).toBeVisible();
+  await expect(detail.locator('.detail-description')).toHaveText('Loaded through the direct issue endpoint.');
+  await expect(page.getByText('Loading issues...')).toBeVisible();
+
+  releaseIssueList();
+  await expect(page.getByRole('row', { name: /List-independent detail issue.*Todo.*Medium/ })).toBeVisible();
+});
+
 test('dashboard issue open updates the URL and unknown issue links can return to list', async ({ page }) => {
   const issue = await createIssueThroughApi(page, {
     title: 'Dashboard URL issue',

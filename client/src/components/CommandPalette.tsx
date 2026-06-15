@@ -126,7 +126,7 @@ export function CommandPalette({
             placeholder="Search commands"
             aria-label="Search commands"
           />
-          <button type="submit" className="sr-only" aria-label="Run first matching command">
+          <button type="submit" className="sr-only" aria-label="Run first matching command" tabIndex={-1}>
             Run command
           </button>
         </form>

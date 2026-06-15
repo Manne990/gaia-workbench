@@ -480,6 +480,13 @@ test('command palette opens with keyboard shortcut, restores focus, and runs com
   await expect(commandSearch).toHaveAttribute('aria-label', 'Search commands');
   await expect(commandList).toBeVisible();
 
+  const newIssueCommand = commandPalette.getByRole('button', { name: 'New issue. Create a new issue' });
+
+  await page.keyboard.press('Tab');
+  await expect(newIssueCommand).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(commandSearch).toBeFocused();
+
   await page.keyboard.press('Shift+Tab');
   await expect.poll(commandButtonHasFocus).toBe(true);
   await page.keyboard.press('Tab');

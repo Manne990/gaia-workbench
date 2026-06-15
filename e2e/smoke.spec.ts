@@ -847,6 +847,39 @@ test('dependency links show and clear blocked issue visibility', async ({ page }
   await expect(dependentsSection.getByText(dependent.title)).toBeVisible();
 });
 
+test('dependency dependents show blocking only when the selected issue can block', async ({ page }) => {
+  const completedBlocker = await createIssueThroughApi(page, {
+    title: 'Completed dependency source',
+    description: 'A finished issue should not currently block active dependents.',
+    status: 'done',
+    priority: 'high'
+  });
+  const activeDependent = await createIssueThroughApi(page, {
+    title: 'Active downstream dependent',
+    description: 'This issue depends on a completed source.',
+    status: 'in_progress',
+    priority: 'medium'
+  });
+
+  const dependencyResponse = await page.request.post(`/api/issues/${activeDependent.id}/dependencies`, {
+    data: {
+      dependsOnIssueId: completedBlocker.id
+    }
+  });
+
+  expect(dependencyResponse.ok()).toBe(true);
+
+  await page.goto(`/issues/${completedBlocker.id}`);
+
+  const detail = page.getByRole('region', { name: completedBlocker.title });
+  const dependentsSection = detail.getByLabel('Issue dependents');
+  const activeDependentItem = dependentsSection.getByRole('listitem').filter({ hasText: activeDependent.title });
+
+  await expect(activeDependentItem).toBeVisible();
+  await expect(activeDependentItem.getByText('In Progress')).toBeVisible();
+  await expect(activeDependentItem.locator('.blocked-pill')).toHaveCount(0);
+});
+
 test('dashboard density toggle compacts rows without hiding issue information', async ({ page }) => {
   await createIssueThroughApi(page, {
     title: 'Density toggle issue',

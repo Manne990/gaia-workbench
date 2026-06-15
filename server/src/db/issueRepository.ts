@@ -742,48 +742,72 @@ export class IssueRepository {
 
     const fields: string[] = [];
     const values: Record<string, string | null> = { id };
+    let nextTitle: string | undefined;
+    let nextDescription: string | undefined;
+    let nextStatus: IssueStatus | undefined;
+    let nextPriority: IssuePriority | undefined;
+    let nextLabels: string[] | undefined;
+    let nextDueDate: string | null | undefined;
 
     if (input.title !== undefined) {
       assertNonEmptyString(input.title, 'title');
       fields.push('title = @title');
-      values.title = input.title.trim();
+      nextTitle = input.title.trim();
+      values.title = nextTitle;
     }
 
     if (input.description !== undefined) {
       fields.push('description = @description');
-      values.description = normalizeIssueDescription(input.description);
+      nextDescription = normalizeIssueDescription(input.description);
+      values.description = nextDescription;
     }
 
     if (input.status !== undefined) {
       assertValidStatus(input.status);
       fields.push('status = @status');
-      values.status = input.status;
+      nextStatus = input.status;
+      values.status = nextStatus;
     }
 
     if (input.priority !== undefined) {
       assertValidPriority(input.priority);
       fields.push('priority = @priority');
-      values.priority = input.priority;
+      nextPriority = input.priority;
+      values.priority = nextPriority;
     }
 
     if (input.labels !== undefined) {
       fields.push('labels = @labels');
-      values.labels = JSON.stringify(normalizeLabels(input.labels));
+      nextLabels = normalizeLabels(input.labels);
+      values.labels = JSON.stringify(nextLabels);
     }
 
     if (input.dueDate !== undefined) {
       fields.push('due_date = @dueDate');
-      values.dueDate = normalizeDueDate(input.dueDate);
+      nextDueDate = normalizeDueDate(input.dueDate);
+      values.dueDate = nextDueDate;
     }
-
-    const updatedAt = nowIso();
-    fields.push('updated_at = @updatedAt');
-    values.updatedAt = updatedAt;
 
     const current = this.getById(id);
     if (!current) {
       return null;
     }
+
+    const hasChanges =
+      (nextTitle !== undefined && nextTitle !== current.title) ||
+      (nextDescription !== undefined && nextDescription !== current.description) ||
+      (nextStatus !== undefined && nextStatus !== current.status) ||
+      (nextPriority !== undefined && nextPriority !== current.priority) ||
+      (nextLabels !== undefined && !labelsEqual(nextLabels, current.labels)) ||
+      (input.dueDate !== undefined && nextDueDate !== current.dueDate);
+
+    if (!hasChanges) {
+      return current;
+    }
+
+    const updatedAt = nowIso();
+    fields.push('updated_at = @updatedAt');
+    values.updatedAt = updatedAt;
 
     const transaction = this.database.transaction(() => {
       const result = this.database

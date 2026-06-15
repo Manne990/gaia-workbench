@@ -489,6 +489,55 @@ test('archives hides restores and preserves issue activity', async ({ page }) =>
   await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBeNull();
 });
 
+test('archive action offers undo recovery in active and include-archived modes', async ({ page }) => {
+  const issue = await createIssueThroughApi(page, {
+    title: 'Undo archive recovery issue',
+    description: 'Allows accidental archive recovery from list actions.',
+    priority: 'medium'
+  });
+
+  await page.goto(`/?search=${encodeURIComponent(issue.title)}`);
+
+  const filters = page.getByLabel('Issue filters');
+  const includeArchived = filters.getByLabel('Include archived');
+  const issueRow = page.getByRole('row', { name: new RegExp(`Undo archive recovery issue.*Todo.*Medium`) });
+  const undoArchiveButton = page.getByRole('button', { name: `Undo archive of ${issue.title}` });
+
+  await expect(includeArchived).not.toBeChecked();
+  await expect(issueRow).toBeVisible();
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Archive "Undo archive recovery issue"?');
+    await dialog.accept();
+  });
+  await page.getByRole('button', { name: `Archive ${issue.title}` }).click();
+
+  await expect(page.getByText(`Issue "${issue.title}" archived.`)).toBeVisible();
+  await expect(undoArchiveButton).toBeVisible();
+  await expect(issueRow).toHaveCount(0);
+
+  await undoArchiveButton.click();
+
+  await expect(page.getByText(`Issue "${issue.title}" archived.`), { timeout: 5000 }).toHaveCount(0);
+  await expect(issueRow).toBeVisible();
+
+  await includeArchived.check();
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Archive "Undo archive recovery issue"?');
+    await dialog.accept();
+  });
+  await page.getByRole('button', { name: `Archive ${issue.title}` }).click();
+
+  await expect(page.getByText(`Issue "${issue.title}" archived.`)).toBeVisible();
+  await expect(issueRow.locator('.archived-pill')).toHaveText('Archived');
+
+  await undoArchiveButton.click();
+
+  await expect(page.getByText(`Issue "${issue.title}" archived.`), { timeout: 5000 }).toHaveCount(0);
+  await expect(issueRow.locator('.archived-pill')).toHaveCount(0);
+});
+
 test('dependency links show and clear blocked issue visibility', async ({ page }) => {
   const blocker = await createIssueThroughApi(page, {
     title: 'Dependency blocker issue',

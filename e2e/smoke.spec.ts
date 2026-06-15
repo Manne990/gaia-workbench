@@ -541,6 +541,31 @@ test('command palette opens with keyboard shortcut, restores focus, and runs com
   await expect(issueForm).toHaveCount(0);
 });
 
+test('command palette clear filters restores focus after dialog state changes', async ({ page }) => {
+  await page.goto('/');
+
+  const filters = page.getByRole('search', { name: 'Issue filters' });
+  const issueSearch = filters.getByLabel('Search');
+  const issueListHeading = page.getByRole('heading', { name: 'Issue List' });
+  const quickActionsButton = page.getByRole('button', { name: 'Quick Actions' });
+  const commandPalette = page.getByRole('dialog', { name: 'Command palette' });
+  const commandSearch = page.getByLabel('Search commands');
+
+  await issueSearch.fill('no matching issue');
+  await expect(issueSearch).toHaveValue('no matching issue');
+  await expect(page).toHaveURL(/search=no\+matching\+issue/);
+
+  await quickActionsButton.click();
+  await expect(commandSearch).toBeFocused();
+  await commandSearch.fill('clear active filters');
+  await page.keyboard.press('Enter');
+
+  await expect(commandPalette).toHaveCount(0);
+  await expect(issueSearch).toHaveValue('');
+  await expect(page).toHaveURL('/');
+  await expect(issueListHeading).toBeFocused();
+});
+
 test('imports tracker JSON through preview and apply', async ({ page }, testInfo) => {
   await page.goto('/');
 

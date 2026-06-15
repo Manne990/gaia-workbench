@@ -2055,6 +2055,68 @@ test('saved filter view apply preserves the local view after transient fetch fai
   await expect(page.getByRole('row', { name: /Saved view transient other.*Todo.*Low/ })).toHaveCount(0);
 });
 
+test('saved filter views recover from stale rename and delete selections', async ({ page }) => {
+  await createIssueThroughApi(page, {
+    title: 'Saved view stale recovery target',
+    description: 'Used to keep manual query state visible during stale view recovery.',
+    status: 'review',
+    priority: 'high',
+    labels: ['stale-view']
+  });
+
+  await page.goto('/');
+
+  const filters = page.getByLabel('Issue filters');
+  let settings = await expandDashboardSettings(page);
+  let savedViews = settings.getByLabel('Saved filter views');
+  let savedViewSelect = savedViews.getByLabel('Saved views');
+
+  await filters.getByLabel('Search').fill('Saved view stale recovery target');
+  await filters.getByLabel('Status').selectOption('review');
+  await savedViews.getByLabel('View name').fill('Stale rename view');
+  await savedViews.getByRole('button', { name: 'Save View' }).click();
+  await expect(savedViewSelect).toContainText('Stale rename view');
+
+  const staleRenameViewId = await savedViewSelect.inputValue();
+
+  await page.reload();
+  settings = await expandDashboardSettings(page);
+  savedViews = settings.getByLabel('Saved filter views');
+  savedViewSelect = savedViews.getByLabel('Saved views');
+  await savedViewSelect.selectOption({ label: 'Stale rename view' });
+  await filters.getByLabel('Search').fill('manual query after reload');
+
+  const staleRenameDelete = await page.request.delete(`/api/filter-views/${staleRenameViewId}`);
+
+  expect(staleRenameDelete.ok()).toBe(true);
+
+  await savedViews.getByLabel('View name').fill('Renamed stale view');
+  await savedViews.getByRole('button', { name: 'Rename' }).click();
+  await expect(savedViews.getByText('Saved view not found')).toBeVisible();
+  await expect(savedViews.getByRole('option', { name: 'Stale rename view' })).toHaveCount(0);
+  await expect(savedViewSelect).toHaveValue('');
+  await expect(savedViews.getByLabel('View name')).toHaveValue('');
+  await expect(filters.getByLabel('Search')).toHaveValue('manual query after reload');
+  await expect(savedViews.getByRole('button', { name: 'Rename' })).toBeDisabled();
+  await expect(savedViews.getByRole('button', { name: 'Delete' })).toBeDisabled();
+
+  await savedViews.getByLabel('View name').fill('Stale delete view');
+  await savedViews.getByRole('button', { name: 'Save View' }).click();
+  await expect(savedViewSelect).toContainText('Stale delete view');
+
+  const staleDeleteViewId = await savedViewSelect.inputValue();
+  const staleDelete = await page.request.delete(`/api/filter-views/${staleDeleteViewId}`);
+
+  expect(staleDelete.ok()).toBe(true);
+
+  await savedViews.getByRole('button', { name: 'Delete' }).click();
+  await expect(savedViews.getByText('Saved view not found')).toBeVisible();
+  await expect(savedViews.getByRole('option', { name: 'Stale delete view' })).toHaveCount(0);
+  await expect(savedViewSelect).toHaveValue('');
+  await expect(savedViews.getByLabel('View name')).toHaveValue('');
+  await expect(savedViews.getByRole('button', { name: 'Apply View' })).toBeDisabled();
+});
+
 test('blocked-only filter is shareable and restores from saved views', async ({ page }) => {
   const blocker = await createIssueThroughApi(page, {
     title: 'Blocked filter blocker',

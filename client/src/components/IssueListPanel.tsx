@@ -47,6 +47,7 @@ type IssueListPanelProps = {
   onApplySavedView: () => void;
   onRenameSavedView: () => void;
   onDeleteSavedView: () => void;
+  issueSearchInputRef: RefObject<HTMLInputElement | null>;
   issueListHeadingRef: RefObject<HTMLHeadingElement | null>;
   onClearFilters: () => void;
   onPreviousPage: () => void;
@@ -91,6 +92,7 @@ export function IssueListPanel({
   onApplySavedView,
   onRenameSavedView,
   onDeleteSavedView,
+  issueSearchInputRef,
   issueListHeadingRef,
   onClearFilters,
   onPreviousPage,
@@ -140,6 +142,7 @@ export function IssueListPanel({
           <span>Search</span>
           <input
             id="issue-search-filter"
+            ref={issueSearchInputRef}
             value={searchFilter}
             onChange={(event) => onSearchFilterChange(event.target.value)}
           />

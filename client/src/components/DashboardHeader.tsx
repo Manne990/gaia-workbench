@@ -8,6 +8,7 @@ type DashboardHeaderProps = {
   importInputRef: RefObject<HTMLInputElement | null>;
   onCreateIssue: (trigger: HTMLElement) => void;
   onChooseImportFile: (event: ChangeEvent<HTMLInputElement>) => void;
+  onOpenCommandPalette: (trigger: HTMLElement) => void;
 };
 
 function serviceHealthText(state: ServiceHealthState): string {
@@ -28,7 +29,8 @@ export function DashboardHeader({
   newIssueButtonRef,
   importInputRef,
   onCreateIssue,
-  onChooseImportFile
+  onChooseImportFile,
+  onOpenCommandPalette
 }: DashboardHeaderProps) {
   return (
     <header className="dashboard-header">
@@ -51,6 +53,14 @@ export function DashboardHeader({
           onClick={(event) => onCreateIssue(event.currentTarget)}
         >
           New Issue
+        </button>
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={(event) => onOpenCommandPalette(event.currentTarget)}
+        >
+          Quick Actions
+          <span className="button-shortcut">⌘/Ctrl+K</span>
         </button>
         <div
           className={`service-status service-status-${serviceHealthState}`}

@@ -736,14 +736,23 @@ describe('issues API', () => {
         dueDate: '2999-12-31'
       })
       .expect(201);
+    const dependent = await request(app).post('/api/issues').send({ title: 'Original dependent' }).expect(201);
     const comment = await request(app)
       .post(`/api/issues/${source.body.id}/comments`)
       .send({ body: 'Original comment should stay behind' })
       .expect(201);
+    const editedComment = await request(app)
+      .put(`/api/comments/${comment.body.id}`)
+      .send({ body: 'Edited source-only comment' })
+      .expect(200);
 
     await request(app)
       .post(`/api/issues/${source.body.id}/dependencies`)
       .send({ dependsOnIssueId: blocker.body.id })
+      .expect(201);
+    await request(app)
+      .post(`/api/issues/${dependent.body.id}/dependencies`)
+      .send({ dependsOnIssueId: source.body.id })
       .expect(201);
     const archivedSource = await request(app).post(`/api/issues/${source.body.id}/archive`).expect(200);
     const duplicated = await request(app).post(`/api/issues/${source.body.id}/duplicate`).expect(201);
@@ -762,7 +771,18 @@ describe('issues API', () => {
     expect(duplicated.body.id).not.toBe(source.body.id);
 
     await request(app).get(`/api/issues/${source.body.id}`).expect(200, archivedSource.body);
-    await request(app).get(`/api/issues/${source.body.id}/comments`).expect(200, [comment.body]);
+    await request(app).get(`/api/issues/${source.body.id}/comments`).expect(200, [editedComment.body]);
+    await request(app)
+      .get(`/api/comments/${comment.body.id}/history`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toHaveLength(1);
+        expect(response.body[0]).toMatchObject({
+          commentId: comment.body.id,
+          previousBody: 'Original comment should stay behind',
+          newBody: 'Edited source-only comment'
+        });
+      });
     await request(app).get(`/api/issues/${duplicated.body.id}/comments`).expect(200, []);
     await request(app)
       .get(`/api/issues/${duplicated.body.id}/dependencies`)
@@ -775,11 +795,23 @@ describe('issues API', () => {
           isBlocked: false
         });
       });
+    await request(app)
+      .get(`/api/issues/${source.body.id}/dependencies`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          issueId: source.body.id,
+          dependencies: [expect.objectContaining({ id: blocker.body.id, title: 'Original blocker' })],
+          dependents: [expect.objectContaining({ id: dependent.body.id, title: 'Original dependent' })],
+          isBlocked: true
+        });
+      });
 
     const sourceActivity = await request(app).get(`/api/issues/${source.body.id}/activity`).expect(200);
     expect(sourceActivity.body.map((event: { type: string }) => event.type)).toEqual([
       'issue_created',
       'comment_added',
+      'comment_edited',
       'issue_dependency_added',
       'issue_archived'
     ]);

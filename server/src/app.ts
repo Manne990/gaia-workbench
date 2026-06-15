@@ -104,23 +104,53 @@ function getIssueListPagination(query: { page?: unknown; limit?: unknown }) {
   return { page, limit };
 }
 
+function groupBy<T>(items: T[], keySelector: (item: T) => string): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+
+  for (const item of items) {
+    const key = keySelector(item);
+    const group = groups.get(key);
+
+    if (group) {
+      group.push(item);
+    } else {
+      groups.set(key, [item]);
+    }
+  }
+
+  return groups;
+}
+
 function buildTrackerExport(
   issueRepository: IssueRepository,
   commentRepository: CommentRepository,
   activityRepository: ActivityRepository
 ): TrackerExport {
+  const issues = issueRepository.listForExport();
+  const issueIds = issues.map((issue) => issue.id);
+  const comments = commentRepository.listByIssueIds(issueIds);
+  const commentsByIssueId = groupBy(comments, (comment) => comment.issueId);
+  const historyByCommentId = groupBy(
+    commentRepository.getHistoryByCommentIds(comments.map((comment) => comment.id)),
+    (history) => history.commentId
+  );
+  const activityByIssueId = groupBy(
+    activityRepository.listByIssueIds(issueIds),
+    (event) => event.issueId
+  );
+
   return {
     exportVersion: 1,
-    issues: issueRepository.listForExport().map((issue) => {
-      const comments = commentRepository.listByIssueId(issue.id).map((comment) => ({
+    issues: issues.map((issue) => {
+      const exportedComments = (commentsByIssueId.get(issue.id) ?? []).map((comment) => ({
         ...comment,
-        editHistory: commentRepository.getHistory(comment.id)
+        editHistory: historyByCommentId.get(comment.id) ?? []
       }));
 
       return {
         ...issue,
-        comments,
-        activityEvents: activityRepository.listByIssueId(issue.id)
+        comments: exportedComments,
+        activityEvents: activityByIssueId.get(issue.id) ?? []
       };
     })
   };

@@ -34,6 +34,16 @@ const createCommentEditHistoryTable = `
   );
 `;
 
+const createCommentsIssueIndex = `
+  CREATE INDEX IF NOT EXISTS idx_comments_issue_id_created_at
+  ON comments (issue_id, created_at);
+`;
+
+const createCommentEditHistoryCommentIndex = `
+  CREATE INDEX IF NOT EXISTS idx_comment_edit_history_comment_id_edited_at
+  ON comment_edit_history (comment_id, edited_at);
+`;
+
 const createActivityEventsTable = `
   CREATE TABLE IF NOT EXISTS activity_events (
     id TEXT PRIMARY KEY,
@@ -66,7 +76,9 @@ export function ensureTinyTrackerSchema(database: Database.Database): void {
   database.exec(createActivityEventsTable);
   database.exec(createActivityEventsIssueIndex);
   database.exec(createCommentsTable);
+  database.exec(createCommentsIssueIndex);
   database.exec(createCommentEditHistoryTable);
+  database.exec(createCommentEditHistoryCommentIndex);
 }
 
 export const TABLE_NAMES = {

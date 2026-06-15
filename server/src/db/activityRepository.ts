@@ -38,6 +38,10 @@ function mapActivityEventRow(row: ActivityEventRow): ActivityEvent {
   };
 }
 
+function placeholdersFor(values: string[]): string {
+  return values.map(() => '?').join(', ');
+}
+
 export function recordActivityEvent(
   database: Database.Database,
   input: NewActivityEvent
@@ -82,6 +86,23 @@ export class ActivityRepository {
         ORDER BY created_at ASC, rowid ASC
       `)
       .all({ issueId }) as ActivityEventRow[];
+
+    return rows.map(mapActivityEventRow);
+  }
+
+  listByIssueIds(issueIds: string[]): ActivityEvent[] {
+    if (issueIds.length === 0) {
+      return [];
+    }
+
+    const rows = this.database
+      .prepare(`
+        SELECT id, issue_id, event_type, metadata, created_at
+        FROM activity_events
+        WHERE issue_id IN (${placeholdersFor(issueIds)})
+        ORDER BY issue_id ASC, created_at ASC, rowid ASC
+      `)
+      .all(...issueIds) as ActivityEventRow[];
 
     return rows.map(mapActivityEventRow);
   }

@@ -47,6 +47,18 @@ async function pressTabUntilFocused(page: Page, locator: Locator, maxTabs = 40):
   throw new Error('Expected target to receive focus through keyboard tab navigation.');
 }
 
+async function expandDashboardSettings(page: Page): Promise<Locator> {
+  const settings = page.locator('details.secondary-controls');
+
+  await expect(settings).toHaveCount(1);
+
+  if ((await settings.getAttribute('open')) === null) {
+    await settings.locator('summary').click();
+  }
+
+  return settings;
+}
+
 async function createIssueThroughApi(
   page: Page,
   issue: { title: string; description?: string; status?: string; priority?: string }
@@ -500,6 +512,7 @@ test('dashboard density toggle compacts rows without hiding issue information', 
   await expect(issueRow.getByRole('button', { name: 'Open Density toggle issue' })).toBeVisible();
   await expect(issueRow.getByRole('button', { name: 'Edit Density toggle issue' })).toBeVisible();
   await expect(issueRow.getByRole('button', { name: 'Archive Density toggle issue' })).toBeVisible();
+  await expect(page.getByText('Saved views & page settings')).toBeVisible();
 
   await compactButton.click();
   await expect(compactButton).toHaveAttribute('aria-pressed', 'true');
@@ -517,6 +530,39 @@ test('dashboard density toggle compacts rows without hiding issue information', 
   await comfortableButton.click();
   await expect(comfortableButton).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.issue-table-density-comfortable')).toHaveCount(1);
+});
+
+test('secondary dashboard controls are discoverable and accessible on mobile', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto('/');
+
+  const filters = page.getByLabel('Issue filters');
+  const settings = page.locator('details.secondary-controls');
+
+  await expect(filters.getByLabel('Search')).toBeVisible();
+  await expect(filters.getByLabel('Status')).toBeVisible();
+  await expect(filters.getByLabel('Priority')).toBeVisible();
+  await expect(filters.getByLabel('Include archived')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Download JSON' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Import JSON', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'New Issue' })).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Service status' })).toBeVisible();
+  await expect(settings.locator('summary')).toContainText('Saved views & page settings');
+  await expect(settings.locator('#issue-page-size-filter')).toBeHidden();
+  await expect(settings.locator('#saved-view-select')).toBeHidden();
+
+  await page.keyboard.press('Tab');
+  await pressTabUntilFocused(page, settings.locator('summary'), 40);
+  await page.keyboard.press('Enter');
+  await expect(settings.locator('#issue-page-size-filter')).toBeVisible();
+  await expect(settings.locator('#saved-view-select')).toBeVisible();
+  await expect(settings.getByLabel('View name')).toBeVisible();
+
+  const hasNoHorizontalOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth
+  );
+
+  expect(hasNoHorizontalOverflow).toBe(true);
 });
 
 test('markdown-lite renders safe formatting and keeps unsafe input inert', async ({ page }) => {
@@ -867,13 +913,14 @@ test('saved filter views persist restore and compose with detail routes', async 
   await page.goto('/');
 
   const filters = page.getByLabel('Issue filters');
-  const savedViews = page.getByLabel('Saved filter views');
+  let settings = await expandDashboardSettings(page);
+  let savedViews = settings.getByLabel('Saved filter views');
 
   await filters.getByLabel('Search').fill('Saved view target');
   await filters.getByLabel('Status').selectOption('review');
   await filters.getByLabel('Priority').selectOption('high');
   await filters.getByLabel('Include archived').check();
-  await filters.getByLabel('Page size').selectOption('50');
+  await settings.getByLabel('Page size').selectOption('50');
   await savedViews.getByLabel('View name').fill('Review archive view');
   await savedViews.getByRole('button', { name: 'Save View' }).click();
 
@@ -884,7 +931,7 @@ test('saved filter views persist restore and compose with detail routes', async 
 
   await filters.getByRole('button', { name: 'Clear Filters' }).click();
   await expect(filters.getByLabel('Search')).toHaveValue('');
-  await expect(filters.getByLabel('Page size')).toHaveValue('25');
+  await expect(settings.getByLabel('Page size')).toHaveValue('25');
   await expect(page).toHaveURL('/');
 
   await savedViews.getByRole('button', { name: 'Apply View' }).click();
@@ -892,11 +939,13 @@ test('saved filter views persist restore and compose with detail routes', async 
   await expect(filters.getByLabel('Status')).toHaveValue('review');
   await expect(filters.getByLabel('Priority')).toHaveValue('high');
   await expect(filters.getByLabel('Include archived')).toBeChecked();
-  await expect(filters.getByLabel('Page size')).toHaveValue('50');
+  await expect(settings.getByLabel('Page size')).toHaveValue('50');
   await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Saved view target');
   await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('50');
 
   await page.reload();
+  settings = await expandDashboardSettings(page);
+  savedViews = settings.getByLabel('Saved filter views');
   await expect(savedViews.getByLabel('Saved views')).toContainText('Review archive view');
   await expect(filters.getByLabel('Search')).toHaveValue('Saved view target');
 

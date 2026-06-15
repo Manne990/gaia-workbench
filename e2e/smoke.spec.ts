@@ -1978,6 +1978,71 @@ test('rapid dashboard filter changes keep URL controls and detail routes consist
   await expect(page).toHaveURL('/');
 });
 
+test('rapid create edit search and filter changes preserve issue visibility', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'New Issue' }).click();
+  const issueForm = page.getByRole('form', { name: 'Issue form' });
+
+  await issueForm.getByLabel('Title').fill('Rapid workflow draft');
+  await issueForm.getByLabel('Description').fill('Created before a rapid filter pass.');
+  await issueForm.getByLabel('Labels').fill('rapid, smoke');
+  await issueForm.getByLabel('Status').selectOption('todo');
+  await issueForm.getByLabel('Priority').selectOption('medium');
+  await issueForm.getByRole('button', { name: 'Create Issue' }).click();
+
+  const draftRow = page.getByRole('row', { name: /Rapid workflow draft.*Todo.*Medium/ });
+
+  await expect(draftRow).toBeVisible();
+
+  await draftRow.getByRole('button', { name: 'Edit Rapid workflow draft' }).click();
+  await issueForm.getByLabel('Title').fill('Rapid workflow final');
+  await issueForm.getByLabel('Description').fill('Edited before filters settle.');
+  await issueForm.getByLabel('Labels').fill('rapid, filtered');
+  await issueForm.getByLabel('Status').selectOption('review');
+  await issueForm.getByLabel('Priority').selectOption('high');
+  await issueForm.getByRole('button', { name: 'Save Changes' }).click();
+
+  const finalRow = page.getByRole('row', { name: /Rapid workflow final.*Review.*High/ });
+  const filters = page.getByLabel('Issue filters');
+
+  await expect(finalRow).toBeVisible();
+  await expect(page.getByText('Rapid workflow draft')).toHaveCount(0);
+
+  await changeDashboardFiltersInSameTask(page, {
+    search: 'Rapid workflow final',
+    status: 'review',
+    priority: 'high',
+    label: 'filtered'
+  });
+
+  await expect(filters.getByLabel('Search')).toHaveValue('Rapid workflow final');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(filters.getByLabel('Priority')).toHaveValue('high');
+  await expect(filters.getByLabel('Label')).toHaveValue('filtered');
+  await expect(page.getByLabel('Active filter count')).toHaveText('4 active filters');
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Rapid workflow final');
+  await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('review');
+  await expect.poll(() => new URL(page.url()).searchParams.get('priority')).toBe('high');
+  await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('filtered');
+  await expect(finalRow).toBeVisible();
+
+  await filters.getByLabel('Status').selectOption('todo');
+  await expect(filters.getByLabel('Status')).toHaveValue('todo');
+  await expect(page.getByLabel('Active filters')).toContainText('Status: Todo');
+  await expect(page.getByLabel('Active filter count')).toHaveText('4 active filters');
+  await expect(page.getByText('No issues match the active filters.')).toBeVisible();
+  await expect(finalRow).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('todo');
+
+  await filters.getByLabel('Status').selectOption('review');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(page.getByLabel('Active filters')).toContainText('Status: Review');
+  await expect(page.getByLabel('Active filter count')).toHaveText('4 active filters');
+  await expect(finalRow).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('review');
+});
+
 test('saved filter views persist restore and compose with detail routes', async ({ page }) => {
   const targetIssue = await createIssueThroughApi(page, {
     title: 'Saved view target',

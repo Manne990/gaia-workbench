@@ -506,6 +506,108 @@ describe('issues API', () => {
     await expectBlockedProjection(false, []);
   });
 
+  it('keeps blocked-only visibility scoped to archived issue filters', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const blocker = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Archived visibility blocker', status: 'todo' })
+      .expect(201);
+    const blocked = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Archived visibility blocked issue', status: 'in_progress' })
+      .expect(201);
+
+    await request(app)
+      .post(`/api/issues/${blocked.body.id}/dependencies`)
+      .send({ dependsOnIssueId: blocker.body.id })
+      .expect(201);
+
+    const expectBlockedListVisibility = async ({
+      defaultIds,
+      includeArchivedIds,
+      includeArchivedTotalArchived,
+      includeArchivedTotalBlocked
+    }: {
+      defaultIds: string[];
+      includeArchivedIds: string[];
+      includeArchivedTotalArchived: number;
+      includeArchivedTotalBlocked: number;
+    }) => {
+      const defaultBlockedOnly = await request(app).get('/api/issues?blockedOnly=true').expect(200);
+      const includeArchivedBlockedOnly = await request(app)
+        .get('/api/issues?blockedOnly=true&includeArchived=true')
+        .expect(200);
+      const includeArchivedSummary = await request(app)
+        .get('/api/issues/audit-summary?blockedOnly=true&includeArchived=true')
+        .expect(200);
+
+      expect(defaultBlockedOnly.body.items.map((issue: { id: string }) => issue.id)).toEqual(defaultIds);
+      expect(defaultBlockedOnly.body.pagination.total).toBe(defaultIds.length);
+      expect(includeArchivedBlockedOnly.body.items.map((issue: { id: string }) => issue.id)).toEqual(
+        includeArchivedIds
+      );
+      expect(includeArchivedBlockedOnly.body.pagination.total).toBe(includeArchivedIds.length);
+      expect(includeArchivedSummary.body).toMatchObject({
+        totalIssues: includeArchivedIds.length,
+        totalArchivedIssues: includeArchivedTotalArchived,
+        totalBlockedIssues: includeArchivedTotalBlocked
+      });
+    };
+
+    await expectBlockedListVisibility({
+      defaultIds: [blocked.body.id],
+      includeArchivedIds: [blocked.body.id],
+      includeArchivedTotalArchived: 0,
+      includeArchivedTotalBlocked: 1
+    });
+
+    const archivedBlocked = await request(app).post(`/api/issues/${blocked.body.id}/archive`).expect(200);
+    const archivedDetail = await request(app).get(`/api/issues/${blocked.body.id}`).expect(200);
+
+    expect(archivedBlocked.body).toMatchObject({
+      id: blocked.body.id,
+      archivedAt: expect.any(String),
+      isBlocked: true,
+      dependsOnIssueIds: [blocker.body.id]
+    });
+    expect(archivedDetail.body).toMatchObject({
+      archivedAt: archivedBlocked.body.archivedAt,
+      isBlocked: true,
+      dependsOnIssueIds: [blocker.body.id]
+    });
+    await expectBlockedListVisibility({
+      defaultIds: [],
+      includeArchivedIds: [blocked.body.id],
+      includeArchivedTotalArchived: 1,
+      includeArchivedTotalBlocked: 1
+    });
+
+    await request(app).post(`/api/issues/${blocker.body.id}/close`).expect(200);
+    await expectBlockedListVisibility({
+      defaultIds: [],
+      includeArchivedIds: [],
+      includeArchivedTotalArchived: 0,
+      includeArchivedTotalBlocked: 0
+    });
+
+    await request(app).post(`/api/issues/${blocker.body.id}/reopen`).expect(200);
+    await expectBlockedListVisibility({
+      defaultIds: [],
+      includeArchivedIds: [blocked.body.id],
+      includeArchivedTotalArchived: 1,
+      includeArchivedTotalBlocked: 1
+    });
+
+    await request(app).post(`/api/issues/${blocked.body.id}/unarchive`).expect(200);
+    await expectBlockedListVisibility({
+      defaultIds: [blocked.body.id],
+      includeArchivedIds: [blocked.body.id],
+      includeArchivedTotalArchived: 0,
+      includeArchivedTotalBlocked: 1
+    });
+  });
+
   it('filters stale issues by updated timestamp', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

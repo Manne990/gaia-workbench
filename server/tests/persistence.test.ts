@@ -6,6 +6,7 @@ import {
   ActivityRepository,
   CommentRepository,
   createDatabase,
+  IssueDependencyRepository,
   IssueRepository,
   SavedFilterViewRepository,
   TABLE_NAMES
@@ -25,6 +26,7 @@ describe('persistence layer', () => {
         TABLE_NAMES.activityEvents,
         TABLE_NAMES.commentEditHistory,
         TABLE_NAMES.comments,
+        TABLE_NAMES.issueDependencies,
         TABLE_NAMES.issues,
         TABLE_NAMES.savedFilterViews
       ]);
@@ -373,6 +375,72 @@ describe('persistence layer', () => {
         'issue_created',
         'issue_archived',
         'issue_unarchived'
+      ]);
+    } finally {
+      database.close();
+    }
+  });
+
+  it('persists dependencies and derives blocked state at repository boundaries', () => {
+    const database = createDatabase(':memory:');
+    const issueRepository = new IssueRepository(database);
+    const dependencyRepository = new IssueDependencyRepository(database);
+    const activityRepository = new ActivityRepository(database);
+
+    try {
+      const blocked = issueRepository.create({ title: 'Repository blocked issue' });
+      const blocker = issueRepository.create({ title: 'Repository blocker' });
+      const downstream = issueRepository.create({ title: 'Repository downstream' });
+
+      expect(dependencyRepository.add(blocked.id, blocker.id)).toMatchObject({
+        issueId: blocked.id,
+        isBlocked: true,
+        dependencies: [
+          {
+            id: blocker.id,
+            title: 'Repository blocker',
+            status: 'todo',
+            archivedAt: null
+          }
+        ]
+      });
+      expect(issueRepository.getById(blocked.id)).toMatchObject({
+        isBlocked: true,
+        dependsOnIssueIds: [blocker.id]
+      });
+      expect(issueRepository.list().items.find((issue) => issue.id === blocked.id)).toMatchObject({
+        isBlocked: true,
+        dependsOnIssueIds: [blocker.id]
+      });
+      expect(() => dependencyRepository.add(blocked.id, blocker.id)).toThrow('Issue dependency already exists');
+      expect(() => dependencyRepository.add(blocked.id, blocked.id)).toThrow('Issue cannot depend on itself');
+
+      dependencyRepository.add(blocker.id, downstream.id);
+      expect(() => dependencyRepository.add(downstream.id, blocked.id)).toThrow('Issue dependency cycle detected');
+
+      issueRepository.close(blocker.id);
+      expect(issueRepository.getById(blocked.id)).toMatchObject({
+        isBlocked: false,
+        dependsOnIssueIds: [blocker.id]
+      });
+
+      issueRepository.reopen(blocker.id);
+      issueRepository.archive(blocker.id);
+      expect(issueRepository.getById(blocked.id)).toMatchObject({
+        isBlocked: false,
+        dependsOnIssueIds: [blocker.id]
+      });
+      expect(() => dependencyRepository.add(downstream.id, blocker.id)).toThrow('Cannot depend on archived issue');
+
+      dependencyRepository.remove(blocked.id, blocker.id);
+      expect(issueRepository.getById(blocked.id)).toMatchObject({
+        isBlocked: false,
+        dependsOnIssueIds: []
+      });
+      expect(activityRepository.listByIssueId(blocked.id).map((event) => event.type)).toEqual([
+        'issue_created',
+        'issue_dependency_added',
+        'issue_dependency_removed'
       ]);
     } finally {
       database.close();

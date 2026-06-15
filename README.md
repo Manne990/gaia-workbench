@@ -36,6 +36,7 @@ If Gaia can successfully build, maintain, and evolve TinyTracker, it demonstrate
 * Reopen issue
 * Assign priority
 * Archive and unarchive issues without deleting history
+* Link issue dependencies and show blocked issues
 
 ### Status Workflow
 
@@ -68,6 +69,7 @@ REST API supporting:
 * List issues
 * Update issue
 * Archive and unarchive issue
+* Add and remove issue dependencies
 * Add comments
 * Create, list, update, and delete saved filter views
 * Export tracker JSON
@@ -83,6 +85,7 @@ Simple web interface:
 * Search
 * Saved filter views
 * Archived issue recovery
+* Blocked issue visibility and dependency controls
 * Safe markdown-lite rendering for descriptions and comments
 * JSON export and import
 
@@ -251,10 +254,10 @@ data/tinytracker.sqlite
 ### Schema Versioning
 
 TinyTracker stores its SQLite schema version in `PRAGMA user_version`. The
-current application schema is version `2`, which includes issues, comments,
+current application schema is version `3`, which includes issues, comments,
 comment edit history, activity events, labels, due dates, archive state, saved
-filter views, and the current query indexes. This is separate from tracker JSON
-`exportVersion`.
+filter views, issue dependency links, and the current query indexes. This is
+separate from tracker JSON `exportVersion`.
 
 Startup runs the schema migration path through `createDatabase()`. Fresh
 databases and unversioned legacy databases (`user_version = 0`) are upgraded to
@@ -359,6 +362,11 @@ By default, the issue list and dashboard summary exclude archived issues. When
 `includeArchived=true`, archived issues are included in list results and summary
 counts.
 
+Each issue in the list and detail payload includes `isBlocked` and
+`dependsOnIssueIds`. An issue is blocked when at least one linked dependency is
+not `done`. Archived dependency targets remain visible in dependency detail data
+but do not make the issue blocked.
+
 ### Saved Filter Views API
 
 Saved filter views are instance-wide dashboard shortcuts. They do not store the
@@ -412,6 +420,37 @@ unarchive request is idempotent and does not create duplicate activity events.
 Archive state is separate from workflow status; `archived` is not a valid issue
 status.
 
+### Issue Dependencies API
+
+Issue dependencies are directed links: issue A depends on issue B when A cannot
+proceed until B is `done`. TinyTracker stores these links separately from
+workflow status; `blocked` is a derived visibility state, not an issue status.
+
+```http
+GET /api/issues/:id/dependencies
+POST /api/issues/:id/dependencies
+DELETE /api/issues/:id/dependencies/:dependsOnIssueId
+```
+
+Create payload:
+
+```json
+{
+  "dependsOnIssueId": "issue-id"
+}
+```
+
+Dependency creation rejects missing issues, self-dependencies, duplicate links,
+archived dependency targets, and cycles. Removing a dependency clears the link
+and refreshes the issue's derived blocked state. Existing links remain visible if
+a dependency target is archived later, but archived targets are treated as
+non-blocking.
+
+Dependency add/remove operations write activity events:
+
+* `issue_dependency_added`
+* `issue_dependency_removed`
+
 ### Export API
 
 `GET /api/export` returns TinyTracker JSON using this root shape:
@@ -424,9 +463,9 @@ status.
 ```
 
 Each issue contains its current issue fields, nested comments, comment edit
-history, activity events, and `archivedAt`. Active issues use
-`"archivedAt": null`; archived issues contain the archive timestamp. Export is
-read-only and does not mutate tracker state.
+history, activity events, `archivedAt`, and `dependsOnIssueIds`. Active issues
+use `"archivedAt": null`; archived issues contain the archive timestamp. Export
+is read-only and does not mutate tracker state.
 
 ### Import API
 
@@ -449,6 +488,11 @@ already present, that issue and its nested records are skipped together.
 Import preserves `archivedAt` when present. Older `exportVersion: 1` payloads
 without `archivedAt` remain valid and are imported as active issues with
 `archivedAt: null`.
+
+Import preserves issue dependency links through `dependsOnIssueIds` when present.
+Dependency IDs must reference issues in the same import payload, and import
+validation rejects duplicate links, self-dependencies, dangling references, and
+cycles before writing any records.
 
 Malformed JSON, unsupported export versions, duplicate IDs within the payload,
 unknown fields, invalid status or priority values, invalid dates, and dangling
@@ -485,6 +529,7 @@ The Playwright smoke test starts TinyTracker with an in-memory SQLite database a
 * Issue can be archived and restored
 * Saved filter views can be created, applied, renamed, deleted, and composed with URLs
 * Markdown-lite descriptions and comments render safely
+* Issue dependencies can be added and removed, with blocked state shown in list and detail
 * Issue detail view opens
 * Comment can be added
 * Comment can be edited
@@ -512,6 +557,8 @@ TinyTracker V1 intentionally does not include:
 * Plugin support
 * File attachments
 * Assignment workflows
+* Blocked-only dashboard filter
+* Dependency reason metadata
 * Hard delete or retention purge workflows
 * External integrations
 * Arbitrary third-party import formats

@@ -2,6 +2,7 @@ import './styles.css';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {
+  addIssueDependency,
   applyImport,
   archiveIssue,
   createSavedFilterView,
@@ -9,9 +10,11 @@ import {
   fetchCommentHistory,
   fetchIssue,
   fetchIssueActivity,
+  fetchIssueDependencies,
   fetchSavedFilterView,
   fetchSavedFilterViews,
   previewImport,
+  removeIssueDependency,
   unarchiveIssue,
   updateSavedFilterView
 } from './api';
@@ -33,6 +36,7 @@ import type {
   CommentLoadState,
   DashboardFilters,
   Issue,
+  IssueDependencyState,
   IssueDetailLoadState,
   IssueFormValues,
   ImportPlan,
@@ -95,6 +99,11 @@ export function App() {
   const [commentLoadState, setCommentLoadState] = useState<CommentLoadState>('idle');
   const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
   const [activityLoadState, setActivityLoadState] = useState<CommentLoadState>('idle');
+  const [issueDependencies, setIssueDependencies] = useState<IssueDependencyState | null>(null);
+  const [dependencyLoadState, setDependencyLoadState] = useState<CommentLoadState>('idle');
+  const [dependencyIssueId, setDependencyIssueId] = useState('');
+  const [dependencyError, setDependencyError] = useState<string | null>(null);
+  const [isDependencySubmitting, setIsDependencySubmitting] = useState(false);
   const [commentBody, setCommentBody] = useState('');
   const [commentError, setCommentError] = useState<string | null>(null);
   const [isCommentSubmitting, setIsCommentSubmitting] = useState(false);
@@ -514,6 +523,10 @@ export function App() {
       setCommentLoadState('idle');
       setActivityEvents([]);
       setActivityLoadState('idle');
+      setIssueDependencies(null);
+      setDependencyLoadState('idle');
+      setDependencyIssueId('');
+      setDependencyError(null);
       return;
     }
 
@@ -523,16 +536,19 @@ export function App() {
     async function loadIssueDetailData() {
       setCommentLoadState('loading');
       setActivityLoadState('loading');
+      setDependencyLoadState('loading');
       setCommentError(null);
+      setDependencyError(null);
       setEditingCommentId(null);
       setEditCommentError(null);
 
       try {
-        const [commentsResponse, loadedActivityEvents] = await Promise.all([
+        const [commentsResponse, loadedActivityEvents, loadedIssueDependencies] = await Promise.all([
           fetch(`/api/issues/${issueId}/comments`, {
             signal: controller.signal
           }),
-          fetchIssueActivity(issueId, controller.signal)
+          fetchIssueActivity(issueId, controller.signal),
+          fetchIssueDependencies(issueId, controller.signal)
         ]);
 
         if (!commentsResponse.ok) {
@@ -554,12 +570,15 @@ export function App() {
         setComments(loadedComments);
         setCommentHistory(Object.fromEntries(historyPairs));
         setActivityEvents(loadedActivityEvents);
+        setIssueDependencies(loadedIssueDependencies);
         setCommentLoadState('loaded');
         setActivityLoadState('loaded');
+        setDependencyLoadState('loaded');
       } catch {
         if (!controller.signal.aborted) {
           setCommentLoadState('error');
           setActivityLoadState('error');
+          setDependencyLoadState('error');
         }
       }
     }
@@ -638,6 +657,69 @@ export function App() {
       setActivityLoadState('loaded');
     } catch {
       setActivityLoadState('error');
+    }
+  }
+
+  async function refreshSelectedIssueAfterDependency(issueId: string, dependencies: IssueDependencyState) {
+    setIssueDependencies(dependencies);
+    setDependencyLoadState('loaded');
+
+    const refreshedIssue = await fetchIssue(issueId);
+
+    if (refreshedIssue) {
+      setSelectedIssue(refreshedIssue);
+      setSelectedIssueLoadState('loaded');
+    }
+
+    refreshIssues();
+    await refreshActivity(issueId);
+  }
+
+  async function submitIssueDependency(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!selectedIssue) {
+      return;
+    }
+
+    const dependsOnIssueId = dependencyIssueId.trim();
+
+    if (!dependsOnIssueId) {
+      setDependencyError('Dependency issue id is required.');
+      return;
+    }
+
+    setIsDependencySubmitting(true);
+    setDependencyError(null);
+
+    try {
+      const dependencies = await addIssueDependency(selectedIssue.id, dependsOnIssueId);
+
+      setDependencyIssueId('');
+      await refreshSelectedIssueAfterDependency(selectedIssue.id, dependencies);
+    } catch (error) {
+      setDependencyError(error instanceof Error ? error.message : 'Dependency add failed.');
+    } finally {
+      setIsDependencySubmitting(false);
+    }
+  }
+
+  async function handleRemoveIssueDependency(dependsOnIssueId: string) {
+    if (!selectedIssue) {
+      return;
+    }
+
+    setIsDependencySubmitting(true);
+    setDependencyError(null);
+
+    try {
+      const dependencies = await removeIssueDependency(selectedIssue.id, dependsOnIssueId);
+
+      await refreshSelectedIssueAfterDependency(selectedIssue.id, dependencies);
+    } catch (error) {
+      setDependencyError(error instanceof Error ? error.message : 'Dependency remove failed.');
+    } finally {
+      setIsDependencySubmitting(false);
     }
   }
 
@@ -965,6 +1047,12 @@ export function App() {
           commentLoadState={commentLoadState}
           activityEvents={activityEvents}
           activityLoadState={activityLoadState}
+          issueDependencies={issueDependencies}
+          dependencyLoadState={dependencyLoadState}
+          dependencyIssueId={dependencyIssueId}
+          setDependencyIssueId={setDependencyIssueId}
+          dependencyError={dependencyError}
+          isDependencySubmitting={isDependencySubmitting}
           commentBody={commentBody}
           setCommentBody={setCommentBody}
           commentError={commentError}
@@ -981,6 +1069,8 @@ export function App() {
           onCloseIssueDetail={closeIssueDetail}
           onArchiveIssue={handleArchiveIssue}
           onUnarchiveIssue={handleUnarchiveIssue}
+          onSubmitIssueDependency={submitIssueDependency}
+          onRemoveIssueDependency={handleRemoveIssueDependency}
           onSubmitComment={submitComment}
           onStartEditComment={startEditComment}
           onCancelEditComment={(commentId) => cancelEditComment({ commentId })}

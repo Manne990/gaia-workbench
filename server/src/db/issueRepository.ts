@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { recordActivityEvent } from './activityRepository.js';
+import { attachIssueDependencyState } from './issueDependencyRepository.js';
 import {
   Issue,
   IssueListFilters,
@@ -216,6 +217,8 @@ function mapIssueRow(row: IssueRow): Issue {
     labels: parseLabels(row.labels),
     dueDate,
     isOverdue: isIssueOverdue(dueDate, row.status),
+    isBlocked: false,
+    dependsOnIssueIds: [],
     archivedAt: row.archived_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -277,6 +280,8 @@ export class IssueRepository {
       labels: normalizeLabels(input.labels),
       dueDate: normalizeDueDate(input.dueDate),
       isOverdue: false,
+      isBlocked: false,
+      dependsOnIssueIds: [],
       archivedAt: null,
       createdAt: now,
       updatedAt: now
@@ -330,7 +335,11 @@ export class IssueRepository {
       )
       .get({ id }) as IssueRow | undefined;
 
-    return row ? mapIssueRow(row) : null;
+    if (!row) {
+      return null;
+    }
+
+    return attachIssueDependencyState(this.database, [mapIssueRow(row)])[0] ?? null;
   }
 
   list(filters: IssueListFilters = {}, pagination: IssueListPaginationInput = { page: 1, limit: 25 }): IssueListResult {
@@ -361,7 +370,7 @@ export class IssueRepository {
       .all({ ...values, limit: pagination.limit, offset }) as IssueRow[];
 
     return {
-      items: rows.map(mapIssueRow),
+      items: attachIssueDependencyState(this.database, rows.map(mapIssueRow)),
       pagination: {
         page: pagination.page,
         limit: pagination.limit,
@@ -389,7 +398,7 @@ export class IssueRepository {
       )
       .all() as IssueRow[];
 
-    return rows.map(mapIssueRow);
+    return attachIssueDependencyState(this.database, rows.map(mapIssueRow));
   }
 
   private getListSummary(includeArchived = false): IssueListSummary {

@@ -22,6 +22,7 @@ type ExportedIssue = {
   description?: string;
   status: string;
   archivedAt?: string | null;
+  dependsOnIssueIds?: string[];
   comments: ExportedComment[];
   activityEvents: Array<{ id: string; issueId: string }>;
 };
@@ -439,6 +440,40 @@ describe('tracker import API', () => {
         expect.objectContaining({
           code: 'dangling_reference',
           path: `$.issues[${issueIndex}].comments[0].issueId`
+        })
+      ])
+    );
+  });
+
+  it('rejects dangling dependency references and dependency cycles', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const dangling = cloneExport(payload);
+
+    dangling.issues[0].dependsOnIssueIds = ['missing-issue'];
+
+    const danglingResponse = await request(app).post('/api/import/preview').send(dangling).expect(400);
+
+    expect(danglingResponse.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'dangling_reference',
+          path: '$.issues[0].dependsOnIssueIds[0]'
+        })
+      ])
+    );
+
+    const cyclic = cloneExport(payload);
+
+    cyclic.issues[0].dependsOnIssueIds = [cyclic.issues[1].id];
+    cyclic.issues[1].dependsOnIssueIds = [cyclic.issues[0].id];
+
+    const cycleResponse = await request(app).post('/api/import/preview').send(cyclic).expect(400);
+
+    expect(cycleResponse.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'dependency_cycle'
         })
       ])
     );

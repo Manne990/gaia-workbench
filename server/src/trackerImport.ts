@@ -87,6 +87,8 @@ const VALID_ACTIVITY_TYPES: ActivityEventType[] = [
   'issue_labels_changed',
   'issue_archived',
   'issue_unarchived',
+  'issue_dependency_added',
+  'issue_dependency_removed',
   'comment_added',
   'comment_edited'
 ];
@@ -293,6 +295,103 @@ function validateLabels(value: unknown, path: string, errors: ImportErrorDetail[
   return labels;
 }
 
+function validateDependsOnIssueIds(
+  value: unknown,
+  path: string,
+  issueId: string,
+  errors: ImportErrorDetail[]
+): string[] {
+  if (!Array.isArray(value)) {
+    pushError(errors, 'invalid_type', path, 'dependsOnIssueIds must be an array.', value);
+    return [];
+  }
+
+  const dependsOnIssueIds: string[] = [];
+  const seen = new Set<string>();
+
+  value.forEach((dependsOnIssueId, index) => {
+    const dependencyPath = `${path}[${index}]`;
+
+    if (typeof dependsOnIssueId !== 'string' || dependsOnIssueId.trim().length === 0) {
+      pushError(errors, 'invalid_dependency', dependencyPath, 'Dependency issue ids must be non-empty strings.', value);
+      return;
+    }
+
+    if (dependsOnIssueId === issueId) {
+      pushError(errors, 'invalid_dependency', dependencyPath, 'An issue cannot depend on itself.', dependsOnIssueId);
+      return;
+    }
+
+    if (seen.has(dependsOnIssueId)) {
+      pushError(errors, 'duplicate_dependency', dependencyPath, 'Duplicate dependency issue id.', dependsOnIssueId);
+      return;
+    }
+
+    seen.add(dependsOnIssueId);
+    dependsOnIssueIds.push(dependsOnIssueId);
+  });
+
+  return dependsOnIssueIds;
+}
+
+function validateIssueDependencyGraph(issues: ExportedIssue[], errors: ImportErrorDetail[]): void {
+  const issueIds = new Set(issues.map((issue) => issue.id));
+  const issueIndexById = new Map(issues.map((issue, index) => [issue.id, index]));
+  const graph = new Map(issues.map((issue) => [issue.id, issue.dependsOnIssueIds]));
+
+  for (const issue of issues) {
+    const issueIndex = issueIndexById.get(issue.id) ?? 0;
+
+    issue.dependsOnIssueIds.forEach((dependsOnIssueId, dependencyIndex) => {
+      if (!issueIds.has(dependsOnIssueId)) {
+        pushError(
+          errors,
+          'dangling_reference',
+          `$.issues[${issueIndex}].dependsOnIssueIds[${dependencyIndex}]`,
+          'Dependency issue id must reference another issue in the import payload.',
+          dependsOnIssueId
+        );
+      }
+    });
+  }
+
+  function reaches(startIssueId: string, targetIssueId: string, visited: Set<string>): boolean {
+    if (startIssueId === targetIssueId) {
+      return true;
+    }
+
+    if (visited.has(startIssueId)) {
+      return false;
+    }
+
+    visited.add(startIssueId);
+
+    for (const nextIssueId of graph.get(startIssueId) ?? []) {
+      if (reaches(nextIssueId, targetIssueId, visited)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  for (const issue of issues) {
+    const issueIndex = issueIndexById.get(issue.id) ?? 0;
+
+    issue.dependsOnIssueIds.forEach((dependsOnIssueId, dependencyIndex) => {
+      if (issueIds.has(dependsOnIssueId) && reaches(dependsOnIssueId, issue.id, new Set<string>())) {
+        pushError(
+          errors,
+          'dependency_cycle',
+          `$.issues[${issueIndex}].dependsOnIssueIds[${dependencyIndex}]`,
+          'Dependency graph must not contain cycles.',
+          dependsOnIssueId
+        );
+      }
+    });
+  }
+}
+
 function validateUniqueId(
   id: string,
   entity: ImportEntity,
@@ -395,7 +494,7 @@ function validateTrackerExport(input: unknown): ValidationResult {
         'activityEvents'
       ],
       errors,
-      ['archivedAt']
+      ['archivedAt', 'isBlocked', 'dependsOnIssueIds']
     );
 
     if (!issueObject) {
@@ -417,6 +516,12 @@ function validateTrackerExport(input: unknown): ValidationResult {
     const labels = validateLabels(issueObject.labels, `${issuePath}.labels`, errors);
     const dueDate = readStringOrNull(issueObject, 'dueDate', issuePath, errors);
     const isOverdue = readBoolean(issueObject, 'isOverdue', issuePath, errors);
+    const isBlocked =
+      issueObject.isBlocked === undefined ? false : readBoolean(issueObject, 'isBlocked', issuePath, errors);
+    const dependsOnIssueIds =
+      issueObject.dependsOnIssueIds === undefined
+        ? []
+        : validateDependsOnIssueIds(issueObject.dependsOnIssueIds, `${issuePath}.dependsOnIssueIds`, issueId, errors);
     const archivedAt =
       issueObject.archivedAt === undefined ? null : readStringOrNull(issueObject, 'archivedAt', issuePath, errors);
     const createdAt = readString(issueObject, 'createdAt', issuePath, errors, { nonEmpty: true });
@@ -674,6 +779,8 @@ function validateTrackerExport(input: unknown): ValidationResult {
       labels,
       dueDate,
       isOverdue,
+      isBlocked,
+      dependsOnIssueIds,
       archivedAt,
       createdAt,
       updatedAt,
@@ -681,6 +788,8 @@ function validateTrackerExport(input: unknown): ValidationResult {
       activityEvents
     });
   });
+
+  validateIssueDependencyGraph(issues, errors);
 
   const exportData: TrackerExport | null =
     exportVersion === 1
@@ -876,6 +985,14 @@ export function applyTrackerImport(database: Database.Database, input: unknown):
   const historyIdsToImport = decisionSet(plan, 'commentEditHistory');
   const activityIdsToImport = decisionSet(plan, 'activityEvent');
   const issues = validation.exportData.issues.filter((issue) => issueIdsToImport.has(issue.id)).sort(byCreatedAtThenId);
+  const dependencies = issues.flatMap((issue) =>
+    issue.dependsOnIssueIds.map((dependsOnIssueId) => ({
+      issueId: issue.id,
+      dependsOnIssueId,
+      createdAt: issue.updatedAt,
+      updatedAt: issue.updatedAt
+    }))
+  );
   const comments = validation.exportData.issues
     .flatMap((issue) => issue.comments)
     .filter((comment) => commentIdsToImport.has(comment.id));
@@ -894,6 +1011,10 @@ export function applyTrackerImport(database: Database.Database, input: unknown):
     const insertComment = database.prepare(`
       INSERT INTO comments (id, issue_id, body, created_at, updated_at)
       VALUES (@id, @issueId, @body, @createdAt, @updatedAt)
+    `);
+    const insertDependency = database.prepare(`
+      INSERT INTO issue_dependencies (issue_id, depends_on_issue_id, created_at, updated_at)
+      VALUES (@issueId, @dependsOnIssueId, @createdAt, @updatedAt)
     `);
     const insertHistory = database.prepare(`
       INSERT INTO comment_edit_history (id, comment_id, previous_body, new_body, edited_at)
@@ -917,6 +1038,10 @@ export function applyTrackerImport(database: Database.Database, input: unknown):
         createdAt: issue.createdAt,
         updatedAt: issue.updatedAt
       });
+    }
+
+    for (const dependency of dependencies) {
+      insertDependency.run(dependency);
     }
 
     for (const comment of comments) {

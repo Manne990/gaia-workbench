@@ -3,6 +3,7 @@ import type {
   CommentEditHistory,
   ImportPlan,
   Issue,
+  IssueDependencyState,
   SavedFilterView,
   SavedFilterViewPayload
 } from './types';
@@ -39,6 +40,30 @@ export async function fetchIssueActivity(issueId: string, signal?: AbortSignal):
   }
 
   return (await response.json()) as ActivityEvent[];
+}
+
+export async function fetchIssueDependencies(issueId: string, signal?: AbortSignal): Promise<IssueDependencyState> {
+  const response = await fetch(`/api/issues/${issueId}/dependencies`, { signal });
+
+  return readJsonOrThrow<IssueDependencyState>(response, 'Dependency request failed');
+}
+
+export async function addIssueDependency(issueId: string, dependsOnIssueId: string): Promise<IssueDependencyState> {
+  const response = await fetch(`/api/issues/${issueId}/dependencies`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dependsOnIssueId })
+  });
+
+  return readJsonOrThrow<IssueDependencyState>(response, 'Dependency add failed');
+}
+
+export async function removeIssueDependency(issueId: string, dependsOnIssueId: string): Promise<IssueDependencyState> {
+  const response = await fetch(`/api/issues/${issueId}/dependencies/${dependsOnIssueId}`, {
+    method: 'DELETE'
+  });
+
+  return readJsonOrThrow<IssueDependencyState>(response, 'Dependency remove failed');
 }
 
 async function postIssueAction(issueId: string, action: 'archive' | 'unarchive'): Promise<Issue> {

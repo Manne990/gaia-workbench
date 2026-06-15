@@ -312,7 +312,11 @@ export function IssueListPanel({
                   <tr
                     key={issue.id}
                     className={
-                      [issue.isOverdue ? 'overdue-row' : '', issue.archivedAt ? 'archived-row' : '']
+                      [
+                        issue.isOverdue ? 'overdue-row' : '',
+                        issue.isBlocked ? 'blocked-row' : '',
+                        issue.archivedAt ? 'archived-row' : ''
+                      ]
                         .filter(Boolean)
                         .join(' ') || undefined
                     }
@@ -320,6 +324,7 @@ export function IssueListPanel({
                     <td>
                       <strong>{issue.title}</strong>
                       {issue.archivedAt ? <span className="archived-pill">Archived</span> : null}
+                      {issue.isBlocked ? <span className="blocked-pill">Blocked</span> : null}
                       {issue.description
                         ? renderMarkdownLiteInline(issue.description, { className: 'issue-description-snippet' })
                         : null}

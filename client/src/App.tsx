@@ -1,8 +1,9 @@
 import './styles.css';
-import type { FormEvent } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { fetchCommentHistory, fetchIssue, fetchIssueActivity } from './api';
+import { applyImport, fetchCommentHistory, fetchIssue, fetchIssueActivity, previewImport } from './api';
 import { DashboardHeader } from './components/DashboardHeader';
+import { ImportPanel } from './components/ImportPanel';
 import { IssueDetailPanel } from './components/IssueDetailPanel';
 import { IssueFormPanel } from './components/IssueFormPanel';
 import { IssueListPanel } from './components/IssueListPanel';
@@ -21,6 +22,7 @@ import type {
   Issue,
   IssueDetailLoadState,
   IssueFormValues,
+  ImportPlan,
   PriorityFilter,
   StatusFilter,
 } from './types';
@@ -82,7 +84,15 @@ export function App() {
   const [editCommentBody, setEditCommentBody] = useState('');
   const [editCommentError, setEditCommentError] = useState<string | null>(null);
   const [isCommentEditing, setIsCommentEditing] = useState(false);
+  const [importPayload, setImportPayload] = useState<unknown | null>(null);
+  const [importFileName, setImportFileName] = useState<string | null>(null);
+  const [importPlan, setImportPlan] = useState<ImportPlan | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [isImportPreviewing, setIsImportPreviewing] = useState(false);
+  const [isImportApplying, setIsImportApplying] = useState(false);
   const newIssueButtonRef = useRef<HTMLButtonElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const issueListHeadingRef = useRef<HTMLHeadingElement>(null);
   const issueTitleInputRef = useRef<HTMLInputElement>(null);
   const issueDetailHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -107,6 +117,10 @@ export function App() {
     selectedIssueId && selectedIssueLoadState === 'error' && !selectedIssue
   );
   const isMissingSelectedIssue = selectedIssueLoadState === 'not_found';
+  const isImportPanelVisible = Boolean(
+    importFileName || importPlan || importError || isImportPreviewing || importMessage
+  );
+  const canApplyImport = Boolean(importPayload && importPlan?.valid && !isImportApplying);
 
   useEffect(() => {
     if (activeForm) {
@@ -187,6 +201,93 @@ export function App() {
     setSelectedIssue(null);
     setSelectedIssueLoadState('idle');
     detailReturnFocusRef.current = null;
+  }
+
+  function resetImportInput() {
+    if (importInputRef.current) {
+      importInputRef.current.value = '';
+    }
+  }
+
+  function clearImportState() {
+    setImportPayload(null);
+    setImportFileName(null);
+    setImportPlan(null);
+    setImportError(null);
+    setImportMessage(null);
+    setIsImportPreviewing(false);
+    setIsImportApplying(false);
+    resetImportInput();
+  }
+
+  async function handleChooseImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    setImportPayload(null);
+    setImportFileName(file.name);
+    setImportPlan(null);
+    setImportError(null);
+    setImportMessage(null);
+    setIsImportPreviewing(true);
+
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text) as unknown;
+      const plan = await previewImport(payload);
+
+      setImportPayload(payload);
+      setImportPlan(plan);
+      setImportError(plan.valid ? null : 'Import preview found validation errors.');
+      setImportMessage(
+        plan.valid
+          ? `Ready to create ${plan.summary.toCreate.issues} issues and skip ${plan.summary.skip.issues}.`
+          : null
+      );
+    } catch (error) {
+      setImportPayload(null);
+      setImportPlan(null);
+      setImportError(
+        error instanceof SyntaxError ? 'File is not valid JSON.' : 'Import preview failed.'
+      );
+    } finally {
+      setIsImportPreviewing(false);
+      resetImportInput();
+    }
+  }
+
+  async function submitImport() {
+    if (!importPayload) {
+      return;
+    }
+
+    setIsImportApplying(true);
+    setImportError(null);
+
+    try {
+      const plan = await applyImport(importPayload);
+
+      setImportPlan(plan);
+
+      if (!plan.valid) {
+        setImportError('Import apply found validation errors.');
+        return;
+      }
+
+      setImportPayload(null);
+      setImportMessage(
+        `Import applied: ${plan.summary.toCreate.issues} issues created, ${plan.summary.skip.issues} skipped.`
+      );
+      returnToFirstPage();
+    } catch {
+      setImportError('Import apply failed.');
+    } finally {
+      setIsImportApplying(false);
+      resetImportInput();
+    }
   }
 
   useEffect(() => {
@@ -567,10 +668,26 @@ export function App() {
         <DashboardHeader
           totalIssues={totalIssueCount}
           newIssueButtonRef={newIssueButtonRef}
+          importInputRef={importInputRef}
           onCreateIssue={startCreate}
+          onChooseImportFile={handleChooseImportFile}
         />
 
         <IssueStatusSummary statusCounts={statusCounts} />
+
+        {isImportPanelVisible ? (
+          <ImportPanel
+            fileName={importFileName}
+            importPlan={importPlan}
+            importError={importError}
+            importMessage={importMessage}
+            isPreviewing={isImportPreviewing}
+            isApplying={isImportApplying}
+            canApply={canApplyImport}
+            onApply={submitImport}
+            onCancel={clearImportState}
+          />
+        ) : null}
 
         {activeForm ? (
           <IssueFormPanel

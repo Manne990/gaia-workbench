@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -12,6 +12,12 @@ import {
   IssueListFilters,
   IssueRepository
 } from './db/index.js';
+import {
+  applyTrackerImport,
+  ImportValidationError,
+  previewTrackerImport,
+  type ImportPlan
+} from './trackerImport.js';
 
 type AppConfig = {
   clientDir?: string;
@@ -36,6 +42,35 @@ const DEFAULT_ISSUE_PAGE = 1;
 const DEFAULT_ISSUE_LIMIT = 25;
 const MAX_ISSUE_LIMIT = 100;
 
+const emptyImportPlan = (error: ImportPlan['errors'][number]): ImportPlan => ({
+  valid: false,
+  exportVersion: null,
+  summary: {
+    input: {
+      issues: 0,
+      comments: 0,
+      editHistory: 0,
+      activityEvents: 0
+    },
+    toCreate: {
+      issues: 0,
+      comments: 0,
+      editHistory: 0,
+      activityEvents: 0
+    },
+    skip: {
+      issues: 0,
+      comments: 0,
+      editHistory: 0,
+      activityEvents: 0
+    },
+    reject: 1
+  },
+  decisions: [],
+  errors: [error],
+  warnings: []
+});
+
 const validationErrorMessages = new Set([
   'title is required',
   'body is required',
@@ -49,6 +84,30 @@ const validationErrorMessages = new Set([
 
 function isValidationError(error: unknown): error is Error {
   return error instanceof Error && validationErrorMessages.has(error.message);
+}
+
+function isJsonParseError(error: unknown): error is SyntaxError & { status?: number; type?: string } {
+  return error instanceof SyntaxError && typeof (error as { status?: unknown }).status === 'number';
+}
+
+function jsonParseErrorHandler(error: unknown, req: Request, res: Response, next: NextFunction) {
+  if (!isJsonParseError(error)) {
+    next(error);
+    return;
+  }
+
+  if (req.path.startsWith('/api/import/')) {
+    res.status(400).json(
+      emptyImportPlan({
+        code: 'invalid_json',
+        path: '$',
+        message: 'Request body must be valid JSON.'
+      })
+    );
+    return;
+  }
+
+  res.status(400).json({ error: 'Request body must be valid JSON.' });
 }
 
 function getOptionalQueryString(value: unknown): string | undefined {
@@ -164,7 +223,8 @@ export function createApp(config: AppConfig = {}) {
   const commentRepository = new CommentRepository(database);
   const activityRepository = new ActivityRepository(database);
 
-  app.use(express.json());
+  app.use(express.json({ limit: '2mb' }));
+  app.use(jsonParseErrorHandler);
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', service: 'TinyTracker' });
@@ -176,6 +236,24 @@ export function createApp(config: AppConfig = {}) {
 
   app.get('/api/export', (_req, res) => {
     res.status(200).json(buildTrackerExport(issueRepository, commentRepository, activityRepository));
+  });
+
+  app.post('/api/import/preview', (req, res) => {
+    const plan = previewTrackerImport(database, req.body);
+
+    return res.status(plan.valid ? 200 : 400).json(plan);
+  });
+
+  app.post('/api/import/apply', (req, res) => {
+    try {
+      return res.status(200).json(applyTrackerImport(database, req.body));
+    } catch (error) {
+      if (error instanceof ImportValidationError) {
+        return res.status(400).json(error.plan);
+      }
+
+      throw error;
+    }
   });
 
   app.get('/api/issues', (req, res) => {

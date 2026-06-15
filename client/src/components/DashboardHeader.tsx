@@ -1,15 +1,19 @@
-import type { RefObject } from 'react';
+import type { ChangeEvent, RefObject } from 'react';
 
 type DashboardHeaderProps = {
   totalIssues: number;
   newIssueButtonRef: RefObject<HTMLButtonElement | null>;
+  importInputRef: RefObject<HTMLInputElement | null>;
   onCreateIssue: (trigger: HTMLElement) => void;
+  onChooseImportFile: (event: ChangeEvent<HTMLInputElement>) => void;
 };
 
 export function DashboardHeader({
   totalIssues,
   newIssueButtonRef,
-  onCreateIssue
+  importInputRef,
+  onCreateIssue,
+  onChooseImportFile
 }: DashboardHeaderProps) {
   return (
     <header className="dashboard-header">
@@ -21,6 +25,20 @@ export function DashboardHeader({
         <a className="button-link secondary-button" href="/api/export" download="tinytracker-export.json">
           Download JSON
         </a>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={onChooseImportFile}
+        />
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() => importInputRef.current?.click()}
+        >
+          Import JSON
+        </button>
         <button
           type="button"
           className="primary-button"

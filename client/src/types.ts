@@ -75,6 +75,49 @@ export type ActivityEvent = {
   createdAt: string;
 };
 
+export type ImportEntity = 'issue' | 'comment' | 'commentEditHistory' | 'activityEvent';
+export type ImportDecisionType = 'import' | 'skip-existing' | 'reject';
+
+export type ImportCounts = {
+  issues: number;
+  comments: number;
+  editHistory: number;
+  activityEvents: number;
+};
+
+export type ImportSummary = {
+  input: ImportCounts;
+  toCreate: ImportCounts;
+  skip: ImportCounts;
+  reject: number;
+};
+
+export type ImportDecision = {
+  entity: ImportEntity;
+  sourceId: string | null;
+  sourceIndex: number;
+  issueId?: string;
+  commentId?: string;
+  decision: ImportDecisionType;
+  reasons: string[];
+};
+
+export type ImportErrorDetail = {
+  code: string;
+  path: string;
+  message: string;
+  value?: unknown;
+};
+
+export type ImportPlan = {
+  valid: boolean;
+  exportVersion: number | null;
+  summary: ImportSummary;
+  decisions: ImportDecision[];
+  errors: ImportErrorDetail[];
+  warnings: string[];
+};
+
 export type LoadState = 'loading' | 'loaded' | 'error';
 export type CommentLoadState = LoadState | 'idle';
 export type IssueDetailLoadState = CommentLoadState | 'not_found';

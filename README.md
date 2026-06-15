@@ -63,6 +63,8 @@ REST API supporting:
 * List issues
 * Update issue
 * Add comments
+* Export tracker JSON
+* Preview and apply tracker JSON imports
 
 ### User Interface
 
@@ -72,6 +74,7 @@ Simple web interface:
 * Issue list
 * Issue details
 * Search
+* JSON export and import
 
 No advanced enterprise features.
 
@@ -293,6 +296,44 @@ Supported query parameters:
 * `page`: 1-based page number, default `1`
 * `limit`: items per page, default `25`, maximum `100`
 
+### Export API
+
+`GET /api/export` returns TinyTracker JSON using this root shape:
+
+```json
+{
+  "exportVersion": 1,
+  "issues": []
+}
+```
+
+Each issue contains its current issue fields, nested comments, comment edit
+history, and activity events. Export is read-only and does not mutate tracker
+state.
+
+### Import API
+
+TinyTracker imports its own `exportVersion: 1` JSON through a preview-and-apply
+flow:
+
+* `POST /api/import/preview`
+* `POST /api/import/apply`
+
+Both endpoints accept the same JSON shape returned by `GET /api/export`.
+Preview validates the payload and reports what would be created, skipped, or
+rejected. Apply validates the full payload again, then writes valid records in a
+single SQLite transaction.
+
+Import preserves exported issue, comment, edit-history, and activity IDs and
+timestamps. Existing incoming IDs are skipped rather than overwritten, so
+re-importing the same file is a deterministic no-op. If an incoming issue ID is
+already present, that issue and its nested records are skipped together.
+
+Malformed JSON, unsupported export versions, duplicate IDs within the payload,
+unknown fields, invalid status or priority values, invalid dates, and dangling
+nested references return structured validation errors. Failed validation does not
+write partial data.
+
 ## Smoke Verification
 
 The Playwright smoke test starts TinyTracker with an in-memory SQLite database and verifies the V1 path:
@@ -326,10 +367,10 @@ TinyTracker V1 intentionally does not include:
 * User accounts or permissions
 * Notifications
 * Plugin support
-* Pagination
 * File attachments
 * Assignment workflows
 * External integrations
+* Arbitrary third-party import formats
 
 Issue status transitions are intentionally unconstrained in V1. Any valid status can be selected directly.
 

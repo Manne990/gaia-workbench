@@ -490,6 +490,60 @@ describe('issues API', () => {
     });
   });
 
+  it('rejects mixed-valid invalid issue updates without partial writes', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const created = await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'Original validation issue',
+        description: 'Original description',
+        status: 'todo',
+        priority: 'low',
+        labels: ['api'],
+        dueDate: '2999-12-31'
+      })
+      .expect(201);
+
+    await request(app)
+      .put(`/api/issues/${created.body.id}`)
+      .send({
+        title: 'Partially applied title',
+        description: 'Partially applied description',
+        status: 'done',
+        priority: 'urgent',
+        labels: ['mutated'],
+        dueDate: '2000-01-01'
+      })
+      .expect(400, {
+        error: 'Invalid issue priority'
+      });
+
+    await request(app)
+      .get(`/api/issues/${created.body.id}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          id: created.body.id,
+          title: 'Original validation issue',
+          description: 'Original description',
+          status: 'todo',
+          priority: 'low',
+          labels: ['api'],
+          dueDate: '2999-12-31',
+          isOverdue: false
+        });
+        expect(response.body.updatedAt).toBe(created.body.updatedAt);
+      });
+
+    await request(app)
+      .get(`/api/issues/${created.body.id}/activity`)
+      .expect(200)
+      .expect((activity) => {
+        expect(activity.body.map((event: { type: string }) => event.type)).toEqual(['issue_created']);
+      });
+  });
+
   it('returns derived overdue state for active issues only', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

@@ -270,11 +270,14 @@ describe('issues API', () => {
       .expect(200);
     const updatedIds = bulkResponse.body.updated.map((issue: ListedIssue) => issue.id);
     const reviewAfterBulk = await request(app).get(`${filteredQuery}&limit=4&page=1`).expect(200);
+    const secondReviewPageAfterBulk = await request(app).get(`${filteredQuery}&limit=4&page=2`).expect(200);
     const doneAfterBulk = await request(app)
       .get('/api/issues?search=Large%20API%20guard&status=done&priority=high&label=group-2&limit=25&page=1')
       .expect(200);
 
     expect(updatedIds).toEqual(firstPageIds);
+    expect(reviewAfterBulk.body.items.map((issue: ListedIssue) => issue.id)).toEqual(secondPageIds);
+    expect(secondReviewPageAfterBulk.body.items.map((issue: ListedIssue) => issue.id)).toEqual(thirdPageIds);
     expect(reviewAfterBulk.body.pagination).toMatchObject({
       page: 1,
       limit: 4,
@@ -284,6 +287,15 @@ describe('issues API', () => {
       hasPrevious: false
     });
     assertLargeFilteredIssues(reviewAfterBulk.body.items);
+    expect(secondReviewPageAfterBulk.body.pagination).toMatchObject({
+      page: 2,
+      limit: 4,
+      total: 6,
+      totalPages: 2,
+      hasMore: false,
+      hasPrevious: true
+    });
+    assertLargeFilteredIssues(secondReviewPageAfterBulk.body.items);
     expect(reviewAfterBulk.body.summary).toMatchObject({
       totalByStatus: {
         todo: 30,

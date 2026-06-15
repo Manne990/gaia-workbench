@@ -245,6 +245,24 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   expect(exportedActivityTypes).toContain('issue_created');
   expect(exportedActivityTypes).toContain('comment_added');
   expect(exportedActivityTypes).toContain('comment_edited');
+
+  await page.locator('#issue-status-filter').selectOption('done');
+  await page.locator('#issue-search-filter').fill('Edit issue from UI');
+  const csvDownloadPromise = page.waitForEvent('download');
+  await page.getByRole('link', { name: 'Download CSV' }).click();
+  const csvDownload = await csvDownloadPromise;
+  const csvPath = await csvDownload.path();
+
+  expect(csvDownload.suggestedFilename()).toBe('tinytracker-issues.csv');
+  expect(csvPath).not.toBeNull();
+
+  const exportedCsv = readFileSync(csvPath ?? '', 'utf8');
+  const csvLines = exportedCsv.trim().split('\n');
+
+  expect(csvLines).toHaveLength(2);
+  expect(csvLines[1]).toContain('Edit issue from UI');
+  expect(csvLines[1]).toContain('done');
+  expect(csvLines[1]).toContain('low');
 });
 
 test('command palette opens with keyboard shortcut, restores focus, and runs commands', async ({ page }) => {

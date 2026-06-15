@@ -4,6 +4,7 @@ import type { ServiceHealthState } from '../types';
 type DashboardHeaderProps = {
   totalIssues: number;
   serviceHealthState: ServiceHealthState;
+  csvExportHref: string;
   newIssueButtonRef: RefObject<HTMLButtonElement | null>;
   importInputRef: RefObject<HTMLInputElement | null>;
   onCreateIssue: (trigger: HTMLElement) => void;
@@ -26,6 +27,7 @@ function serviceHealthText(state: ServiceHealthState): string {
 export function DashboardHeader({
   totalIssues,
   serviceHealthState,
+  csvExportHref,
   newIssueButtonRef,
   importInputRef,
   onCreateIssue,
@@ -62,6 +64,9 @@ export function DashboardHeader({
           Quick Actions
           <span className="button-shortcut">⌘/Ctrl+K</span>
         </button>
+        <a className="button-link secondary-button" href={csvExportHref} download="tinytracker-issues.csv">
+          Download CSV
+        </a>
         <div
           className={`service-status service-status-${serviceHealthState}`}
           role="status"

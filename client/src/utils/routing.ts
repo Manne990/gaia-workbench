@@ -105,7 +105,10 @@ function parsePageSize(value: string | null): number {
   return pageSize <= maxPageSize ? pageSize : defaultPageSize;
 }
 
-function buildDashboardQuery(filters: DashboardFilters): string {
+export function buildDashboardQuery(
+  filters: DashboardFilters = defaultDashboardFilters,
+  options: { includePageSize?: boolean } = {}
+): string {
   const params = new URLSearchParams();
   const search = filters.search.trim();
 
@@ -132,7 +135,7 @@ function buildDashboardQuery(filters: DashboardFilters): string {
     params.set('staleOnly', 'true');
   }
 
-  if (filters.pageSize !== defaultPageSize) {
+  if (options.includePageSize !== false && filters.pageSize !== defaultPageSize) {
     params.set('limit', String(filters.pageSize));
   }
 

@@ -580,16 +580,20 @@ export class IssueRepository {
     };
   }
 
-  listForExport(): Issue[] {
+  listForExport(filters: IssueListFilters = {}): Issue[] {
+    const archiveMode: ArchiveFilterMode = filters.includeArchived === false ? 'active' : 'all';
+    const { whereClause, values } = buildIssueListWhereClause(filters, archiveMode);
+
     const rows = this.database
       .prepare(
         `
         SELECT id, title, description, status, priority, labels, due_date, archived_at, created_at, updated_at
         FROM issues
+        ${whereClause}
         ORDER BY created_at ASC, id ASC
       `
       )
-      .all() as IssueRow[];
+      .all(values) as IssueRow[];
 
     return attachIssueDependencyState(this.database, rows.map(mapIssueRow));
   }

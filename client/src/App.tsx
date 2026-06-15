@@ -51,7 +51,7 @@ import type {
 } from './types';
 import { restoreFocus } from './utils/focus';
 import { parseDueDateInput, parseLabelsInput } from './utils/parse';
-import { defaultDashboardFilters, getRouteStateFromLocation, writeRoute } from './utils/routing';
+import { buildDashboardQuery, defaultDashboardFilters, getRouteStateFromLocation, writeRoute } from './utils/routing';
 
 const DEFAULT_IMPORT_POLICY: ImportConflictPolicy = 'skip-conflicts';
 type IssueAnchorTarget = {
@@ -199,6 +199,11 @@ export function App() {
     staleOnly,
     pageSize
   };
+  const csvExportHref = useMemo(() => {
+    const query = buildDashboardQuery(dashboardFilters, { includePageSize: false });
+
+    return query ? `/api/export.csv?${query}` : '/api/export.csv';
+  }, [dashboardFilters]);
   const commandPaletteCommands = useMemo(
     () => [
       {
@@ -1367,6 +1372,7 @@ export function App() {
       <section className="workspace">
         <DashboardHeader
           totalIssues={totalIssueCount}
+          csvExportHref={csvExportHref}
           serviceHealthState={serviceHealthState}
           newIssueButtonRef={newIssueButtonRef}
           importInputRef={importInputRef}

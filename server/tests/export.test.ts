@@ -24,6 +24,50 @@ type TrackerExport = {
   issues: ExportedIssue[];
 };
 
+function getCsvLines(csv: string): string[] {
+  return csv.trim().split('\r\n');
+}
+
+function parseCsvLine(line: string): string[] {
+  const values: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const nextChar = line[index + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      values.push(current);
+      current = '';
+      continue;
+    }
+
+    if (char === '\r') {
+      continue;
+    }
+
+    current += char;
+  }
+
+  values.push(current);
+  return values;
+}
+
+function parseCsvRows(csv: string): string[][] {
+  return getCsvLines(csv).map(parseCsvLine);
+}
+
 function compareExportIssueOrder(first: IssueSnapshot, second: IssueSnapshot): number {
   return first.createdAt.localeCompare(second.createdAt) || first.id.localeCompare(second.id);
 }
@@ -211,6 +255,181 @@ describe('tracker export API', () => {
     await request(app).get(`/api/issues/${createdFirst.body.id}/activity`).expect(200, activityBefore.body);
     await request(app).get(`/api/issues/${createdSecond.body.id}/activity`).expect(200, secondIssueActivityBefore.body);
     await request(app).get(`/api/issues/${createdEmpty.body.id}/activity`).expect(200, emptyIssueActivityBefore.body);
+  });
+
+  it('exports filtered issues to CSV with deterministic headers', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const activeCsvIssue = await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'CSV filtered issue',
+        description: 'First match with comma, in description',
+        status: 'todo',
+        priority: 'high'
+      })
+      .expect(201);
+    const secondActiveCsvIssue = await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'Second list issue',
+        description: 'No match for filter query',
+        status: 'done',
+        priority: 'low'
+      })
+      .expect(201);
+    const archivedIssue = await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'Archived filtered issue',
+        description: 'Done issue',
+        status: 'in_progress',
+        priority: 'low'
+      })
+      .expect(201);
+    const archivedCsv = await request(app).post(`/api/issues/${archivedIssue.body.id}/archive`).expect(200);
+    const blocker = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Blocking base', status: 'todo', priority: 'high' })
+      .expect(201);
+    const blockedIssue = await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'Filtered blocker child',
+        description: 'No match for filter query',
+        status: 'in_progress',
+        priority: 'medium'
+      })
+      .expect(201);
+
+    await request(app)
+      .post(`/api/issues/${blockedIssue.body.id}/comments`)
+      .send({ body: 'Should not appear in CSV export row body columns' })
+      .expect(201);
+    await request(app)
+      .post(`/api/issues/${blockedIssue.body.id}/dependencies`)
+      .send({ dependsOnIssueId: blocker.body.id })
+      .expect(201);
+
+    const todoFilteredCsv = await request(app)
+      .get(`/api/export.csv?status=todo&search=${encodeURIComponent('csv')}`)
+      .expect(200)
+      .expect('Content-Type', /text\/csv/);
+    const todoLines = parseCsvRows(todoFilteredCsv.text);
+
+    expect(todoLines[0]).toEqual([
+      'id',
+      'title',
+      'description',
+      'status',
+      'priority',
+      'dueDate',
+      'isOverdue',
+      'isBlocked',
+      'archivedAt',
+      'dependsOnIssueIds',
+      'labels',
+      'createdAt',
+      'updatedAt'
+    ]);
+
+    const todoRowsById = new Map(todoLines.slice(1).map((row) => [row[0], row]));
+
+    expect(todoRowsById.get(activeCsvIssue.body.id)).toEqual([
+      activeCsvIssue.body.id,
+      'CSV filtered issue',
+      'First match with comma, in description',
+      'todo',
+      'high',
+      '',
+      'false',
+      'false',
+      '',
+      '',
+      '',
+      activeCsvIssue.body.createdAt,
+      activeCsvIssue.body.updatedAt
+    ]);
+    expect(todoRowsById.size).toBe(1);
+    expect(todoRowsById.has(secondActiveCsvIssue.body.id)).toBe(false);
+    expect(todoRowsById.has(archivedCsv.body.id)).toBe(false);
+
+    const blockedCsv = await request(app)
+      .get('/api/export.csv?blockedOnly=true')
+      .expect(200)
+      .expect('Content-Type', /text\/csv/);
+    const blockedRowsById = new Map(
+      parseCsvRows(blockedCsv.text)
+        .slice(1)
+        .map((row) => [row[0], row])
+    );
+
+    const blockedCsvRow = blockedRowsById.get(blockedIssue.body.id);
+
+    expect(blockedCsvRow).toBeDefined();
+    expect(blockedCsvRow?.[0]).toBe(blockedIssue.body.id);
+    expect(blockedCsvRow?.[1]).toBe('Filtered blocker child');
+    expect(blockedCsvRow?.[2]).toBe('No match for filter query');
+    expect(blockedCsvRow?.[3]).toBe('in_progress');
+    expect(blockedCsvRow?.[4]).toBe('medium');
+    expect(blockedCsvRow?.[5]).toBe('');
+    expect(blockedCsvRow?.[6]).toBe('false');
+    expect(blockedCsvRow?.[7]).toBe('true');
+    expect(blockedCsvRow?.[8]).toBe('');
+    expect(blockedCsvRow?.[9]).toBe(blocker.body.id);
+    expect(blockedCsvRow?.[10]).toBe('');
+    expect(blockedRowsById.size).toBe(1);
+
+    const archivedCsvResponse = await request(app)
+      .get('/api/export.csv?includeArchived=true&status=in_progress')
+      .expect(200)
+      .expect('Content-Type', /text\/csv/);
+    const archivedRowsById = new Map(
+      parseCsvRows(archivedCsvResponse.text)
+        .slice(1)
+        .map((row) => [row[0], row])
+    );
+
+    expect(archivedRowsById.has(archivedCsv.body.id)).toBe(true);
+    expect(archivedRowsById.has(blockedIssue.body.id)).toBe(true);
+  });
+
+  it('escapes CSV special characters in issue fields', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const escapedIssue = await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'Issue title with "quotes", commas',
+        description: 'A description, with punctuation and "quotes"',
+        status: 'review',
+        priority: 'high'
+      })
+      .expect(201);
+
+    const response = await request(app)
+      .get('/api/export.csv?status=review')
+      .expect(200)
+      .expect('Content-Type', /text\/csv/);
+
+    const lines = parseCsvRows(response.text);
+
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toEqual([
+      escapedIssue.body.id,
+      'Issue title with "quotes", commas',
+      'A description, with punctuation and "quotes"',
+      'review',
+      'high',
+      '',
+      'false',
+      'false',
+      '',
+      '',
+      '',
+      escapedIssue.body.createdAt,
+      escapedIssue.body.updatedAt
+    ]);
   });
 
   it('exports archived issues with archive state and activity', async () => {

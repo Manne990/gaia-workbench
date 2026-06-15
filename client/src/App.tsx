@@ -199,17 +199,21 @@ export function App() {
   const [commandPaletteQuery, setCommandPaletteQuery] = useState('');
   const [recentlyArchivedIssue, setRecentlyArchivedIssue] = useState<{ id: string; title: string } | null>(null);
   const didCanonicalizeInitialRouteRef = useRef(false);
+  const dashboardFiltersRef = useRef<DashboardFilters>(initialRouteStateRef.current.filters);
 
-  const dashboardFilters: DashboardFilters = {
-    search: searchFilter,
-    status: statusFilter,
-    priority: priorityFilter,
-    label: labelFilter,
-    includeArchived,
-    blockedOnly,
-    staleOnly,
-    pageSize
-  };
+  const dashboardFilters: DashboardFilters = useMemo(
+    () => ({
+      search: searchFilter,
+      status: statusFilter,
+      priority: priorityFilter,
+      label: labelFilter,
+      includeArchived,
+      blockedOnly,
+      staleOnly,
+      pageSize
+    }),
+    [blockedOnly, includeArchived, labelFilter, pageSize, priorityFilter, searchFilter, staleOnly, statusFilter]
+  );
   const csvExportHref = useMemo(() => {
     const query = buildDashboardQuery(dashboardFilters, { includePageSize: false });
 
@@ -273,6 +277,10 @@ export function App() {
       return next.length === current.length ? current : next;
     });
   }, [filteredIssues]);
+
+  useEffect(() => {
+    dashboardFiltersRef.current = dashboardFilters;
+  }, [dashboardFilters]);
 
   function openCommandPalette(trigger?: HTMLElement | null) {
     if (isCommandPaletteOpen) {
@@ -472,6 +480,7 @@ export function App() {
       const routeState = getRouteStateFromLocation();
 
       detailReturnFocusRef.current = null;
+      dashboardFiltersRef.current = routeState.filters;
       setDashboardFilters(routeState.filters);
       setSelectedIssueId(routeState.issueId);
       setIssueAnchorHash(window.location.hash);
@@ -501,63 +510,69 @@ export function App() {
     writeRouteState(selectedIssueId, filters, mode);
   }
 
+  function commitDashboardFilterRoute(filters: DashboardFilters, mode: 'push' | 'replace') {
+    dashboardFiltersRef.current = filters;
+    writeDashboardRoute(filters, mode);
+  }
+
   function handleSearchFilterChange(value: string) {
-    const nextFilters = { ...dashboardFilters, search: value };
+    const nextFilters = { ...dashboardFiltersRef.current, search: value };
 
     setSearchFilter(value);
-    writeDashboardRoute(nextFilters, 'replace');
+    commitDashboardFilterRoute(nextFilters, 'replace');
   }
 
   function handleStatusFilterChange(value: StatusFilter) {
-    const nextFilters = { ...dashboardFilters, status: value };
+    const nextFilters = { ...dashboardFiltersRef.current, status: value };
 
     setStatusFilter(value);
-    writeDashboardRoute(nextFilters, 'push');
+    commitDashboardFilterRoute(nextFilters, 'push');
   }
 
   function handlePriorityFilterChange(value: PriorityFilter) {
-    const nextFilters = { ...dashboardFilters, priority: value };
+    const nextFilters = { ...dashboardFiltersRef.current, priority: value };
 
     setPriorityFilter(value);
-    writeDashboardRoute(nextFilters, 'push');
+    commitDashboardFilterRoute(nextFilters, 'push');
   }
 
   function handleLabelFilterChange(value: string) {
-    const nextFilters = { ...dashboardFilters, label: value };
+    const nextFilters = { ...dashboardFiltersRef.current, label: value };
 
     setLabelFilter(value);
-    writeDashboardRoute(nextFilters, 'replace');
+    commitDashboardFilterRoute(nextFilters, 'replace');
   }
 
   function handleIncludeArchivedChange(value: boolean) {
-    const nextFilters = { ...dashboardFilters, includeArchived: value };
+    const nextFilters = { ...dashboardFiltersRef.current, includeArchived: value };
 
     setIncludeArchived(value);
-    writeDashboardRoute(nextFilters, 'push');
+    commitDashboardFilterRoute(nextFilters, 'push');
   }
 
   function handleBlockedOnlyChange(value: boolean) {
-    const nextFilters = { ...dashboardFilters, blockedOnly: value };
+    const nextFilters = { ...dashboardFiltersRef.current, blockedOnly: value };
 
     setBlockedOnly(value);
-    writeDashboardRoute(nextFilters, 'push');
+    commitDashboardFilterRoute(nextFilters, 'push');
   }
 
   function handleStaleOnlyChange(value: boolean) {
-    const nextFilters = { ...dashboardFilters, staleOnly: value };
+    const nextFilters = { ...dashboardFiltersRef.current, staleOnly: value };
 
     setStaleOnly(value);
-    writeDashboardRoute(nextFilters, 'push');
+    commitDashboardFilterRoute(nextFilters, 'push');
   }
 
   function handlePageSizeChange(value: number) {
-    const nextFilters = { ...dashboardFilters, pageSize: value };
+    const nextFilters = { ...dashboardFiltersRef.current, pageSize: value };
 
     setPageSize(value);
-    writeDashboardRoute(nextFilters, 'push');
+    commitDashboardFilterRoute(nextFilters, 'push');
   }
 
   function handleClearFilters() {
+    dashboardFiltersRef.current = defaultDashboardFilters;
     clearFilters();
     writeRouteState(null, defaultDashboardFilters, 'replace');
     setSelectedIssueId(null);
@@ -597,7 +612,7 @@ export function App() {
       upsertSavedView(
         await createSavedFilterView({
           name,
-          ...dashboardFilters
+          ...dashboardFiltersRef.current
         })
       );
     } catch (error) {
@@ -630,6 +645,7 @@ export function App() {
       };
 
       upsertSavedView(view);
+      dashboardFiltersRef.current = nextFilters;
       setDashboardFilters(nextFilters);
       writeRouteState(selectedIssueId, nextFilters, 'push');
     } catch (error) {
@@ -1045,7 +1061,7 @@ export function App() {
     detailReturnFocusRef.current = trigger ?? null;
     setSelectedIssue(issue);
     setSelectedIssueLoadState('loaded');
-    writeRouteState(issue.id, dashboardFilters, 'push');
+    writeRouteState(issue.id, dashboardFiltersRef.current, 'push');
     setSelectedIssueId(issue.id);
     cancelForm({ restoreFocus: false });
   }
@@ -1056,7 +1072,7 @@ export function App() {
     setSelectedIssueId(null);
     setSelectedIssue(null);
     setSelectedIssueLoadState('idle');
-    writeRouteState(null, dashboardFilters, detailReturnFocusRef.current ? 'replace' : 'push');
+    writeRouteState(null, dashboardFiltersRef.current, detailReturnFocusRef.current ? 'replace' : 'push');
     setCommentBody('');
     setCommentError(null);
     setEditingCommentId(null);

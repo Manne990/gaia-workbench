@@ -98,6 +98,58 @@ async function createIssueThroughApi(
   return (await response.json()) as CreatedIssue;
 }
 
+async function changeDashboardFiltersInSameTask(
+  page: Page,
+  values: { search?: string; status?: string; priority?: string; label?: string }
+): Promise<void> {
+  await page.evaluate((nextValues) => {
+    const inputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    const selectValueSetter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set;
+
+    if (!inputValueSetter || !selectValueSetter) {
+      throw new Error('Unable to resolve native dashboard filter setters.');
+    }
+
+    function setInputValue(id: string, value: string) {
+      const input = document.getElementById(id);
+
+      if (!(input instanceof HTMLInputElement)) {
+        throw new Error(`Missing dashboard input ${id}.`);
+      }
+
+      inputValueSetter.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    function setSelectValue(id: string, value: string) {
+      const select = document.getElementById(id);
+
+      if (!(select instanceof HTMLSelectElement)) {
+        throw new Error(`Missing dashboard select ${id}.`);
+      }
+
+      selectValueSetter.call(select, value);
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    if (nextValues.status !== undefined) {
+      setSelectValue('issue-status-filter', nextValues.status);
+    }
+
+    if (nextValues.priority !== undefined) {
+      setSelectValue('issue-priority-filter', nextValues.priority);
+    }
+
+    if (nextValues.search !== undefined) {
+      setInputValue('issue-search-filter', nextValues.search);
+    }
+
+    if (nextValues.label !== undefined) {
+      setInputValue('issue-label-filter', nextValues.label);
+    }
+  }, values);
+}
+
 async function createLargeIssueSet(page: Page, count: number): Promise<CreatedIssue[]> {
   const issues: CreatedIssue[] = [];
   const batchSize = 25;
@@ -1530,6 +1582,69 @@ test('dashboard filters hydrate from URL and compose with issue detail routes', 
   await expect(filters.getByLabel('Priority')).toHaveValue('all');
   await expect(filters.getByLabel('Label')).toHaveValue('');
   await expect(page.getByLabel('Active filters')).toHaveCount(0);
+  await expect(page).toHaveURL('/');
+});
+
+test('rapid dashboard filter changes keep URL controls and detail routes consistent', async ({ page }) => {
+  const targetIssue = await createIssueThroughApi(page, {
+    title: 'Rapid filter target',
+    description: 'Receives rapid composed dashboard filters.',
+    status: 'review',
+    priority: 'high',
+    labels: ['api']
+  });
+  await createIssueThroughApi(page, {
+    title: 'Rapid filter review low',
+    description: 'Matches only the rapid status filter.',
+    status: 'review',
+    priority: 'low',
+    labels: ['api']
+  });
+  await createIssueThroughApi(page, {
+    title: 'Rapid filter todo high',
+    description: 'Matches only the rapid priority filter.',
+    status: 'todo',
+    priority: 'high',
+    labels: ['api']
+  });
+
+  await page.goto('/');
+
+  const filters = page.getByLabel('Issue filters');
+
+  await changeDashboardFiltersInSameTask(page, {
+    status: 'review',
+    priority: 'high',
+    search: 'Rapid filter target'
+  });
+
+  await expect(filters.getByLabel('Search')).toHaveValue('Rapid filter target');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(filters.getByLabel('Priority')).toHaveValue('high');
+  await expect(page.getByLabel('Active filter count')).toHaveText('3 active filters');
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Rapid filter target');
+  await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('review');
+  await expect.poll(() => new URL(page.url()).searchParams.get('priority')).toBe('high');
+  await expect(page.getByRole('row', { name: /Rapid filter target.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Rapid filter review low.*Review.*Low/ })).toHaveCount(0);
+  await expect(page.getByRole('row', { name: /Rapid filter todo high.*Todo.*High/ })).toHaveCount(0);
+
+  await page.getByRole('button', { name: `Open ${targetIssue.title}` }).click();
+  await expect(page.getByRole('region', { name: targetIssue.title })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${targetIssue.id}`);
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Rapid filter target');
+  await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('review');
+  await expect.poll(() => new URL(page.url()).searchParams.get('priority')).toBe('high');
+
+  await filters.getByRole('button', { name: 'Clear Filters' }).click();
+  await expect(page.getByRole('region', { name: targetIssue.title })).toHaveCount(0);
+  await expect(filters.getByLabel('Search')).toHaveValue('');
+  await expect(filters.getByLabel('Status')).toHaveValue('all');
+  await expect(filters.getByLabel('Priority')).toHaveValue('all');
+  await expect(page.getByLabel('Active filters')).toHaveCount(0);
+  await expect(page.getByRole('row', { name: /Rapid filter target.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Rapid filter review low.*Review.*Low/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Rapid filter todo high.*Todo.*High/ })).toBeVisible();
   await expect(page).toHaveURL('/');
 });
 

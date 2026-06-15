@@ -383,6 +383,44 @@ Each issue in the list and detail payload includes `isBlocked` and
 not `done`. Archived dependency targets remain visible in dependency detail data
 but do not make the issue blocked.
 
+### Audit Summary API
+
+`GET /api/issues/audit-summary` returns a read-only aggregate for external
+verification tools. The filter parameters match `GET /api/issues`:
+
+* `search`, `status`, `priority`, `includeArchived`, and `blockedOnly`.
+
+Response shape:
+
+```json
+{
+  "totalIssues": 0,
+  "totalArchivedIssues": 0,
+  "totalBlockedIssues": 0,
+  "totalOverdueIssues": 0,
+  "totalStaleIssues": 0,
+  "byStatus": {
+    "todo": 0,
+    "in_progress": 0,
+    "review": 0,
+    "done": 0
+  },
+  "byPriority": {
+    "low": 0,
+    "medium": 0,
+    "high": 0
+  },
+  "dependencyEdges": {
+    "total": 0,
+    "blocked": 0
+  }
+}
+```
+
+`totalArchivedIssues` counts archived issues that match the non-archive filters.
+`totalStaleIssues` is currently aligned with `totalOverdueIssues` for
+compatibility.
+
 ### Saved Filter Views API
 
 Saved filter views are instance-wide dashboard shortcuts. They do not store the

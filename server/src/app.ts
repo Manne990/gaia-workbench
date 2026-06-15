@@ -375,6 +375,29 @@ export function createApp(config: AppConfig = {}) {
     }
   });
 
+  app.get('/api/issues/audit-summary', (req, res) => {
+    try {
+      const filters: IssueListFilters = {
+        status: getOptionalQueryString(req.query.status) as IssueListFilters['status'],
+        priority: getOptionalQueryString(req.query.priority) as IssueListFilters['priority'],
+        search: getOptionalQueryString(req.query.search),
+        includeArchived: parseOptionalBooleanQuery(
+          req.query.includeArchived,
+          false,
+          'Invalid includeArchived parameter'
+        ),
+        blockedOnly: parseOptionalBooleanQuery(req.query.blockedOnly, false, 'Invalid blockedOnly parameter')
+      };
+
+      return res.status(200).json(issueRepository.getAuditSummary(filters));
+    } catch (error) {
+      if (isValidationError(error)) {
+        return res.status(400).json({ error: error.message });
+      }
+      throw error;
+    }
+  });
+
   app.get('/api/issues/:id', (req, res) => {
     const issue = issueRepository.getById(req.params.id);
 

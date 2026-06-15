@@ -68,6 +68,12 @@ button:disabled {
   opacity: 0.58;
 }
 
+button:focus-visible,
+.button-link:focus-visible {
+  outline: 3px solid #d9ecee;
+  outline-offset: 2px;
+}
+
 .button-link {
   display: inline-flex;
   align-items: center;

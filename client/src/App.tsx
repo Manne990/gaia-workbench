@@ -1,6 +1,6 @@
 import './styles.css';
 import type { FormEvent } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 type IssueStatus = 'todo' | 'in_progress' | 'review' | 'done';
 type IssuePriority = 'low' | 'medium' | 'high';
@@ -71,6 +71,14 @@ type IssueFormValues = {
 type ActiveForm = {
   mode: FormMode;
   issueId?: string;
+};
+
+type CancelOptions = {
+  restoreFocus?: boolean;
+};
+
+type CommentEditCancelOptions = CancelOptions & {
+  commentId?: string;
 };
 
 type StatusFilter = 'all' | IssueStatus;
@@ -230,6 +238,13 @@ function formatLabelList(labels: string[]): string {
   return labels.length > 0 ? labels.join(', ') : 'No labels';
 }
 
+function restoreFocus(element: HTMLElement | null, fallback?: () => HTMLElement | null): void {
+  window.setTimeout(() => {
+    const target = element?.isConnected ? element : fallback?.();
+    target?.focus();
+  }, 0);
+}
+
 function activityTitle(event: ActivityEvent): string {
   switch (event.type) {
     case 'issue_created':
@@ -308,6 +323,37 @@ export function App() {
   const [editCommentBody, setEditCommentBody] = useState('');
   const [editCommentError, setEditCommentError] = useState<string | null>(null);
   const [isCommentEditing, setIsCommentEditing] = useState(false);
+  const newIssueButtonRef = useRef<HTMLButtonElement>(null);
+  const issueListHeadingRef = useRef<HTMLHeadingElement>(null);
+  const issueTitleInputRef = useRef<HTMLInputElement>(null);
+  const issueDetailHeadingRef = useRef<HTMLHeadingElement>(null);
+  const commentsHeadingRef = useRef<HTMLHeadingElement>(null);
+  const editCommentTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const formReturnFocusRef = useRef<HTMLElement | null>(null);
+  const detailReturnFocusRef = useRef<HTMLElement | null>(null);
+  const commentEditReturnFocusRef = useRef<HTMLElement | null>(null);
+
+  const selectedIssue = useMemo(() => {
+    return issues.find((issue) => issue.id === selectedIssueId) ?? null;
+  }, [issues, selectedIssueId]);
+
+  useEffect(() => {
+    if (activeForm) {
+      issueTitleInputRef.current?.focus();
+    }
+  }, [activeForm]);
+
+  useEffect(() => {
+    if (selectedIssue) {
+      issueDetailHeadingRef.current?.focus();
+    }
+  }, [selectedIssue]);
+
+  useEffect(() => {
+    if (editingCommentId) {
+      editCommentTextareaRef.current?.focus();
+    }
+  }, [editingCommentId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -396,10 +442,6 @@ export function App() {
     return () => controller.abort();
   }, [selectedIssueId]);
 
-  const selectedIssue = useMemo(() => {
-    return issues.find((issue) => issue.id === selectedIssueId) ?? null;
-  }, [issues, selectedIssueId]);
-
   const normalizedSearchFilter = searchFilter.trim().toLowerCase();
 
   const filteredIssues = useMemo(() => {
@@ -459,13 +501,15 @@ export function App() {
     ? `${filteredIssues.length} of ${issues.length} shown`
     : `${highPriorityCount} high priority`;
 
-  function startCreate() {
+  function startCreate(trigger?: HTMLElement) {
+    formReturnFocusRef.current = trigger ?? null;
     setActiveForm({ mode: 'create' });
     setFormValues(emptyFormValues);
     setFormError(null);
   }
 
-  function startEdit(issue: Issue) {
+  function startEdit(issue: Issue, trigger?: HTMLElement) {
+    formReturnFocusRef.current = trigger ?? null;
     setActiveForm({ mode: 'edit', issueId: issue.id });
     setFormValues({
       title: issue.title,
@@ -478,24 +522,38 @@ export function App() {
     setFormError(null);
   }
 
-  function cancelForm() {
+  function cancelForm(options: CancelOptions = {}) {
+    const shouldRestoreFocus = options.restoreFocus ?? true;
+    const returnFocusTarget = formReturnFocusRef.current;
+
     setActiveForm(null);
     setFormValues(emptyFormValues);
     setFormError(null);
+
+    if (shouldRestoreFocus) {
+      restoreFocus(returnFocusTarget, () => newIssueButtonRef.current ?? issueListHeadingRef.current);
+    }
+
+    formReturnFocusRef.current = null;
   }
 
-  function openIssue(issue: Issue) {
+  function openIssue(issue: Issue, trigger?: HTMLElement) {
+    detailReturnFocusRef.current = trigger ?? null;
     setSelectedIssueId(issue.id);
-    cancelForm();
+    cancelForm({ restoreFocus: false });
   }
 
   function closeIssueDetail() {
+    const returnFocusTarget = detailReturnFocusRef.current;
+
     setSelectedIssueId(null);
     setCommentBody('');
     setCommentError(null);
     setEditingCommentId(null);
     setEditCommentBody('');
     setEditCommentError(null);
+    restoreFocus(returnFocusTarget, () => issueListHeadingRef.current);
+    detailReturnFocusRef.current = null;
   }
 
   function clearFilters() {
@@ -625,16 +683,35 @@ export function App() {
     }
   }
 
-  function startEditComment(comment: Comment) {
+  function getCommentEditButton(commentId: string): HTMLElement | null {
+    return document.querySelector<HTMLElement>(`[data-comment-edit-button="${commentId}"]`);
+  }
+
+  function startEditComment(comment: Comment, trigger?: HTMLElement) {
+    commentEditReturnFocusRef.current = trigger ?? null;
     setEditingCommentId(comment.id);
     setEditCommentBody(comment.body);
     setEditCommentError(null);
   }
 
-  function cancelEditComment() {
+  function cancelEditComment(options: CommentEditCancelOptions = {}) {
+    const shouldRestoreFocus = options.restoreFocus ?? true;
+    const commentId = options.commentId ?? editingCommentId;
+    const returnFocusTarget = commentEditReturnFocusRef.current;
+
     setEditingCommentId(null);
     setEditCommentBody('');
     setEditCommentError(null);
+
+    if (shouldRestoreFocus) {
+      restoreFocus(returnFocusTarget, () =>
+        commentId
+          ? getCommentEditButton(commentId) ?? commentsHeadingRef.current
+          : commentsHeadingRef.current
+      );
+    }
+
+    commentEditReturnFocusRef.current = null;
   }
 
   async function submitCommentEdit(event: FormEvent<HTMLFormElement>) {
@@ -651,11 +728,13 @@ export function App() {
       return;
     }
 
+    const commentId = editingCommentId;
+
     setIsCommentEditing(true);
     setEditCommentError(null);
 
     try {
-      const response = await fetch(`/api/comments/${editingCommentId}`, {
+      const response = await fetch(`/api/comments/${commentId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ body })
@@ -673,7 +752,7 @@ export function App() {
       );
       setCommentHistory((current) => ({ ...current, [savedComment.id]: history }));
       await refreshActivity(savedComment.issueId);
-      cancelEditComment();
+      cancelEditComment({ commentId });
     } catch (error) {
       setEditCommentError(error instanceof Error ? error.message : 'Comment update failed');
     } finally {
@@ -693,7 +772,12 @@ export function App() {
             <a className="button-link secondary-button" href="/api/export" download="tinytracker-export.json">
               Download JSON
             </a>
-            <button type="button" className="primary-button" onClick={startCreate}>
+            <button
+              type="button"
+              className="primary-button"
+              ref={newIssueButtonRef}
+              onClick={(event) => startCreate(event.currentTarget)}
+            >
               New Issue
             </button>
             <div className="total-summary" aria-label="Issue totals">
@@ -728,9 +812,12 @@ export function App() {
                 <span>Title</span>
                 <input
                   id="issue-title"
+                  ref={issueTitleInputRef}
                   value={formValues.title}
                   onChange={(event) => setFormValues({ ...formValues, title: event.target.value })}
                   disabled={isSubmitting}
+                  aria-invalid={formError === 'Title is required.' ? true : undefined}
+                  aria-describedby={formError ? 'issue-form-error' : undefined}
                 />
               </label>
 
@@ -808,7 +895,7 @@ export function App() {
               </label>
 
               {formError ? (
-                <div className="form-error full-span" role="alert">
+                <div className="form-error full-span" id="issue-form-error" role="alert">
                   {formError}
                 </div>
               ) : null}
@@ -817,7 +904,12 @@ export function App() {
                 <button type="submit" className="primary-button" disabled={isSubmitting}>
                   {activeForm.mode === 'create' ? 'Create Issue' : 'Save Changes'}
                 </button>
-                <button type="button" className="secondary-button" onClick={cancelForm} disabled={isSubmitting}>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => cancelForm()}
+                  disabled={isSubmitting}
+                >
                   Cancel
                 </button>
               </div>
@@ -828,13 +920,17 @@ export function App() {
         <section className="issue-panel" aria-labelledby="issue-list-heading" aria-busy={loadState === 'loading'}>
           <div className="panel-header">
             <div>
-              <h2 id="issue-list-heading">Issue List</h2>
+              <h2 id="issue-list-heading" ref={issueListHeadingRef} tabIndex={-1}>
+                Issue List
+              </h2>
               <p>{issueListSummary}</p>
             </div>
-            <span className="panel-count">{filteredIssues.length}</span>
+            <span className="panel-count" aria-label={`${filteredIssues.length} issues shown`}>
+              {filteredIssues.length}
+            </span>
           </div>
 
-          <div className="filter-panel" aria-label="Issue filters">
+          <div className="filter-panel" role="search" aria-label="Issue filters">
             <label className="filter-field" htmlFor="issue-search-filter">
               <span>Search</span>
               <input
@@ -966,7 +1062,7 @@ export function App() {
                           <button
                             type="button"
                             className="ghost-button"
-                            onClick={() => openIssue(issue)}
+                            onClick={(event) => openIssue(issue, event.currentTarget)}
                             aria-label={`Open ${issue.title}`}
                           >
                             Open
@@ -974,7 +1070,7 @@ export function App() {
                           <button
                             type="button"
                             className="ghost-button"
-                            onClick={() => startEdit(issue)}
+                            onClick={(event) => startEdit(issue, event.currentTarget)}
                             aria-label={`Edit ${issue.title}`}
                           >
                             Edit
@@ -993,10 +1089,17 @@ export function App() {
           <section className="detail-panel" aria-labelledby="issue-detail-heading">
             <div className="panel-header">
               <div>
-                <h2 id="issue-detail-heading">{selectedIssue.title}</h2>
+                <h2 id="issue-detail-heading" ref={issueDetailHeadingRef} tabIndex={-1}>
+                  {selectedIssue.title}
+                </h2>
                 <p>Updated {formatDate(selectedIssue.updatedAt)}</p>
               </div>
-              <button type="button" className="secondary-button" onClick={closeIssueDetail}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={closeIssueDetail}
+                aria-label={`Close issue detail for ${selectedIssue.title}`}
+              >
                 Close
               </button>
             </div>
@@ -1083,7 +1186,9 @@ export function App() {
 
               <section className="comments-section" aria-labelledby="comments-heading">
                 <div className="comments-header">
-                  <h3 id="comments-heading">Comments</h3>
+                  <h3 id="comments-heading" ref={commentsHeadingRef} tabIndex={-1}>
+                    Comments
+                  </h3>
                   <span>{comments.length}</span>
                 </div>
 
@@ -1112,11 +1217,13 @@ export function App() {
                       onChange={(event) => setCommentBody(event.target.value)}
                       disabled={isCommentSubmitting || commentLoadState === 'loading'}
                       rows={3}
+                      aria-invalid={commentError ? true : undefined}
+                      aria-describedby={commentError ? 'comment-form-error' : undefined}
                     />
                   </label>
 
                   {commentError ? (
-                    <div className="form-error" role="alert">
+                    <div className="form-error" id="comment-form-error" role="alert">
                       {commentError}
                     </div>
                   ) : null}
@@ -1155,15 +1262,24 @@ export function App() {
                                 <span>Comment</span>
                                 <textarea
                                   id={`comment-edit-${comment.id}`}
+                                  ref={editCommentTextareaRef}
                                   value={editCommentBody}
                                   onChange={(event) => setEditCommentBody(event.target.value)}
                                   disabled={isCommentEditing}
                                   rows={3}
+                                  aria-invalid={editCommentError ? true : undefined}
+                                  aria-describedby={
+                                    editCommentError ? `comment-edit-error-${comment.id}` : undefined
+                                  }
                                 />
                               </label>
 
                               {editCommentError ? (
-                                <div className="form-error" role="alert">
+                                <div
+                                  className="form-error"
+                                  id={`comment-edit-error-${comment.id}`}
+                                  role="alert"
+                                >
                                   {editCommentError}
                                 </div>
                               ) : null}
@@ -1179,7 +1295,7 @@ export function App() {
                                 <button
                                   type="button"
                                   className="secondary-button"
-                                  onClick={cancelEditComment}
+                                  onClick={() => cancelEditComment({ commentId: comment.id })}
                                   disabled={isCommentEditing}
                                 >
                                   Cancel
@@ -1188,13 +1304,15 @@ export function App() {
                             </form>
                           ) : (
                             <>
-                              <p>{comment.body}</p>
+                              <p id={`comment-body-${comment.id}`}>{comment.body}</p>
                               <div className="comment-actions">
                                 <button
                                   type="button"
                                   className="ghost-button"
-                                  onClick={() => startEditComment(comment)}
-                                  aria-label={`Edit comment ${comment.body}`}
+                                  data-comment-edit-button={comment.id}
+                                  onClick={(event) => startEditComment(comment, event.currentTarget)}
+                                  aria-label="Edit comment"
+                                  aria-describedby={`comment-body-${comment.id}`}
                                   disabled={isCommentEditing}
                                 >
                                   Edit

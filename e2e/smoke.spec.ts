@@ -972,6 +972,86 @@ test('saved filter views persist restore and compose with detail routes', async 
   expect(savedViewListBody).toEqual([]);
 });
 
+test('blocked-only filter is shareable and restores from saved views', async ({ page }) => {
+  const blocker = await createIssueThroughApi(page, {
+    title: 'Blocked filter blocker',
+    status: 'todo',
+    description: 'Active blocker for filtering.'
+  });
+  const blockedIssue = await createIssueThroughApi(page, {
+    title: 'Blocked filter issue',
+    status: 'in_progress',
+    description: 'Issue hidden when not blocked-only.'
+  });
+  await createIssueThroughApi(page, {
+    title: 'Unblocked issue',
+    status: 'todo',
+    description: 'Should be excluded by blocked-only filter.'
+  });
+  const resolvedBlocker = await createIssueThroughApi(page, {
+    title: 'Blocked filter resolved blocker',
+    status: 'done',
+    description: 'Resolved dependency should not block.'
+  });
+  const resolvedIssue = await createIssueThroughApi(page, {
+    title: 'Blocked filter resolved issue',
+    status: 'todo',
+    description: 'Depends on resolved blocker.'
+  });
+
+  const blockedDependency = await page.request.post(`/api/issues/${blockedIssue.id}/dependencies`, {
+    data: { dependsOnIssueId: blocker.id }
+  });
+
+  expect(blockedDependency.ok()).toBe(true);
+
+  const resolvedDependency = await page.request.post(`/api/issues/${resolvedIssue.id}/dependencies`, {
+    data: { dependsOnIssueId: resolvedBlocker.id }
+  });
+
+  expect(resolvedDependency.ok()).toBe(true);
+
+  const filters = page.getByLabel('Issue filters');
+
+  await page.goto('/');
+
+  await filters.getByLabel('Blocked only').check();
+  await expect(page.getByLabel('Active filters')).toContainText('Blocked: Only');
+  await expect(page.getByRole('row', { name: /Blocked filter issue.*In Progress/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Unblocked issue.*Todo/ })).toHaveCount(0);
+  await expect(page.getByRole('row', { name: /Blocked filter resolved issue/ })).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
+
+  const settings = await expandDashboardSettings(page);
+  const savedViews = settings.getByLabel('Saved filter views');
+
+  await savedViews.getByLabel('View name').fill('Blocked-only only review');
+  await savedViews.getByRole('button', { name: 'Save View' }).click();
+  await expect(savedViews.getByLabel('Saved views')).toContainText('Blocked-only only review');
+
+  await filters.getByLabel('Blocked only').uncheck();
+  await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBeNull();
+  await expect(page.getByRole('row', { name: /Unblocked issue.*Todo/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Blocked filter issue.*In Progress/ })).toBeVisible();
+
+  await savedViews.getByRole('button', { name: 'Apply View' }).click();
+  await expect(page.getByLabel('Active filters')).toContainText('Blocked: Only');
+  await expect(filters.getByLabel('Blocked only')).toBeChecked();
+  await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
+  await expect(page.getByRole('row', { name: /Blocked filter issue.*In Progress/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Unblocked issue.*Todo/ })).toHaveCount(0);
+
+  const viewsResponse = await page.request.get('/api/filter-views');
+  const savedViewsPayload = (await viewsResponse.json()) as Array<{ id: string; name: string }>;
+
+  expect(viewsResponse.ok()).toBe(true);
+  const blockedOnlyView = savedViewsPayload.find((view) => view.name === 'Blocked-only only review');
+
+  if (blockedOnlyView) {
+    await page.request.delete(`/api/filter-views/${blockedOnlyView.id}`);
+  }
+});
+
 test('large issue lists remain filterable and can open detail', async ({ page }) => {
   test.setTimeout(60_000);
 

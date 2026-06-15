@@ -14,6 +14,7 @@ describe('saved filter views API', () => {
         status: 'review',
         priority: 'high',
         includeArchived: true,
+        blockedOnly: true,
         pageSize: 50
       })
       .expect(201);
@@ -25,6 +26,7 @@ describe('saved filter views API', () => {
       status: 'review',
       priority: 'high',
       includeArchived: true,
+      blockedOnly: true,
       pageSize: 50,
       createdAt: expect.any(String),
       updatedAt: expect.any(String)
@@ -44,6 +46,7 @@ describe('saved filter views API', () => {
         status: 'all',
         priority: 'medium',
         includeArchived: false,
+        blockedOnly: true,
         pageSize: 10
       })
       .expect(200);
@@ -55,6 +58,7 @@ describe('saved filter views API', () => {
       status: 'all',
       priority: 'medium',
       includeArchived: false,
+      blockedOnly: true,
       pageSize: 10,
       createdAt: created.body.createdAt,
       updatedAt: expect.any(String)
@@ -78,6 +82,7 @@ describe('saved filter views API', () => {
       status: 'all',
       priority: 'all',
       includeArchived: false,
+      blockedOnly: false,
       pageSize: 25
     });
 
@@ -114,6 +119,10 @@ describe('saved filter views API', () => {
       .expect(400, {
         error: 'Invalid saved view includeArchived'
       });
+
+    await request(app).post('/api/filter-views').send({ name: 'Bad blocked flag', blockedOnly: 'true' }).expect(400, {
+      error: 'Invalid saved view blockedOnly'
+    });
 
     await request(app).post('/api/filter-views').send({ name: 'Bad page size', pageSize: 101 }).expect(400, {
       error: 'Invalid saved view pageSize'

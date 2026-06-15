@@ -83,6 +83,8 @@ export function App() {
     setPriorityFilter,
     includeArchived,
     setIncludeArchived,
+    blockedOnly,
+    setBlockedOnly,
     pageSize,
     setPageSize,
     filteredIssues,
@@ -158,6 +160,7 @@ export function App() {
     status: statusFilter,
     priority: priorityFilter,
     includeArchived,
+    blockedOnly,
     pageSize
   };
 
@@ -286,6 +289,13 @@ export function App() {
     writeDashboardRoute(nextFilters, 'push');
   }
 
+  function handleBlockedOnlyChange(value: boolean) {
+    const nextFilters = { ...dashboardFilters, blockedOnly: value };
+
+    setBlockedOnly(value);
+    writeDashboardRoute(nextFilters, 'push');
+  }
+
   function handlePageSizeChange(value: number) {
     const nextFilters = { ...dashboardFilters, pageSize: value };
 
@@ -359,6 +369,7 @@ export function App() {
         status: view.status,
         priority: view.priority,
         includeArchived: view.includeArchived,
+        blockedOnly: view.blockedOnly,
         pageSize: view.pageSize
       };
 
@@ -1065,6 +1076,8 @@ export function App() {
           onPriorityFilterChange={handlePriorityFilterChange}
           includeArchived={includeArchived}
           onIncludeArchivedChange={handleIncludeArchivedChange}
+          blockedOnly={blockedOnly}
+          onBlockedOnlyChange={handleBlockedOnlyChange}
           pageSize={pageSize}
           onPageSizeChange={handlePageSizeChange}
           dashboardDensity={dashboardDensity}

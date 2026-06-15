@@ -165,6 +165,54 @@ describe('issues API', () => {
     });
   });
 
+  it('filters issues by blocked state derived from active dependencies', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const blocker = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Dependency blocker', status: 'todo' })
+      .expect(201);
+    const blockedIssue = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Blocked issue', status: 'in_progress', priority: 'high' })
+      .expect(201);
+    const resolvedDependencyIssue = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Issue with resolved dependency', status: 'todo' })
+      .expect(201);
+    const unblockedIssue = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Unblocked issue', status: 'todo' })
+      .expect(201);
+
+    await request(app)
+      .post(`/api/issues/${blockedIssue.body.id}/dependencies`)
+      .send({ dependsOnIssueId: blocker.body.id })
+      .expect(201);
+    await request(app)
+      .post(`/api/issues/${resolvedDependencyIssue.body.id}/dependencies`)
+      .send({ dependsOnIssueId: unblockedIssue.body.id })
+      .expect(201);
+    await request(app).put(`/api/issues/${unblockedIssue.body.id}`).send({ status: 'done' }).expect(200);
+
+    const blockedOnly = await request(app).get('/api/issues?blockedOnly=true').expect(200);
+    const blockedOnlyIds = blockedOnly.body.items.map((issue: { id: string }) => issue.id);
+
+    expect(blockedOnlyIds).toEqual([blockedIssue.body.id]);
+    expect(blockedOnly.body.pagination.total).toBe(1);
+    expect(blockedOnly.body.items[0]).toMatchObject({
+      title: 'Blocked issue',
+      isBlocked: true,
+      dependsOnIssueIds: [blocker.body.id]
+    });
+
+    const blockedWithFilter = await request(app).get('/api/issues?blockedOnly=true&status=in_progress').expect(200);
+
+    expect(blockedWithFilter.body.items).toHaveLength(1);
+    expect(blockedWithFilter.body.items[0].id).toBe(blockedIssue.body.id);
+    expect(blockedWithFilter.body.pagination.total).toBe(1);
+  });
+
   it('returns empty pages with stable metadata when requested page is out of range', async () => {
     const app = createApp({ databasePath: ':memory:' });
 
@@ -558,6 +606,10 @@ describe('issues API', () => {
 
     await request(app).get('/api/issues?includeArchived=yes').expect(400, {
       error: 'Invalid includeArchived parameter'
+    });
+
+    await request(app).get('/api/issues?blockedOnly=yes').expect(400, {
+      error: 'Invalid blockedOnly parameter'
     });
 
     await request(app)

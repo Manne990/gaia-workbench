@@ -3,6 +3,7 @@ import { priorityLabels, priorityOrder, statusLabels, statusOrder } from '../con
 import type {
   ActiveFilterSummary,
   Issue,
+  IssueListPagination,
   LoadState,
   PriorityFilter,
   StatusFilter
@@ -13,6 +14,8 @@ type IssueListPanelProps = {
   loadState: LoadState;
   issues: Issue[];
   filteredIssues: Issue[];
+  pagination: IssueListPagination;
+  totalIssueCount: number;
   issueListSummary: string;
   hasActiveFilters: boolean;
   activeFilterSummaries: ActiveFilterSummary[];
@@ -24,6 +27,8 @@ type IssueListPanelProps = {
   onPriorityFilterChange: (value: PriorityFilter) => void;
   issueListHeadingRef: RefObject<HTMLHeadingElement | null>;
   onClearFilters: () => void;
+  onPreviousPage: () => void;
+  onNextPage: () => void;
   onOpenIssue: (issue: Issue, trigger: HTMLElement) => void;
   onEditIssue: (issue: Issue, trigger: HTMLElement) => void;
 };
@@ -32,6 +37,8 @@ export function IssueListPanel({
   loadState,
   issues,
   filteredIssues,
+  pagination,
+  totalIssueCount,
   issueListSummary,
   hasActiveFilters,
   activeFilterSummaries,
@@ -43,6 +50,8 @@ export function IssueListPanel({
   onPriorityFilterChange,
   issueListHeadingRef,
   onClearFilters,
+  onPreviousPage,
+  onNextPage,
   onOpenIssue,
   onEditIssue
 }: IssueListPanelProps) {
@@ -131,87 +140,127 @@ export function IssueListPanel({
       ) : null}
 
       {loadState === 'loaded' && issues.length === 0 ? (
-        <div className="state-message">No issues yet.</div>
-      ) : null}
-
-      {loadState === 'loaded' && issues.length > 0 && filteredIssues.length === 0 ? (
-        <div className="state-message filtered-empty">
-          <strong>No issues match the active filters.</strong>
-          <button type="button" className="secondary-button" onClick={onClearFilters}>
-            Clear Filters
-          </button>
-        </div>
+        totalIssueCount === 0 ? (
+          <div className="state-message">No issues yet.</div>
+        ) : pagination.total === 0 ? (
+          <div className="state-message filtered-empty">
+            <strong>No issues match the active filters.</strong>
+            <button type="button" className="secondary-button" onClick={onClearFilters}>
+              Clear Filters
+            </button>
+          </div>
+        ) : (
+          <div className="state-message filtered-empty">
+            <strong>No issues on this page.</strong>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onPreviousPage}
+              disabled={!pagination.hasPrevious}
+            >
+              Previous
+            </button>
+          </div>
+        )
       ) : null}
 
       {loadState === 'loaded' && filteredIssues.length > 0 ? (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Issue</th>
-                <th scope="col">Status</th>
-                <th scope="col">Priority</th>
-                <th scope="col">Due</th>
-                <th scope="col">Updated</th>
-                <th scope="col">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredIssues.map((issue) => (
-                <tr key={issue.id} className={issue.isOverdue ? 'overdue-row' : undefined}>
-                  <td>
-                    <strong>{issue.title}</strong>
-                    {issue.description ? <span>{issue.description}</span> : null}
-                    {issue.labels.length > 0 ? (
-                      <div className="label-row" aria-label={`Labels for ${issue.title}`}>
-                        {issue.labels.map((label) => (
-                          <span key={label} className="label-pill">
-                            {label}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </td>
-                  <td>
-                    <span className={`pill status-${issue.status}`}>{statusLabels[issue.status]}</span>
-                  </td>
-                  <td>
-                    <span className={`pill priority-${issue.priority}`}>{priorityLabels[issue.priority]}</span>
-                  </td>
-                  <td>
-                    <div className="due-date-cell">
-                      <span className={issue.isOverdue ? 'due-date-text overdue' : 'due-date-text'}>
-                        {issue.dueDate ? formatDueDate(issue.dueDate) : 'No due date'}
-                      </span>
-                      {issue.isOverdue ? <span className="overdue-pill">Overdue</span> : null}
-                    </div>
-                  </td>
-                  <td>{formatDate(issue.updatedAt)}</td>
-                  <td>
-                    <div className="row-actions">
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={(event) => onOpenIssue(issue, event.currentTarget)}
-                        aria-label={`Open ${issue.title}`}
-                      >
-                        Open
-                      </button>
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={(event) => onEditIssue(issue, event.currentTarget)}
-                        aria-label={`Edit ${issue.title}`}
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  </td>
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Issue</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Priority</th>
+                  <th scope="col">Due</th>
+                  <th scope="col">Updated</th>
+                  <th scope="col">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filteredIssues.map((issue) => (
+                  <tr key={issue.id} className={issue.isOverdue ? 'overdue-row' : undefined}>
+                    <td>
+                      <strong>{issue.title}</strong>
+                      {issue.description ? <span>{issue.description}</span> : null}
+                      {issue.labels.length > 0 ? (
+                        <div className="label-row" aria-label={`Labels for ${issue.title}`}>
+                          {issue.labels.map((label) => (
+                            <span key={label} className="label-pill">
+                              {label}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td>
+                      <span className={`pill status-${issue.status}`}>{statusLabels[issue.status]}</span>
+                    </td>
+                    <td>
+                      <span className={`pill priority-${issue.priority}`}>{priorityLabels[issue.priority]}</span>
+                    </td>
+                    <td>
+                      <div className="due-date-cell">
+                        <span className={issue.isOverdue ? 'due-date-text overdue' : 'due-date-text'}>
+                          {issue.dueDate ? formatDueDate(issue.dueDate) : 'No due date'}
+                        </span>
+                        {issue.isOverdue ? <span className="overdue-pill">Overdue</span> : null}
+                      </div>
+                    </td>
+                    <td>{formatDate(issue.updatedAt)}</td>
+                    <td>
+                      <div className="row-actions">
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          onClick={(event) => onOpenIssue(issue, event.currentTarget)}
+                          aria-label={`Open ${issue.title}`}
+                        >
+                          Open
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          onClick={(event) => onEditIssue(issue, event.currentTarget)}
+                          aria-label={`Edit ${issue.title}`}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <nav className="pagination-bar" aria-label="Issue pagination">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onPreviousPage}
+              disabled={!pagination.hasPrevious}
+            >
+              Previous
+            </button>
+            <span>
+              Page {pagination.page} of {Math.max(pagination.totalPages, 1)}
+            </span>
+            <span>
+              Showing {(pagination.page - 1) * pagination.limit + 1}-
+              {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
+            </span>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onNextPage}
+              disabled={!pagination.hasMore}
+            >
+              Next
+            </button>
+          </nav>
+        </>
       ) : null}
     </section>
   );

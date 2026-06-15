@@ -32,13 +32,19 @@ type TrackerExport = {
   issues: ExportedIssue[];
 };
 
+const DEFAULT_ISSUE_PAGE = 1;
+const DEFAULT_ISSUE_LIMIT = 25;
+const MAX_ISSUE_LIMIT = 100;
+
 const validationErrorMessages = new Set([
   'title is required',
   'body is required',
   'Invalid issue status',
   'Invalid issue priority',
   'Invalid issue labels',
-  'Invalid issue due date'
+  'Invalid issue due date',
+  'Invalid page parameter',
+  'Invalid limit parameter'
 ]);
 
 function isValidationError(error: unknown): error is Error {
@@ -59,6 +65,43 @@ function getOptionalQueryString(value: unknown): string | undefined {
   }
 
   return undefined;
+}
+
+function parsePositiveIntegerQuery(
+  value: unknown,
+  defaultValue: number,
+  errorMessage: string
+): number {
+  const queryValue = getOptionalQueryString(value);
+
+  if (queryValue === undefined) {
+    return defaultValue;
+  }
+
+  if (!/^[1-9]\d*$/.test(queryValue)) {
+    throw new Error(errorMessage);
+  }
+
+  return Number(queryValue);
+}
+
+function getIssueListPagination(query: { page?: unknown; limit?: unknown }) {
+  const page = parsePositiveIntegerQuery(
+    query.page,
+    DEFAULT_ISSUE_PAGE,
+    'Invalid page parameter'
+  );
+  const limit = parsePositiveIntegerQuery(
+    query.limit,
+    DEFAULT_ISSUE_LIMIT,
+    'Invalid limit parameter'
+  );
+
+  if (limit > MAX_ISSUE_LIMIT) {
+    throw new Error('Invalid limit parameter');
+  }
+
+  return { page, limit };
 }
 
 function buildTrackerExport(
@@ -113,7 +156,7 @@ export function createApp(config: AppConfig = {}) {
     };
 
     try {
-      return res.status(200).json(issueRepository.list(filters));
+      return res.status(200).json(issueRepository.list(filters, getIssueListPagination(req.query)));
     } catch (error) {
       if (isValidationError(error)) {
         return res.status(400).json({ error: error.message });

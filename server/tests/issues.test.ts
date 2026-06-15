@@ -39,10 +39,62 @@ describe('issues API', () => {
     await request(app).post('/api/issues').send({ title: 'Second issue' }).expect(201);
 
     const response = await request(app).get('/api/issues').expect(200);
-    const titles = response.body.map((issue: { title: string }) => issue.title);
+    const titles = response.body.items.map((issue: { title: string }) => issue.title);
 
-    expect(response.body).toHaveLength(2);
+    expect(response.body.items).toHaveLength(2);
+    expect(response.body.pagination).toMatchObject({
+      page: 1,
+      limit: 25,
+      total: 2,
+      totalPages: 1,
+      hasMore: false,
+      hasPrevious: false
+    });
+    expect(response.body.summary).toMatchObject({
+      totalByStatus: {
+        todo: 2,
+        in_progress: 0,
+        review: 0,
+        done: 0
+      },
+      totalHighPriority: 0
+    });
+    expect(response.body.sort).toEqual({ field: 'created_at,id', direction: 'desc,desc' });
     expect(titles).toEqual(expect.arrayContaining(['First issue', 'Second issue']));
+  });
+
+  it('paginates listed issues with deterministic metadata', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    await request(app).post('/api/issues').send({ title: 'Page issue 1' }).expect(201);
+    await request(app).post('/api/issues').send({ title: 'Page issue 2' }).expect(201);
+    await request(app).post('/api/issues').send({ title: 'Page issue 3' }).expect(201);
+
+    const firstPage = await request(app).get('/api/issues?page=1&limit=2').expect(200);
+    const secondPage = await request(app).get('/api/issues?page=2&limit=2').expect(200);
+
+    expect(firstPage.body.items).toHaveLength(2);
+    expect(firstPage.body.pagination).toMatchObject({
+      page: 1,
+      limit: 2,
+      total: 3,
+      totalPages: 2,
+      hasMore: true,
+      hasPrevious: false
+    });
+    expect(secondPage.body.items).toHaveLength(1);
+    expect(secondPage.body.pagination).toMatchObject({
+      page: 2,
+      limit: 2,
+      total: 3,
+      totalPages: 2,
+      hasMore: false,
+      hasPrevious: true
+    });
+    expect(new Set(firstPage.body.items.map((issue: { id: string }) => issue.id)).size).toBe(2);
+    expect(firstPage.body.items.map((issue: { id: string }) => issue.id)).not.toContain(
+      secondPage.body.items[0].id
+    );
   });
 
   it('filters and searches listed issues', async () => {
@@ -78,8 +130,14 @@ describe('issues API', () => {
 
     const filtered = await request(app).get('/api/issues?status=review&priority=medium&search=dashboard').expect(200);
 
-    expect(filtered.body).toHaveLength(1);
-    expect(filtered.body[0]).toMatchObject({
+    expect(filtered.body.items).toHaveLength(1);
+    expect(filtered.body.pagination).toMatchObject({
+      page: 1,
+      limit: 25,
+      total: 1,
+      totalPages: 1
+    });
+    expect(filtered.body.items[0]).toMatchObject({
       title: 'Review onboarding copy',
       status: 'review',
       priority: 'medium'
@@ -87,13 +145,41 @@ describe('issues API', () => {
 
     const search = await request(app).get('/api/issues?search=unicode').expect(200);
 
-    expect(search.body).toHaveLength(1);
-    expect(search.body[0]).toMatchObject({
+    expect(search.body.items).toHaveLength(1);
+    expect(search.body.items[0]).toMatchObject({
       title: 'Fix export bug',
       priority: 'high'
     });
 
-    await request(app).get('/api/issues?status=done&priority=high').expect(200, []);
+    const noMatches = await request(app).get('/api/issues?status=done&priority=high').expect(200);
+
+    expect(noMatches.body.items).toEqual([]);
+    expect(noMatches.body.pagination).toMatchObject({
+      page: 1,
+      limit: 25,
+      total: 0,
+      totalPages: 0,
+      hasMore: false,
+      hasPrevious: false
+    });
+  });
+
+  it('returns empty pages with stable metadata when requested page is out of range', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    await request(app).post('/api/issues').send({ title: 'Only issue' }).expect(201);
+
+    const response = await request(app).get('/api/issues?page=4&limit=2').expect(200);
+
+    expect(response.body.items).toEqual([]);
+    expect(response.body.pagination).toMatchObject({
+      page: 4,
+      limit: 2,
+      total: 1,
+      totalPages: 1,
+      hasMore: false,
+      hasPrevious: true
+    });
   });
 
   it('updates issue fields', async () => {
@@ -170,7 +256,7 @@ describe('issues API', () => {
     });
 
     const list = await request(app).get('/api/issues').expect(200);
-    const byTitle = new Map(list.body.map((issue: { title: string }) => [issue.title, issue]));
+    const byTitle = new Map(list.body.items.map((issue: { title: string }) => [issue.title, issue]));
 
     expect(byTitle.get('Past due issue')).toMatchObject({ isOverdue: true });
     expect(byTitle.get('Done past due issue')).toMatchObject({ isOverdue: false });
@@ -226,6 +312,22 @@ describe('issues API', () => {
 
     await request(app).get('/api/issues?priority=urgent').expect(400, {
       error: 'Invalid issue priority'
+    });
+
+    await request(app).get('/api/issues?page=0').expect(400, {
+      error: 'Invalid page parameter'
+    });
+
+    await request(app).get('/api/issues?page=1.5').expect(400, {
+      error: 'Invalid page parameter'
+    });
+
+    await request(app).get('/api/issues?limit=0').expect(400, {
+      error: 'Invalid limit parameter'
+    });
+
+    await request(app).get('/api/issues?limit=101').expect(400, {
+      error: 'Invalid limit parameter'
     });
 
     await request(app)

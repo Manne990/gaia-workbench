@@ -129,7 +129,9 @@ export function seedDemoData(databasePath = resolveDemoSeedDatabasePath()): Demo
   };
 
   try {
-    const issuesByTitle = new Map(issueRepository.list().map((issue) => [issue.title, issue]));
+    const issuesByTitle = new Map(
+      issueRepository.list({}, { page: 1, limit: 100 }).items.map((issue) => [issue.title, issue])
+    );
 
     for (const demoIssue of demoIssues) {
       let issue = issuesByTitle.get(demoIssue.title);

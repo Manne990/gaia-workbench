@@ -39,6 +39,37 @@ export interface IssueListFilters {
   search?: string;
 }
 
+export interface IssueListPaginationInput {
+  page: number;
+  limit: number;
+}
+
+export interface IssueListPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasMore: boolean;
+  hasPrevious: boolean;
+}
+
+export interface IssueListSummary {
+  totalByStatus: Record<IssueStatus, number>;
+  totalHighPriority: number;
+}
+
+export interface IssueListSort {
+  field: 'created_at,id';
+  direction: 'desc,desc';
+}
+
+export interface IssueListResult {
+  items: Issue[];
+  pagination: IssueListPagination;
+  summary: IssueListSummary;
+  sort: IssueListSort;
+}
+
 export interface Comment {
   id: string;
   issueId: string;

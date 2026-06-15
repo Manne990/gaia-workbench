@@ -47,7 +47,7 @@ describe('demo data seed command', () => {
       const activityRepository = new ActivityRepository(database);
 
       try {
-        const issues = issueRepository.list();
+        const issues = issueRepository.list({}, { page: 1, limit: 100 }).items;
         const byTitle = new Map(issues.map((issue) => [issue.title, issue]));
         const overdue = byTitle.get('Demo: Fix overdue activity review');
         const done = byTitle.get('Demo: Close resolved mobile polish');
@@ -133,7 +133,7 @@ describe('demo data seed command', () => {
       const issueRepository = new IssueRepository(database);
 
       try {
-        expect(issueRepository.list()).toHaveLength(4);
+        expect(issueRepository.list({}, { page: 1, limit: 100 }).items).toHaveLength(4);
       } finally {
         database.close();
       }

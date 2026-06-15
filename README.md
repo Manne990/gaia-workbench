@@ -254,6 +254,45 @@ The started application serves:
 * TinyTracker React UI at `/`
 * API routes under `/api`
 
+### Issue List API
+
+`GET /api/issues` returns a paginated envelope:
+
+```json
+{
+  "items": [],
+  "pagination": {
+    "page": 1,
+    "limit": 25,
+    "total": 0,
+    "totalPages": 0,
+    "hasMore": false,
+    "hasPrevious": false
+  },
+  "summary": {
+    "totalByStatus": {
+      "todo": 0,
+      "in_progress": 0,
+      "review": 0,
+      "done": 0
+    },
+    "totalHighPriority": 0
+  },
+  "sort": {
+    "field": "created_at,id",
+    "direction": "desc,desc"
+  }
+}
+```
+
+Supported query parameters:
+
+* `search`: title or description search
+* `status`: `todo`, `in_progress`, `review`, or `done`
+* `priority`: `low`, `medium`, or `high`
+* `page`: 1-based page number, default `1`
+* `limit`: items per page, default `25`, maximum `100`
+
 ## Smoke Verification
 
 The Playwright smoke test starts TinyTracker with an in-memory SQLite database and verifies the V1 path:

@@ -4,6 +4,9 @@ import { recordActivityEvent } from './activityRepository.js';
 import {
   Issue,
   IssueListFilters,
+  IssueListPaginationInput,
+  IssueListResult,
+  IssueListSummary,
   IssuePriority,
   IssueStatus,
   IssueUpdate,
@@ -26,6 +29,15 @@ type IssueRow = {
   due_date: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type CountRow = {
+  count: number;
+};
+
+type StatusCountRow = {
+  status: IssueStatus;
+  count: number;
 };
 
 function nowIso(): string {
@@ -215,6 +227,37 @@ function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (match) => `\\${match}`);
 }
 
+function buildIssueListWhereClause(filters: IssueListFilters): {
+  whereClause: string;
+  values: Record<string, string>;
+} {
+  const clauses: string[] = [];
+  const values: Record<string, string> = {};
+
+  if (filters.status !== undefined) {
+    assertValidStatus(filters.status);
+    clauses.push('status = @status');
+    values.status = filters.status;
+  }
+
+  if (filters.priority !== undefined) {
+    assertValidPriority(filters.priority);
+    clauses.push('priority = @priority');
+    values.priority = filters.priority;
+  }
+
+  const search = filters.search?.trim().toLowerCase();
+  if (search) {
+    clauses.push("(LOWER(title) LIKE @search ESCAPE '\\' OR LOWER(description) LIKE @search ESCAPE '\\')");
+    values.search = `%${escapeLikePattern(search)}%`;
+  }
+
+  return {
+    whereClause: clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '',
+    values
+  };
+}
+
 export class IssueRepository {
   constructor(private readonly database: Database.Database) {}
 
@@ -281,39 +324,48 @@ export class IssueRepository {
     return row ? mapIssueRow(row) : null;
   }
 
-  list(filters: IssueListFilters = {}): Issue[] {
-    const clauses: string[] = [];
-    const values: Record<string, string> = {};
-
-    if (filters.status !== undefined) {
-      assertValidStatus(filters.status);
-      clauses.push('status = @status');
-      values.status = filters.status;
-    }
-
-    if (filters.priority !== undefined) {
-      assertValidPriority(filters.priority);
-      clauses.push('priority = @priority');
-      values.priority = filters.priority;
-    }
-
-    const search = filters.search?.trim().toLowerCase();
-    if (search) {
-      clauses.push("(LOWER(title) LIKE @search ESCAPE '\\' OR LOWER(description) LIKE @search ESCAPE '\\')");
-      values.search = `%${escapeLikePattern(search)}%`;
-    }
-
-    const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+  list(
+    filters: IssueListFilters = {},
+    pagination: IssueListPaginationInput = { page: 1, limit: 25 }
+  ): IssueListResult {
+    const { whereClause, values } = buildIssueListWhereClause(filters);
+    const total = (
+      this.database
+        .prepare(`
+          SELECT COUNT(*) AS count
+          FROM issues
+          ${whereClause}
+        `)
+        .get(values) as CountRow
+    ).count;
+    const totalPages = total === 0 ? 0 : Math.ceil(total / pagination.limit);
+    const offset = (pagination.page - 1) * pagination.limit;
     const rows = this.database
       .prepare(`
         SELECT id, title, description, status, priority, labels, due_date, created_at, updated_at
         FROM issues
         ${whereClause}
         ORDER BY created_at DESC, id DESC
+        LIMIT @limit OFFSET @offset
       `)
-      .all(values) as IssueRow[];
+      .all({ ...values, limit: pagination.limit, offset }) as IssueRow[];
 
-    return rows.map(mapIssueRow);
+    return {
+      items: rows.map(mapIssueRow),
+      pagination: {
+        page: pagination.page,
+        limit: pagination.limit,
+        total,
+        totalPages,
+        hasMore: pagination.page < totalPages,
+        hasPrevious: pagination.page > 1 && total > 0
+      },
+      summary: this.getListSummary(),
+      sort: {
+        field: 'created_at,id',
+        direction: 'desc,desc'
+      }
+    };
   }
 
   listForExport(): Issue[] {
@@ -326,6 +378,41 @@ export class IssueRepository {
       .all() as IssueRow[];
 
     return rows.map(mapIssueRow);
+  }
+
+  private getListSummary(): IssueListSummary {
+    const totalByStatus: IssueListSummary['totalByStatus'] = {
+      todo: 0,
+      in_progress: 0,
+      review: 0,
+      done: 0
+    };
+    const statusRows = this.database
+      .prepare(`
+        SELECT status, COUNT(*) AS count
+        FROM issues
+        GROUP BY status
+      `)
+      .all() as StatusCountRow[];
+
+    for (const row of statusRows) {
+      totalByStatus[row.status] = row.count;
+    }
+
+    const totalHighPriority = (
+      this.database
+        .prepare(`
+          SELECT COUNT(*) AS count
+          FROM issues
+          WHERE priority = 'high'
+        `)
+        .get() as CountRow
+    ).count;
+
+    return {
+      totalByStatus,
+      totalHighPriority
+    };
   }
 
   update(id: string, input: IssueUpdate): Issue | null {

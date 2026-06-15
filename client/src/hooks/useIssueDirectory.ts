@@ -4,11 +4,34 @@ import type {
   ActiveFilterSummary,
   DashboardFilters,
   Issue,
+  IssueListPagination,
+  IssueListSummary,
   LoadState,
   PriorityFilter,
   StatusFilter
 } from '../types';
 import { defaultDashboardFilters } from '../utils/routing';
+
+const ISSUE_PAGE_LIMIT = 25;
+
+const defaultPagination: IssueListPagination = {
+  page: 1,
+  limit: ISSUE_PAGE_LIMIT,
+  total: 0,
+  totalPages: 0,
+  hasMore: false,
+  hasPrevious: false
+};
+
+const defaultSummary: IssueListSummary = {
+  totalByStatus: {
+    todo: 0,
+    in_progress: 0,
+    review: 0,
+    done: 0
+  },
+  totalHighPriority: 0
+};
 
 export function useIssueDirectory(initialFilters: DashboardFilters = defaultDashboardFilters) {
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -16,19 +39,52 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
   const [searchFilter, setSearchFilter] = useState(initialFilters.search);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialFilters.status);
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>(initialFilters.priority);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState<IssueListPagination>(defaultPagination);
+  const [summary, setSummary] = useState<IssueListSummary>(defaultSummary);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
 
     async function loadIssues() {
+      const params = new URLSearchParams({
+        page: String(currentPage),
+        limit: String(ISSUE_PAGE_LIMIT)
+      });
+      const search = searchFilter.trim();
+
+      if (search) {
+        params.set('search', search);
+      }
+
+      if (statusFilter !== 'all') {
+        params.set('status', statusFilter);
+      }
+
+      if (priorityFilter !== 'all') {
+        params.set('priority', priorityFilter);
+      }
+
       try {
-        const response = await fetch('/api/issues', { signal: controller.signal });
+        setLoadState('loading');
+        const response = await fetch(`/api/issues?${params.toString()}`, {
+          signal: controller.signal
+        });
 
         if (!response.ok) {
           throw new Error('Issue request failed');
         }
 
-        setIssues((await response.json()) as Issue[]);
+        const body = (await response.json()) as {
+          items: Issue[];
+          pagination: IssueListPagination;
+          summary: IssueListSummary;
+        };
+
+        setIssues(body.items);
+        setPagination(body.pagination);
+        setSummary(body.summary);
         setLoadState('loaded');
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -40,30 +96,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     void loadIssues();
 
     return () => controller.abort();
-  }, []);
-
-  const normalizedSearchFilter = searchFilter.trim().toLowerCase();
-
-  const filteredIssues = useMemo(() => {
-    return issues.filter((issue) => {
-      if (statusFilter !== 'all' && issue.status !== statusFilter) {
-        return false;
-      }
-
-      if (priorityFilter !== 'all' && issue.priority !== priorityFilter) {
-        return false;
-      }
-
-      if (!normalizedSearchFilter) {
-        return true;
-      }
-
-      return [issue.title, issue.description]
-        .join(' ')
-        .toLowerCase()
-        .includes(normalizedSearchFilter);
-    });
-  }, [issues, normalizedSearchFilter, priorityFilter, statusFilter]);
+  }, [currentPage, priorityFilter, reloadToken, searchFilter, statusFilter]);
 
   const activeFilterSummaries = useMemo(() => {
     const filters: ActiveFilterSummary[] = [];
@@ -89,47 +122,92 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
   const statusCounts = useMemo(() => {
     return statusOrder.map((status) => ({
       status,
-      count: issues.filter((issue) => issue.status === status).length
+      count: summary.totalByStatus[status]
     }));
-  }, [issues]);
+  }, [summary]);
 
-  const highPriorityCount = useMemo(() => {
-    return issues.filter((issue) => issue.priority === 'high').length;
-  }, [issues]);
+  const totalIssueCount = useMemo(
+    () => statusCounts.reduce((total, item) => total + item.count, 0),
+    [statusCounts]
+  );
+  const pageStart = pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.limit + 1;
+  const pageEnd = Math.min(pagination.page * pagination.limit, pagination.total);
 
   const issueListSummary = hasActiveFilters
-    ? `${filteredIssues.length} of ${issues.length} shown`
-    : `${highPriorityCount} high priority`;
+    ? pagination.total === 0
+      ? '0 matching issues'
+      : `Showing ${pageStart}-${pageEnd} of ${pagination.total} matches`
+    : `${summary.totalHighPriority} high priority`;
 
   function clearFilters() {
     setSearchFilter('');
     setStatusFilter('all');
     setPriorityFilter('all');
+    setCurrentPage(1);
   }
 
   function setDashboardFilters(filters: DashboardFilters) {
     setSearchFilter(filters.search);
     setStatusFilter(filters.status);
     setPriorityFilter(filters.priority);
+    setCurrentPage(1);
+  }
+
+  function setSearchFilterAndResetPage(value: string) {
+    setSearchFilter(value);
+    setCurrentPage(1);
+  }
+
+  function setStatusFilterAndResetPage(value: StatusFilter) {
+    setStatusFilter(value);
+    setCurrentPage(1);
+  }
+
+  function setPriorityFilterAndResetPage(value: PriorityFilter) {
+    setPriorityFilter(value);
+    setCurrentPage(1);
+  }
+
+  function goToPreviousPage() {
+    setCurrentPage((page) => Math.max(1, page - 1));
+  }
+
+  function goToNextPage() {
+    setCurrentPage((page) => page + 1);
+  }
+
+  function refreshIssues() {
+    setReloadToken((value) => value + 1);
+  }
+
+  function returnToFirstPage() {
+    setCurrentPage(1);
+    refreshIssues();
   }
 
   return {
     issues,
-    setIssues,
     loadState,
-    setLoadState,
     searchFilter,
-    setSearchFilter,
+    setSearchFilter: setSearchFilterAndResetPage,
     statusFilter,
-    setStatusFilter,
+    setStatusFilter: setStatusFilterAndResetPage,
     priorityFilter,
-    setPriorityFilter,
-    filteredIssues,
+    setPriorityFilter: setPriorityFilterAndResetPage,
+    currentPage,
+    pagination,
+    summary,
+    totalIssueCount,
+    filteredIssues: issues,
     activeFilterSummaries,
     hasActiveFilters,
     statusCounts,
     issueListSummary,
     clearFilters,
-    setDashboardFilters
+    setDashboardFilters,
+    goToPreviousPage,
+    goToNextPage,
+    refreshIssues,
+    returnToFirstPage
   };
 }

@@ -67,7 +67,7 @@ describe('persistence layer', () => {
         isOverdue: true
       });
 
-      expect(secondRepository.list()).toHaveLength(1);
+      expect(secondRepository.list().items).toHaveLength(1);
     } finally {
       database.close();
     }
@@ -339,12 +339,14 @@ describe('persistence layer', () => {
         priority: 'low'
       });
 
-      expect(issueRepository.list({ status: 'review' })).toEqual([docs]);
-      expect(issueRepository.list({ priority: 'high' })).toEqual([bug]);
-      expect(issueRepository.list({ search: 'oauth' })).toEqual([bug]);
-      expect(issueRepository.list({ search: 'SETUP' })).toEqual([docs]);
-      expect(issueRepository.list({ status: 'todo', priority: 'high', search: 'login' })).toEqual([bug]);
-      expect(issueRepository.list({ status: 'done', priority: 'high' })).toEqual([]);
+      expect(issueRepository.list({ status: 'review' }).items).toEqual([docs]);
+      expect(issueRepository.list({ priority: 'high' }).items).toEqual([bug]);
+      expect(issueRepository.list({ search: 'oauth' }).items).toEqual([bug]);
+      expect(issueRepository.list({ search: 'SETUP' }).items).toEqual([docs]);
+      expect(issueRepository.list({ status: 'todo', priority: 'high', search: 'login' }).items).toEqual([
+        bug
+      ]);
+      expect(issueRepository.list({ status: 'done', priority: 'high' }).items).toEqual([]);
     } finally {
       database.close();
     }

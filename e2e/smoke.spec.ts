@@ -13,6 +13,18 @@ type CreatedIssue = {
   description: string;
 };
 
+type IssueListResponse = {
+  items: CreatedIssue[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasMore: boolean;
+    hasPrevious: boolean;
+  };
+};
+
 const largeIssueStatuses = ['todo', 'in_progress', 'review', 'done'] as const;
 const largeIssuePriorities = ['low', 'medium', 'high'] as const;
 const largeIssueCount = 500;
@@ -358,7 +370,7 @@ test('direct issue detail URLs hydrate before the full issue list finishes loadi
     releaseIssueList = resolve;
   });
 
-  await page.route('**/api/issues', async (route) => {
+  await page.route('**/api/issues**', async (route) => {
     const url = new URL(route.request().url());
 
     if (route.request().method() === 'GET' && url.pathname === '/api/issues') {
@@ -478,12 +490,33 @@ test('large issue lists remain filterable and can open detail', async ({ page })
   const issues = await createLargeIssueSet(page, largeIssueCount);
   const targetIssue = issues[420];
   const listRequestStartedAt = Date.now();
-  const listResponse = await page.request.get('/api/issues?search=Large%20issue');
+  const listResponse = await page.request.get('/api/issues?search=Large%20issue&limit=25&page=1');
   const listRequestElapsedMs = Date.now() - listRequestStartedAt;
+  const listBody = (await listResponse.json()) as IssueListResponse;
+  const secondPageResponse = await page.request.get('/api/issues?search=Large%20issue&limit=25&page=2');
+  const secondPageBody = (await secondPageResponse.json()) as IssueListResponse;
+  const secondPageTarget = secondPageBody.items[0];
 
   expect(listResponse.ok()).toBe(true);
+  expect(secondPageResponse.ok()).toBe(true);
   expect(listRequestElapsedMs).toBeLessThan(1000);
-  expect(await listResponse.json()).toHaveLength(largeIssueCount);
+  expect(listBody.items).toHaveLength(25);
+  expect(listBody.pagination).toMatchObject({
+    page: 1,
+    limit: 25,
+    total: largeIssueCount,
+    totalPages: 20,
+    hasMore: true,
+    hasPrevious: false
+  });
+  expect(secondPageBody.pagination).toMatchObject({
+    page: 2,
+    limit: 25,
+    total: largeIssueCount,
+    totalPages: 20,
+    hasMore: true,
+    hasPrevious: true
+  });
 
   await page.goto(`/issues/${targetIssue.id}`);
   const directDetail = page.getByRole('region', { name: targetIssue.title });
@@ -495,8 +528,24 @@ test('large issue lists remain filterable and can open detail', async ({ page })
 
   const filters = page.getByLabel('Issue filters');
   await filters.getByLabel('Search').fill('Large issue');
-  await expect(page.getByLabel('Active filters')).toContainText(`${largeIssueCount} shown`);
-  await expect(page.getByLabel(`${largeIssueCount} issues shown`)).toBeVisible();
+  await expect(page.getByText(`Showing 1-25 of ${largeIssueCount} matches`)).toBeVisible();
+  await expect(page.getByLabel('Active filters')).toContainText('25 shown');
+  await expect(page.getByLabel('25 issues shown')).toBeVisible();
+
+  const pagination = page.getByLabel('Issue pagination');
+  await expect(pagination).toContainText('Page 1 of 20');
+  await pagination.getByRole('button', { name: 'Next' }).click();
+  await expect(pagination).toContainText('Page 2 of 20');
+  await expect(page.getByRole('row', { name: new RegExp(`${secondPageTarget.title}.*`) })).toBeVisible();
+
+  await page.getByRole('button', { name: `Open ${secondPageTarget.title}` }).click();
+  const pagedDetail = page.getByRole('region', { name: secondPageTarget.title });
+
+  await expect(pagedDetail.getByRole('heading', { name: secondPageTarget.title })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${secondPageTarget.id}`);
+  await pagedDetail
+    .getByRole('button', { name: `Close issue detail for ${secondPageTarget.title}` })
+    .click();
 
   const filterStartedAt = Date.now();
   await filters.getByLabel('Search').fill(targetIssue.title);

@@ -737,5 +737,22 @@ describe('tracker import API', () => {
       ])
     );
     expect(afterSelfDependencyImport.body).toEqual(beforeImport.body);
+
+    const cyclic = cloneExport(payload);
+    cyclic.issues[0].dependsOnIssueIds = [cyclic.issues[1].id];
+    cyclic.issues[1].dependsOnIssueIds = [cyclic.issues[0].id];
+
+    const cycleResponse = await request(app).post('/api/import/apply').send(cyclic).expect(400);
+    const afterCycleImport = await request(app).get('/api/export').expect(200);
+
+    expect(cycleResponse.body.valid).toBe(false);
+    expect(cycleResponse.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'dependency_cycle'
+        })
+      ])
+    );
+    expect(afterCycleImport.body).toEqual(beforeImport.body);
   });
 });

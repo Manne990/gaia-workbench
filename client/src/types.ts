@@ -156,10 +156,22 @@ export type DashboardFilters = {
   status: StatusFilter;
   priority: PriorityFilter;
   includeArchived: boolean;
+  pageSize: number;
 };
 
 export type ActiveFilterSummary = {
   key: string;
   label: string;
   value: string;
+};
+
+export type SavedFilterView = DashboardFilters & {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SavedFilterViewPayload = DashboardFilters & {
+  name: string;
 };

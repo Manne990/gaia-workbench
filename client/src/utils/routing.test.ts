@@ -27,7 +27,8 @@ describe('client routing helpers', () => {
       search: 'ready for review',
       status: 'review',
       priority: 'high',
-      includeArchived: false
+      includeArchived: false,
+      pageSize: 25
     });
   });
 
@@ -38,7 +39,8 @@ describe('client routing helpers', () => {
       search: '',
       status: 'all',
       priority: 'all',
-      includeArchived: false
+      includeArchived: false,
+      pageSize: 25
     });
   });
 
@@ -47,20 +49,59 @@ describe('client routing helpers', () => {
       search: '',
       status: 'all',
       priority: 'all',
-      includeArchived: true
+      includeArchived: true,
+      pageSize: 25
+    });
+  });
+
+  it('parses valid page size and normalizes invalid values', () => {
+    expect(parseDashboardFiltersFromSearch('?limit=50')).toEqual({
+      search: '',
+      status: 'all',
+      priority: 'all',
+      includeArchived: false,
+      pageSize: 50
+    });
+    expect(parseDashboardFiltersFromSearch('?limit=0')).toEqual({
+      search: '',
+      status: 'all',
+      priority: 'all',
+      includeArchived: false,
+      pageSize: 25
+    });
+    expect(parseDashboardFiltersFromSearch('?limit=101')).toEqual({
+      search: '',
+      status: 'all',
+      priority: 'all',
+      includeArchived: false,
+      pageSize: 25
     });
   });
 
   it('builds canonical dashboard paths with stable query order', () => {
     expect(
-      buildDashboardPath({ search: 'ready for review', status: 'review', priority: 'high', includeArchived: true })
-    ).toBe('/?search=ready+for+review&status=review&priority=high&includeArchived=true');
-    expect(buildDashboardPath({ search: '  ', status: 'all', priority: 'all', includeArchived: false })).toBe('/');
+      buildDashboardPath({
+        search: 'ready for review',
+        status: 'review',
+        priority: 'high',
+        includeArchived: true,
+        pageSize: 50
+      })
+    ).toBe('/?search=ready+for+review&status=review&priority=high&includeArchived=true&limit=50');
+    expect(
+      buildDashboardPath({ search: '  ', status: 'all', priority: 'all', includeArchived: false, pageSize: 25 })
+    ).toBe('/');
   });
 
   it('builds detail paths with composed dashboard filters', () => {
     expect(
-      buildIssuePath('issue id', { search: 'api export', status: 'done', priority: 'low', includeArchived: true })
-    ).toBe('/issues/issue%20id?search=api+export&status=done&priority=low&includeArchived=true');
+      buildIssuePath('issue id', {
+        search: 'api export',
+        status: 'done',
+        priority: 'low',
+        includeArchived: true,
+        pageSize: 100
+      })
+    ).toBe('/issues/issue%20id?search=api+export&status=done&priority=low&includeArchived=true&limit=100');
   });
 });

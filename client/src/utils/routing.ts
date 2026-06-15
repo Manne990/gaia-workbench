@@ -1,11 +1,15 @@
 import { priorityOrder, statusOrder } from '../constants';
 import type { DashboardFilters, IssuePriority, IssueStatus, PriorityFilter, StatusFilter } from '../types';
 
+export const defaultPageSize = 25;
+export const maxPageSize = 100;
+
 export const defaultDashboardFilters: DashboardFilters = {
   search: '',
   status: 'all',
   priority: 'all',
-  includeArchived: false
+  includeArchived: false,
+  pageSize: defaultPageSize
 };
 
 export function getIssueIdFromPath(pathname: string): string | null {
@@ -32,12 +36,14 @@ export function parseDashboardFiltersFromSearch(search: string | URLSearchParams
   const statusFilter = parseStatusFilter(params.get('status'));
   const priorityFilter = parsePriorityFilter(params.get('priority'));
   const includeArchived = params.get('includeArchived') === 'true';
+  const pageSize = parsePageSize(params.get('limit'));
 
   return {
     search: searchFilter,
     status: statusFilter,
     priority: priorityFilter,
-    includeArchived
+    includeArchived,
+    pageSize
   };
 }
 
@@ -83,6 +89,16 @@ function parsePriorityFilter(value: string | null): PriorityFilter {
   return value && priorityOrder.includes(value as IssuePriority) ? (value as IssuePriority) : 'all';
 }
 
+function parsePageSize(value: string | null): number {
+  if (!value || !/^[1-9]\d*$/.test(value)) {
+    return defaultPageSize;
+  }
+
+  const pageSize = Number(value);
+
+  return pageSize <= maxPageSize ? pageSize : defaultPageSize;
+}
+
 function buildDashboardQuery(filters: DashboardFilters): string {
   const params = new URLSearchParams();
   const search = filters.search.trim();
@@ -101,6 +117,10 @@ function buildDashboardQuery(filters: DashboardFilters): string {
 
   if (filters.includeArchived) {
     params.set('includeArchived', 'true');
+  }
+
+  if (filters.pageSize !== defaultPageSize) {
+    params.set('limit', String(filters.pageSize));
   }
 
   return params.toString();

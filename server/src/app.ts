@@ -8,9 +8,11 @@ import {
   type CommentEditHistory,
   CommentRepository,
   createDatabase,
+  DuplicateSavedFilterViewNameError,
   type Issue,
   IssueListFilters,
-  IssueRepository
+  IssueRepository,
+  SavedFilterViewRepository
 } from './db/index.js';
 import { applyTrackerImport, ImportValidationError, previewTrackerImport, type ImportPlan } from './trackerImport.js';
 
@@ -75,7 +77,14 @@ const validationErrorMessages = new Set([
   'Invalid issue due date',
   'Invalid page parameter',
   'Invalid limit parameter',
-  'Invalid includeArchived parameter'
+  'Invalid includeArchived parameter',
+  'Saved view name is required',
+  'Invalid saved view name',
+  'Invalid saved view search',
+  'Invalid saved view status',
+  'Invalid saved view priority',
+  'Invalid saved view includeArchived',
+  'Invalid saved view pageSize'
 ]);
 
 function isValidationError(error: unknown): error is Error {
@@ -221,6 +230,7 @@ export function createApp(config: AppConfig = {}) {
   const issueRepository = new IssueRepository(database);
   const commentRepository = new CommentRepository(database);
   const activityRepository = new ActivityRepository(database);
+  const savedFilterViewRepository = new SavedFilterViewRepository(database);
 
   app.use(express.json({ limit: '2mb' }));
   app.use(jsonParseErrorHandler);
@@ -235,6 +245,68 @@ export function createApp(config: AppConfig = {}) {
 
   app.get('/api/export', (_req, res) => {
     res.status(200).json(buildTrackerExport(issueRepository, commentRepository, activityRepository));
+  });
+
+  app.get('/api/filter-views', (_req, res) => {
+    res.status(200).json(savedFilterViewRepository.list());
+  });
+
+  app.post('/api/filter-views', (req, res) => {
+    try {
+      return res.status(201).json(savedFilterViewRepository.create(req.body ?? {}));
+    } catch (error) {
+      if (error instanceof DuplicateSavedFilterViewNameError) {
+        return res.status(409).json({ error: error.message });
+      }
+
+      if (isValidationError(error)) {
+        return res.status(400).json({ error: error.message });
+      }
+
+      throw error;
+    }
+  });
+
+  app.get('/api/filter-views/:id', (req, res) => {
+    const view = savedFilterViewRepository.getById(req.params.id);
+
+    if (!view) {
+      return res.status(404).json({ error: 'Saved view not found' });
+    }
+
+    return res.status(200).json(view);
+  });
+
+  app.patch('/api/filter-views/:id', (req, res) => {
+    try {
+      const view = savedFilterViewRepository.update(req.params.id, req.body ?? {});
+
+      if (!view) {
+        return res.status(404).json({ error: 'Saved view not found' });
+      }
+
+      return res.status(200).json(view);
+    } catch (error) {
+      if (error instanceof DuplicateSavedFilterViewNameError) {
+        return res.status(409).json({ error: error.message });
+      }
+
+      if (isValidationError(error)) {
+        return res.status(400).json({ error: error.message });
+      }
+
+      throw error;
+    }
+  });
+
+  app.delete('/api/filter-views/:id', (req, res) => {
+    const deleted = savedFilterViewRepository.delete(req.params.id);
+
+    if (!deleted) {
+      return res.status(404).json({ error: 'Saved view not found' });
+    }
+
+    return res.status(204).send();
   });
 
   app.post('/api/import/preview', (req, res) => {

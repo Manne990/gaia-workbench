@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 
 // Add future migrations to MIGRATIONS in version order and bump this value.
 // Existing file-backed databases may start at user_version 0.
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 const createIssuesTable = `
   CREATE TABLE IF NOT EXISTS issues (
@@ -69,6 +69,30 @@ const createIssuesArchivedIndex = `
   ON issues (archived_at, created_at);
 `;
 
+const createSavedFilterViewsTable = `
+  CREATE TABLE IF NOT EXISTS saved_filter_views (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL COLLATE NOCASE,
+    search TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'all' CHECK (status IN ('all', 'todo', 'in_progress', 'review', 'done')),
+    priority TEXT NOT NULL DEFAULT 'all' CHECK (priority IN ('all', 'low', 'medium', 'high')),
+    include_archived INTEGER NOT NULL DEFAULT 0 CHECK (include_archived IN (0, 1)),
+    page_size INTEGER NOT NULL DEFAULT 25 CHECK (page_size >= 1 AND page_size <= 100),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+`;
+
+const createSavedFilterViewsNameIndex = `
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_saved_filter_views_name
+  ON saved_filter_views (name COLLATE NOCASE);
+`;
+
+const createSavedFilterViewsUpdatedAtIndex = `
+  CREATE INDEX IF NOT EXISTS idx_saved_filter_views_updated_at
+  ON saved_filter_views (updated_at);
+`;
+
 type Migration = {
   version: number;
   name: string;
@@ -110,25 +134,35 @@ function runCurrentSchemaMigration(database: Database.Database): void {
   database.exec(createCommentEditHistoryCommentIndex);
 }
 
+function runSavedFilterViewsMigration(database: Database.Database): void {
+  database.exec(createSavedFilterViewsTable);
+  database.exec(createSavedFilterViewsNameIndex);
+  database.exec(createSavedFilterViewsUpdatedAtIndex);
+}
+
 export const TABLE_NAMES = {
   activityEvents: 'activity_events',
   issues: 'issues',
   comments: 'comments',
-  commentEditHistory: 'comment_edit_history'
+  commentEditHistory: 'comment_edit_history',
+  savedFilterViews: 'saved_filter_views'
 } as const;
 
 const REQUIRED_TABLES = [
   TABLE_NAMES.activityEvents,
   TABLE_NAMES.commentEditHistory,
   TABLE_NAMES.comments,
-  TABLE_NAMES.issues
+  TABLE_NAMES.issues,
+  TABLE_NAMES.savedFilterViews
 ] as const;
 
 const REQUIRED_INDEXES = [
   'idx_activity_events_issue_id_created_at',
   'idx_comment_edit_history_comment_id_edited_at',
   'idx_comments_issue_id_created_at',
-  'idx_issues_archived_at_created_at'
+  'idx_issues_archived_at_created_at',
+  'idx_saved_filter_views_name',
+  'idx_saved_filter_views_updated_at'
 ] as const;
 
 const REQUIRED_COLUMNS_BY_TABLE: Record<(typeof REQUIRED_TABLES)[number], readonly string[]> = {
@@ -146,6 +180,17 @@ const REQUIRED_COLUMNS_BY_TABLE: Record<(typeof REQUIRED_TABLES)[number], readon
     'archived_at',
     'created_at',
     'updated_at'
+  ],
+  [TABLE_NAMES.savedFilterViews]: [
+    'id',
+    'name',
+    'search',
+    'status',
+    'priority',
+    'include_archived',
+    'page_size',
+    'created_at',
+    'updated_at'
   ]
 };
 
@@ -154,6 +199,11 @@ const MIGRATIONS: Migration[] = [
     version: 1,
     name: '001_create_current_schema',
     up: runCurrentSchemaMigration
+  },
+  {
+    version: 2,
+    name: '002_create_saved_filter_views',
+    up: runSavedFilterViewsMigration
   }
 ];
 

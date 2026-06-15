@@ -72,6 +72,40 @@ export interface IssueListResult {
   sort: IssueListSort;
 }
 
+export type SavedFilterStatus = 'all' | IssueStatus;
+
+export type SavedFilterPriority = 'all' | IssuePriority;
+
+export interface SavedFilterView {
+  id: string;
+  name: string;
+  search: string;
+  status: SavedFilterStatus;
+  priority: SavedFilterPriority;
+  includeArchived: boolean;
+  pageSize: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NewSavedFilterView {
+  name: string;
+  search?: string;
+  status?: SavedFilterStatus;
+  priority?: SavedFilterPriority;
+  includeArchived?: boolean;
+  pageSize?: number;
+}
+
+export interface SavedFilterViewUpdate {
+  name?: string;
+  search?: string;
+  status?: SavedFilterStatus;
+  priority?: SavedFilterPriority;
+  includeArchived?: boolean;
+  pageSize?: number;
+}
+
 export interface Comment {
   id: string;
   issueId: string;

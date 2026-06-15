@@ -7,6 +7,7 @@ import {
   CommentRepository,
   createDatabase,
   IssueRepository,
+  SavedFilterViewRepository,
   TABLE_NAMES
 } from '../src/db/index.js';
 
@@ -24,7 +25,8 @@ describe('persistence layer', () => {
         TABLE_NAMES.activityEvents,
         TABLE_NAMES.commentEditHistory,
         TABLE_NAMES.comments,
-        TABLE_NAMES.issues
+        TABLE_NAMES.issues,
+        TABLE_NAMES.savedFilterViews
       ]);
 
       const created = issueRepository.create({
@@ -178,6 +180,57 @@ describe('persistence layer', () => {
           dueDate: '2999-12-31',
           isOverdue: false
         });
+      } finally {
+        secondDatabase.close();
+      }
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('persists saved filter views across a file-backed SQLite restart', () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'tinytracker-filter-views-'));
+    const databasePath = path.join(tempDir, 'tracker.sqlite');
+
+    try {
+      const firstDatabase = createDatabase(databasePath);
+      const firstRepository = new SavedFilterViewRepository(firstDatabase);
+      const created = firstRepository.create({
+        name: ' Review backlog ',
+        search: 'api',
+        status: 'review',
+        priority: 'high',
+        includeArchived: true,
+        pageSize: 50
+      });
+
+      firstDatabase.close();
+
+      const secondDatabase = createDatabase(databasePath);
+      const secondRepository = new SavedFilterViewRepository(secondDatabase);
+
+      try {
+        expect(secondRepository.getById(created.id)).toEqual(created);
+        expect(secondRepository.list()).toEqual([created]);
+        expect(() =>
+          secondRepository.create({
+            name: 'review backlog'
+          })
+        ).toThrow('Saved view name already exists');
+
+        const renamed = secondRepository.update(created.id, { name: 'Ops backlog', pageSize: 10 });
+
+        expect(renamed).toMatchObject({
+          id: created.id,
+          name: 'Ops backlog',
+          search: 'api',
+          status: 'review',
+          priority: 'high',
+          includeArchived: true,
+          pageSize: 10
+        });
+        expect(secondRepository.delete(created.id)).toBe(true);
+        expect(secondRepository.getById(created.id)).toBeNull();
       } finally {
         secondDatabase.close();
       }

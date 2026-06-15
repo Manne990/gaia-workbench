@@ -4,11 +4,16 @@ import { useEffect, useRef, useState } from 'react';
 import {
   applyImport,
   archiveIssue,
+  createSavedFilterView,
+  deleteSavedFilterView,
   fetchCommentHistory,
   fetchIssue,
   fetchIssueActivity,
+  fetchSavedFilterView,
+  fetchSavedFilterViews,
   previewImport,
-  unarchiveIssue
+  unarchiveIssue,
+  updateSavedFilterView
 } from './api';
 import { DashboardHeader } from './components/DashboardHeader';
 import { ImportPanel } from './components/ImportPanel';
@@ -32,6 +37,7 @@ import type {
   IssueFormValues,
   ImportPlan,
   PriorityFilter,
+  SavedFilterView,
   StatusFilter
 } from './types';
 import { restoreFocus } from './utils/focus';
@@ -59,6 +65,8 @@ export function App() {
     setPriorityFilter,
     includeArchived,
     setIncludeArchived,
+    pageSize,
+    setPageSize,
     filteredIssues,
     pagination,
     totalIssueCount,
@@ -101,6 +109,11 @@ export function App() {
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [isImportPreviewing, setIsImportPreviewing] = useState(false);
   const [isImportApplying, setIsImportApplying] = useState(false);
+  const [savedViews, setSavedViews] = useState<SavedFilterView[]>([]);
+  const [selectedSavedViewId, setSelectedSavedViewId] = useState('');
+  const [savedViewName, setSavedViewName] = useState('');
+  const [savedViewError, setSavedViewError] = useState<string | null>(null);
+  const [isSavedViewBusy, setIsSavedViewBusy] = useState(false);
   const newIssueButtonRef = useRef<HTMLButtonElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const issueListHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -118,7 +131,8 @@ export function App() {
     search: searchFilter,
     status: statusFilter,
     priority: priorityFilter,
-    includeArchived
+    includeArchived,
+    pageSize
   };
 
   const isIssueDetailLoading = Boolean(selectedIssueId && selectedIssueLoadState === 'loading' && !selectedIssue);
@@ -160,6 +174,24 @@ export function App() {
 
     didCanonicalizeInitialRouteRef.current = true;
     writeRoute(selectedIssueId, dashboardFilters, 'replace');
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadSavedViews() {
+      try {
+        setSavedViews(await fetchSavedFilterViews(controller.signal));
+      } catch {
+        if (!controller.signal.aborted) {
+          setSavedViewError('Unable to load saved views.');
+        }
+      }
+    }
+
+    void loadSavedViews();
+
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {
@@ -208,6 +240,13 @@ export function App() {
     writeDashboardRoute(nextFilters, 'push');
   }
 
+  function handlePageSizeChange(value: number) {
+    const nextFilters = { ...dashboardFilters, pageSize: value };
+
+    setPageSize(value);
+    writeDashboardRoute(nextFilters, 'push');
+  }
+
   function handleClearFilters() {
     clearFilters();
     writeRoute(null, defaultDashboardFilters, 'replace');
@@ -215,6 +254,124 @@ export function App() {
     setSelectedIssue(null);
     setSelectedIssueLoadState('idle');
     detailReturnFocusRef.current = null;
+  }
+
+  function upsertSavedView(view: SavedFilterView) {
+    setSavedViews((current) => {
+      const next = current.some((item) => item.id === view.id)
+        ? current.map((item) => (item.id === view.id ? view : item))
+        : [view, ...current];
+
+      return [...next].sort((left, right) => {
+        const updatedAtSort = right.updatedAt.localeCompare(left.updatedAt);
+
+        return updatedAtSort || left.name.localeCompare(right.name) || left.id.localeCompare(right.id);
+      });
+    });
+    setSelectedSavedViewId(view.id);
+    setSavedViewName(view.name);
+  }
+
+  async function handleSaveCurrentView() {
+    const name = savedViewName.trim();
+
+    if (!name) {
+      setSavedViewError('Saved view name is required.');
+      return;
+    }
+
+    setIsSavedViewBusy(true);
+    setSavedViewError(null);
+
+    try {
+      upsertSavedView(
+        await createSavedFilterView({
+          name,
+          ...dashboardFilters
+        })
+      );
+    } catch (error) {
+      setSavedViewError(error instanceof Error ? error.message : 'Saved view create failed.');
+    } finally {
+      setIsSavedViewBusy(false);
+    }
+  }
+
+  async function handleApplySavedView() {
+    if (!selectedSavedViewId) {
+      setSavedViewError('Choose a saved view to apply.');
+      return;
+    }
+
+    setIsSavedViewBusy(true);
+    setSavedViewError(null);
+
+    try {
+      const view = await fetchSavedFilterView(selectedSavedViewId);
+      const nextFilters: DashboardFilters = {
+        search: view.search,
+        status: view.status,
+        priority: view.priority,
+        includeArchived: view.includeArchived,
+        pageSize: view.pageSize
+      };
+
+      upsertSavedView(view);
+      setDashboardFilters(nextFilters);
+      writeRoute(selectedIssueId, nextFilters, 'push');
+    } catch (error) {
+      setSavedViewError(error instanceof Error ? error.message : 'Saved view apply failed.');
+      setSavedViews((current) => current.filter((view) => view.id !== selectedSavedViewId));
+      setSelectedSavedViewId('');
+    } finally {
+      setIsSavedViewBusy(false);
+    }
+  }
+
+  async function handleRenameSavedView() {
+    const name = savedViewName.trim();
+
+    if (!selectedSavedViewId) {
+      setSavedViewError('Choose a saved view to rename.');
+      return;
+    }
+
+    if (!name) {
+      setSavedViewError('Saved view name is required.');
+      return;
+    }
+
+    setIsSavedViewBusy(true);
+    setSavedViewError(null);
+
+    try {
+      upsertSavedView(await updateSavedFilterView(selectedSavedViewId, { name }));
+    } catch (error) {
+      setSavedViewError(error instanceof Error ? error.message : 'Saved view rename failed.');
+    } finally {
+      setIsSavedViewBusy(false);
+    }
+  }
+
+  async function handleDeleteSavedView() {
+    if (!selectedSavedViewId) {
+      setSavedViewError('Choose a saved view to delete.');
+      return;
+    }
+
+    setIsSavedViewBusy(true);
+    setSavedViewError(null);
+
+    try {
+      await deleteSavedFilterView(selectedSavedViewId);
+      setSavedViews((current) => current.filter((view) => view.id !== selectedSavedViewId));
+      setSelectedSavedViewId('');
+      setSavedViewName('');
+    } catch (error) {
+      setSavedViewError(error instanceof Error ? error.message : 'Saved view delete failed.');
+    } finally {
+      setIsSavedViewBusy(false);
+    }
   }
 
   function resetImportInput() {
@@ -766,6 +923,28 @@ export function App() {
           onPriorityFilterChange={handlePriorityFilterChange}
           includeArchived={includeArchived}
           onIncludeArchivedChange={handleIncludeArchivedChange}
+          pageSize={pageSize}
+          onPageSizeChange={handlePageSizeChange}
+          savedViews={savedViews}
+          selectedSavedViewId={selectedSavedViewId}
+          savedViewName={savedViewName}
+          savedViewError={savedViewError}
+          isSavedViewBusy={isSavedViewBusy}
+          onSavedViewSelect={(viewId) => {
+            const view = savedViews.find((item) => item.id === viewId);
+
+            setSelectedSavedViewId(viewId);
+            setSavedViewName(view?.name ?? '');
+            setSavedViewError(null);
+          }}
+          onSavedViewNameChange={(name) => {
+            setSavedViewName(name);
+            setSavedViewError(null);
+          }}
+          onSaveCurrentView={handleSaveCurrentView}
+          onApplySavedView={handleApplySavedView}
+          onRenameSavedView={handleRenameSavedView}
+          onDeleteSavedView={handleDeleteSavedView}
           issueListHeadingRef={issueListHeadingRef}
           onClearFilters={handleClearFilters}
           onPreviousPage={goToPreviousPage}

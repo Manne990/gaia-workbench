@@ -15,6 +15,7 @@ import {
   IssueDependencyNotFoundError,
   IssueDependencyRepository,
   IssueListFilters,
+  type IssueUpdate,
   IssueRepository,
   SavedFilterViewRepository
 } from './db/index.js';
@@ -96,6 +97,8 @@ const validationErrorMessages = new Set([
   'body is required',
   'Invalid issue status',
   'Invalid issue priority',
+  'Invalid issue payload',
+  'Invalid issue description',
   'Invalid issue labels',
   'Invalid issue due date',
   'Invalid page parameter',
@@ -158,6 +161,18 @@ function getOptionalQueryString(value: unknown): string | undefined {
   }
 
   return undefined;
+}
+
+function getOptionalRequestObject(value: unknown, errorMessage: string): Record<string, unknown> {
+  if (value === undefined) {
+    return {};
+  }
+
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error(errorMessage);
+  }
+
+  return value as Record<string, unknown>;
 }
 
 function parsePositiveIntegerQuery(value: unknown, defaultValue: number, errorMessage: string): number {
@@ -519,7 +534,10 @@ export function createApp(config: AppConfig = {}) {
 
   app.put('/api/issues/:id', (req, res) => {
     try {
-      const issue = issueRepository.update(req.params.id, req.body ?? {});
+      const issue = issueRepository.update(
+        req.params.id,
+        getOptionalRequestObject(req.body, 'Invalid issue payload') as IssueUpdate
+      );
 
       if (!issue) {
         return res.status(404).json({ error: 'Issue not found' });

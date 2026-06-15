@@ -1009,6 +1009,21 @@ describe('issues API', () => {
 
     const created = await request(app).post('/api/issues').send({ title: 'Valid issue' }).expect(201);
 
+    await request(app)
+      .post('/api/issues')
+      .send({ title: 'Invalid description issue', description: { text: 'not a string' } })
+      .expect(400, {
+        error: 'Invalid issue description'
+      });
+
+    await request(app).put(`/api/issues/${created.body.id}`).send({ description: 42 }).expect(400, {
+      error: 'Invalid issue description'
+    });
+
+    await request(app).put(`/api/issues/${created.body.id}`).send([]).expect(400, {
+      error: 'Invalid issue payload'
+    });
+
     await request(app).put(`/api/issues/${created.body.id}`).send({ status: 'done', priority: 'urgent' }).expect(400, {
       error: 'Invalid issue priority'
     });

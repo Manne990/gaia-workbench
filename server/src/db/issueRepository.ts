@@ -66,6 +66,18 @@ function assertNonEmptyString(value: unknown, field: string): asserts value is s
   }
 }
 
+function normalizeIssueDescription(value: unknown): string {
+  if (value === undefined) {
+    return '';
+  }
+
+  if (typeof value !== 'string') {
+    throw new Error('Invalid issue description');
+  }
+
+  return value.trim();
+}
+
 function assertValidStatus(value: unknown): asserts value is IssueStatus {
   if (typeof value !== 'string' || !VALID_STATUSES.includes(value as IssueStatus)) {
     throw new Error('Invalid issue status');
@@ -369,7 +381,7 @@ export class IssueRepository {
     const issue: Issue = {
       id: randomUUID(),
       title: input.title.trim(),
-      description: (input.description ?? '').trim(),
+      description: normalizeIssueDescription(input.description),
       status: input.status ?? DEFAULT_STATUS,
       priority: input.priority ?? DEFAULT_PRIORITY,
       labels: normalizeLabels(input.labels),
@@ -739,7 +751,7 @@ export class IssueRepository {
 
     if (input.description !== undefined) {
       fields.push('description = @description');
-      values.description = input.description.trim();
+      values.description = normalizeIssueDescription(input.description);
     }
 
     if (input.status !== undefined) {

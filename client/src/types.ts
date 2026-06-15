@@ -14,6 +14,30 @@ export type Issue = {
   updatedAt: string;
 };
 
+export type IssueListPagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasMore: boolean;
+  hasPrevious: boolean;
+};
+
+export type IssueListSummary = {
+  totalByStatus: Record<IssueStatus, number>;
+  totalHighPriority: number;
+};
+
+export type IssueListResponse = {
+  items: Issue[];
+  pagination: IssueListPagination;
+  summary: IssueListSummary;
+  sort: {
+    field: 'created_at,id';
+    direction: 'desc,desc';
+  };
+};
+
 export type Comment = {
   id: string;
   issueId: string;

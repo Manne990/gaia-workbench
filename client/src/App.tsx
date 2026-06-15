@@ -40,9 +40,7 @@ export function App() {
 
   const {
     issues,
-    setIssues,
     loadState,
-    setLoadState,
     searchFilter,
     setSearchFilter,
     statusFilter,
@@ -50,12 +48,18 @@ export function App() {
     priorityFilter,
     setPriorityFilter,
     filteredIssues,
+    pagination,
+    totalIssueCount,
     activeFilterSummaries,
     hasActiveFilters,
     statusCounts,
     issueListSummary,
     clearFilters,
-    setDashboardFilters
+    setDashboardFilters,
+    goToPreviousPage,
+    goToNextPage,
+    refreshIssues,
+    returnToFirstPage
   } = useIssueDirectory(initialRouteStateRef.current.filters);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(
     () => initialRouteStateRef.current?.issueId ?? null
@@ -418,12 +422,13 @@ export function App() {
       }
 
       const savedIssue = (await response.json()) as Issue;
-      setIssues((current) =>
-        activeForm.mode === 'create'
-          ? [savedIssue, ...current]
-          : current.map((issue) => (issue.id === savedIssue.id ? savedIssue : issue))
-      );
-      setLoadState('loaded');
+
+      if (activeForm.mode === 'create') {
+        returnToFirstPage();
+      } else {
+        refreshIssues();
+      }
+
       if (selectedIssueId === savedIssue.id) {
         setSelectedIssue(savedIssue);
         setSelectedIssueLoadState('loaded');
@@ -560,7 +565,7 @@ export function App() {
     <main className="app-shell">
       <section className="workspace">
         <DashboardHeader
-          totalIssues={issues.length}
+          totalIssues={totalIssueCount}
           newIssueButtonRef={newIssueButtonRef}
           onCreateIssue={startCreate}
         />
@@ -584,6 +589,8 @@ export function App() {
           loadState={loadState}
           issues={issues}
           filteredIssues={filteredIssues}
+          pagination={pagination}
+          totalIssueCount={totalIssueCount}
           issueListSummary={issueListSummary}
           hasActiveFilters={hasActiveFilters}
           activeFilterSummaries={activeFilterSummaries}
@@ -595,6 +602,8 @@ export function App() {
           onPriorityFilterChange={handlePriorityFilterChange}
           issueListHeadingRef={issueListHeadingRef}
           onClearFilters={handleClearFilters}
+          onPreviousPage={goToPreviousPage}
+          onNextPage={goToNextPage}
           onOpenIssue={openIssue}
           onEditIssue={startEdit}
         />

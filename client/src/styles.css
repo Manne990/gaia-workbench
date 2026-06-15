@@ -1556,6 +1556,15 @@ td > span:not(.pill) {
   white-space: nowrap;
 }
 
+.deep-link-target {
+  scroll-margin-top: 96px;
+}
+
+.deep-link-target:focus-visible {
+  outline: 3px solid #d9ecee;
+  outline-offset: 2px;
+}
+
 .comment-form,
 .comment-edit-form {
   display: grid;

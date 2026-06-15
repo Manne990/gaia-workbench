@@ -361,7 +361,12 @@ export function IssueDetailPanel({
               {activityEvents.length > 0 ? (
                 <ol className="activity-list" aria-label="Issue activity">
                   {activityEvents.map((event) => (
-                    <li key={event.id} className="activity-item">
+                    <li
+                      key={event.id}
+                      id={`activity-${event.id}`}
+                      className="activity-item deep-link-target"
+                      tabIndex={-1}
+                    >
                       <div>
                         <strong>{activityTitle(event)}</strong>
                         <p>{activityDetail(event)}</p>
@@ -435,7 +440,12 @@ export function IssueDetailPanel({
                     const isEditingComment = editingCommentId === comment.id;
 
                     return (
-                      <li key={comment.id} className="comment-item">
+                      <li
+                        key={comment.id}
+                        id={`comment-${comment.id}`}
+                        className="comment-item deep-link-target"
+                        tabIndex={-1}
+                      >
                         <div className="comment-meta">
                           <strong>{formatDate(comment.updatedAt)}</strong>
                           {comment.updatedAt !== comment.createdAt ? <span>Edited</span> : null}

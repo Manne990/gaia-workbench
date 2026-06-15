@@ -847,6 +847,34 @@ h3 {
   font-weight: 700;
 }
 
+.archive-undo-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid #d7e8ef;
+  border-radius: 10px;
+  background: #ecf4f8;
+  color: #153f56;
+  font-size: 0.93rem;
+  font-weight: 700;
+}
+
+.archive-undo-notice span {
+  flex: 1;
+  min-width: 0;
+}
+
+.archive-undo-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .state-message.compact {
   padding: 18px 0;
 }

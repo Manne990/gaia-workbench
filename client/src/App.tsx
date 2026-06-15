@@ -159,6 +159,7 @@ export function App() {
   const commandPaletteFocusReturnRef = useRef<HTMLElement | null>(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState('');
+  const [recentlyArchivedIssue, setRecentlyArchivedIssue] = useState<{ id: string; title: string } | null>(null);
   const didCanonicalizeInitialRouteRef = useRef(false);
 
   const dashboardFilters: DashboardFilters = {
@@ -966,6 +967,7 @@ export function App() {
 
     try {
       const archivedIssue = await archiveIssue(issue.id);
+      setRecentlyArchivedIssue({ id: archivedIssue.id, title: archivedIssue.title });
 
       if (selectedIssueId === archivedIssue.id) {
         setSelectedIssue(archivedIssue);
@@ -980,9 +982,35 @@ export function App() {
     }
   }
 
+  async function handleUndoArchiveIssue(trigger: HTMLElement) {
+    if (!recentlyArchivedIssue) {
+      return;
+    }
+
+    try {
+      const restoredIssue = await unarchiveIssue(recentlyArchivedIssue.id);
+
+      if (selectedIssueId === restoredIssue.id) {
+        setSelectedIssue(restoredIssue);
+        setSelectedIssueLoadState('loaded');
+        await refreshActivity(restoredIssue.id);
+      }
+
+      refreshIssues();
+      setRecentlyArchivedIssue(null);
+      restoreFocus(trigger, () => issueListHeadingRef.current);
+    } catch {
+      restoreFocus(trigger, () => issueListHeadingRef.current);
+    }
+  }
+
   async function handleUnarchiveIssue(issue: Issue, trigger: HTMLElement) {
     try {
       const restoredIssue = await unarchiveIssue(issue.id);
+
+      if (recentlyArchivedIssue?.id === restoredIssue.id) {
+        setRecentlyArchivedIssue(null);
+      }
 
       if (selectedIssueId === restoredIssue.id) {
         setSelectedIssue(restoredIssue);
@@ -995,6 +1023,10 @@ export function App() {
     } catch {
       restoreFocus(trigger, () => issueListHeadingRef.current);
     }
+  }
+
+  function clearArchiveRecovery() {
+    setRecentlyArchivedIssue(null);
   }
 
   async function submitIssue(event: FormEvent<HTMLFormElement>) {
@@ -1288,6 +1320,9 @@ export function App() {
           onEditIssue={startEdit}
           onArchiveIssue={handleArchiveIssue}
           onUnarchiveIssue={handleUnarchiveIssue}
+          recentlyArchivedIssue={recentlyArchivedIssue}
+          onUndoArchiveIssue={(trigger) => handleUndoArchiveIssue(trigger)}
+          onDismissArchiveRecovery={clearArchiveRecovery}
         />
 
         <IssueDetailPanel

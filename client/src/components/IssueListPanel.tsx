@@ -56,6 +56,9 @@ type IssueListPanelProps = {
   onEditIssue: (issue: Issue, trigger: HTMLElement) => void;
   onArchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
   onUnarchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
+  recentlyArchivedIssue: { id: string; title: string } | null;
+  onUndoArchiveIssue: (trigger: HTMLElement) => void;
+  onDismissArchiveRecovery: () => void;
 };
 
 export function IssueListPanel({
@@ -100,10 +103,32 @@ export function IssueListPanel({
   onOpenIssue,
   onEditIssue,
   onArchiveIssue,
-  onUnarchiveIssue
+  onUnarchiveIssue,
+  recentlyArchivedIssue,
+  onUndoArchiveIssue,
+  onDismissArchiveRecovery
 }: IssueListPanelProps) {
   return (
     <section className="issue-panel" aria-labelledby="issue-list-heading" aria-busy={loadState === 'loading'}>
+      {recentlyArchivedIssue ? (
+        <div className="archive-undo-notice" role="status">
+          <span>{`Issue "${recentlyArchivedIssue.title}" archived.`}</span>
+          <div className="archive-undo-actions">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={(event) => onUndoArchiveIssue(event.currentTarget)}
+              aria-label={`Undo archive of ${recentlyArchivedIssue.title}`}
+            >
+              Undo archive
+            </button>
+            <button type="button" className="ghost-button" onClick={onDismissArchiveRecovery}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="panel-header">
         <div>
           <h2 id="issue-list-heading" ref={issueListHeadingRef} tabIndex={-1}>

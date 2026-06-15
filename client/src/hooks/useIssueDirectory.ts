@@ -39,6 +39,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
   const [searchFilter, setSearchFilter] = useState(initialFilters.search);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialFilters.status);
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>(initialFilters.priority);
+  const [includeArchived, setIncludeArchived] = useState(initialFilters.includeArchived);
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState<IssueListPagination>(defaultPagination);
   const [summary, setSummary] = useState<IssueListSummary>(defaultSummary);
@@ -64,6 +65,10 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
 
       if (priorityFilter !== 'all') {
         params.set('priority', priorityFilter);
+      }
+
+      if (includeArchived) {
+        params.set('includeArchived', 'true');
       }
 
       try {
@@ -96,7 +101,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     void loadIssues();
 
     return () => controller.abort();
-  }, [currentPage, priorityFilter, reloadToken, searchFilter, statusFilter]);
+  }, [currentPage, includeArchived, priorityFilter, reloadToken, searchFilter, statusFilter]);
 
   const activeFilterSummaries = useMemo(() => {
     const filters: ActiveFilterSummary[] = [];
@@ -114,8 +119,12 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
       filters.push({ key: 'priority', label: 'Priority', value: priorityLabels[priorityFilter] });
     }
 
+    if (includeArchived) {
+      filters.push({ key: 'includeArchived', label: 'Archived', value: 'Included' });
+    }
+
     return filters;
-  }, [priorityFilter, searchFilter, statusFilter]);
+  }, [includeArchived, priorityFilter, searchFilter, statusFilter]);
 
   const hasActiveFilters = activeFilterSummaries.length > 0;
 
@@ -143,6 +152,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     setSearchFilter('');
     setStatusFilter('all');
     setPriorityFilter('all');
+    setIncludeArchived(false);
     setCurrentPage(1);
   }
 
@@ -150,6 +160,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     setSearchFilter(filters.search);
     setStatusFilter(filters.status);
     setPriorityFilter(filters.priority);
+    setIncludeArchived(filters.includeArchived);
     setCurrentPage(1);
   }
 
@@ -165,6 +176,11 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
 
   function setPriorityFilterAndResetPage(value: PriorityFilter) {
     setPriorityFilter(value);
+    setCurrentPage(1);
+  }
+
+  function setIncludeArchivedAndResetPage(value: boolean) {
+    setIncludeArchived(value);
     setCurrentPage(1);
   }
 
@@ -194,6 +210,8 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     setStatusFilter: setStatusFilterAndResetPage,
     priorityFilter,
     setPriorityFilter: setPriorityFilterAndResetPage,
+    includeArchived,
+    setIncludeArchived: setIncludeArchivedAndResetPage,
     currentPage,
     pagination,
     summary,

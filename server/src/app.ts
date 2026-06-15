@@ -79,7 +79,8 @@ const validationErrorMessages = new Set([
   'Invalid issue labels',
   'Invalid issue due date',
   'Invalid page parameter',
-  'Invalid limit parameter'
+  'Invalid limit parameter',
+  'Invalid includeArchived parameter'
 ]);
 
 function isValidationError(error: unknown): error is Error {
@@ -161,6 +162,24 @@ function getIssueListPagination(query: { page?: unknown; limit?: unknown }) {
   }
 
   return { page, limit };
+}
+
+function parseOptionalBooleanQuery(value: unknown, defaultValue: boolean, errorMessage: string): boolean {
+  const queryValue = getOptionalQueryString(value);
+
+  if (queryValue === undefined) {
+    return defaultValue;
+  }
+
+  if (queryValue === 'true') {
+    return true;
+  }
+
+  if (queryValue === 'false') {
+    return false;
+  }
+
+  throw new Error(errorMessage);
 }
 
 function groupBy<T>(items: T[], keySelector: (item: T) => string): Map<string, T[]> {
@@ -257,13 +276,18 @@ export function createApp(config: AppConfig = {}) {
   });
 
   app.get('/api/issues', (req, res) => {
-    const filters: IssueListFilters = {
-      status: getOptionalQueryString(req.query.status) as IssueListFilters['status'],
-      priority: getOptionalQueryString(req.query.priority) as IssueListFilters['priority'],
-      search: getOptionalQueryString(req.query.search)
-    };
-
     try {
+      const filters: IssueListFilters = {
+        status: getOptionalQueryString(req.query.status) as IssueListFilters['status'],
+        priority: getOptionalQueryString(req.query.priority) as IssueListFilters['priority'],
+        search: getOptionalQueryString(req.query.search),
+        includeArchived: parseOptionalBooleanQuery(
+          req.query.includeArchived,
+          false,
+          'Invalid includeArchived parameter'
+        )
+      };
+
       return res.status(200).json(issueRepository.list(filters, getIssueListPagination(req.query)));
     } catch (error) {
       if (isValidationError(error)) {
@@ -324,6 +348,26 @@ export function createApp(config: AppConfig = {}) {
 
   app.post('/api/issues/:id/reopen', (req, res) => {
     const issue = issueRepository.reopen(req.params.id);
+
+    if (!issue) {
+      return res.status(404).json({ error: 'Issue not found' });
+    }
+
+    return res.status(200).json(issue);
+  });
+
+  app.post('/api/issues/:id/archive', (req, res) => {
+    const issue = issueRepository.archive(req.params.id);
+
+    if (!issue) {
+      return res.status(404).json({ error: 'Issue not found' });
+    }
+
+    return res.status(200).json(issue);
+  });
+
+  app.post('/api/issues/:id/unarchive', (req, res) => {
+    const issue = issueRepository.unarchive(req.params.id);
 
     if (!issue) {
       return res.status(404).json({ error: 'Issue not found' });

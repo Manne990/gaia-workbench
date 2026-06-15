@@ -211,6 +211,12 @@ h1 {
   border-bottom: 1px solid #e4e8ec;
 }
 
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 h2 {
   margin: 0;
   font-size: 1.15rem;
@@ -239,7 +245,7 @@ h3 {
 
 .filter-panel {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(150px, 180px) minmax(150px, 180px) auto;
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 180px) minmax(150px, 180px) minmax(144px, auto) auto;
   gap: 14px;
   align-items: end;
   padding: 16px 20px;
@@ -248,15 +254,37 @@ h3 {
 }
 
 .filter-field,
-.filter-field span {
+.filter-field span,
+.filter-toggle span {
   display: block;
 }
 
-.filter-field span {
+.filter-field span,
+.filter-toggle span {
   margin-bottom: 7px;
   color: #4c5661;
   font-size: 0.82rem;
   font-weight: 800;
+}
+
+.filter-toggle {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 9px;
+  color: #4c5661;
+  font-weight: 800;
+}
+
+.filter-toggle input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #245d61;
+}
+
+.filter-toggle span {
+  margin-bottom: 0;
 }
 
 .filter-field input,
@@ -559,6 +587,14 @@ td > span:not(.pill) {
   border-bottom-color: #efd7c7;
 }
 
+.archived-row {
+  background: #f5f6f7;
+}
+
+.archived-row td {
+  color: #59636e;
+}
+
 .label-row {
   display: flex;
   flex-wrap: wrap;
@@ -609,6 +645,23 @@ td > span:not(.pill) {
   border-radius: 999px;
   background: #fae8e5;
   color: #9a2f2f;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.archived-pill {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  min-height: 24px;
+  margin: 0 0 8px;
+  padding: 4px 8px;
+  border: 1px solid #cfd6dd;
+  border-radius: 999px;
+  background: #edf1f5;
+  color: #52606d;
   font-size: 0.78rem;
   font-weight: 800;
   line-height: 1;
@@ -672,9 +725,31 @@ td > span:not(.pill) {
   padding: 20px;
 }
 
+.archive-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border: 1px solid #cfd6dd;
+  border-radius: 8px;
+  background: #f5f6f7;
+  color: #30363d;
+}
+
+.archive-banner strong {
+  color: #15181c;
+}
+
+.archive-banner span {
+  color: #59636e;
+  font-weight: 700;
+}
+
 .issue-detail-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -921,14 +996,17 @@ td > span:not(.pill) {
   }
 
   .header-actions,
-  .form-actions {
+  .form-actions,
+  .panel-actions,
+  .archive-banner {
     align-items: stretch;
     flex-direction: column;
   }
 
   .header-actions .primary-button,
   .header-actions .button-link,
-  .form-actions button {
+  .form-actions button,
+  .panel-actions button {
     width: 100%;
   }
 

@@ -11,6 +11,7 @@ export interface Issue {
   labels: string[];
   dueDate: string | null;
   isOverdue: boolean;
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -37,6 +38,7 @@ export interface IssueListFilters {
   status?: IssueStatus;
   priority?: IssuePriority;
   search?: string;
+  includeArchived?: boolean;
 }
 
 export interface IssueListPaginationInput {
@@ -103,6 +105,8 @@ export type ActivityEventType =
   | 'issue_priority_changed'
   | 'issue_due_date_changed'
   | 'issue_labels_changed'
+  | 'issue_archived'
+  | 'issue_unarchived'
   | 'comment_added'
   | 'comment_edited';
 

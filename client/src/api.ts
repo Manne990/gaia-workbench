@@ -37,6 +37,26 @@ export async function fetchIssueActivity(issueId: string, signal?: AbortSignal):
   return (await response.json()) as ActivityEvent[];
 }
 
+async function postIssueAction(issueId: string, action: 'archive' | 'unarchive'): Promise<Issue> {
+  const response = await fetch(`/api/issues/${issueId}/${action}`, {
+    method: 'POST'
+  });
+
+  if (!response.ok) {
+    throw new Error(`Issue ${action} request failed`);
+  }
+
+  return (await response.json()) as Issue;
+}
+
+export function archiveIssue(issueId: string): Promise<Issue> {
+  return postIssueAction(issueId, 'archive');
+}
+
+export function unarchiveIssue(issueId: string): Promise<Issue> {
+  return postIssueAction(issueId, 'unarchive');
+}
+
 async function readImportPlan(response: Response): Promise<ImportPlan> {
   const body = (await response.json().catch(() => null)) as ImportPlan | null;
 

@@ -23,6 +23,7 @@ describe('issues API', () => {
       priority: 'medium',
       labels: ['api', 'backend'],
       dueDate: '2999-12-31',
+      archivedAt: null,
       isOverdue: false
     });
     expect(created.body.id).toEqual(expect.any(String));
@@ -290,6 +291,102 @@ describe('issues API', () => {
     });
   });
 
+  it('archives and unarchives issues without deleting detail comments or activity', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const archivedCandidate = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Archive me', priority: 'high' })
+      .expect(201);
+    const activeIssue = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Keep active', priority: 'medium' })
+      .expect(201);
+    const comment = await request(app)
+      .post(`/api/issues/${archivedCandidate.body.id}/comments`)
+      .send({ body: 'Comment stays visible after archive' })
+      .expect(201);
+
+    const archived = await request(app)
+      .post(`/api/issues/${archivedCandidate.body.id}/archive`)
+      .expect(200);
+
+    expect(archived.body).toMatchObject({
+      id: archivedCandidate.body.id,
+      title: 'Archive me'
+    });
+    expect(archived.body.archivedAt).toEqual(expect.any(String));
+
+    const defaultList = await request(app).get('/api/issues').expect(200);
+
+    expect(defaultList.body.items.map((issue: { id: string }) => issue.id)).toEqual([activeIssue.body.id]);
+    expect(defaultList.body.pagination.total).toBe(1);
+    expect(defaultList.body.summary).toMatchObject({
+      totalByStatus: {
+        todo: 1,
+        in_progress: 0,
+        review: 0,
+        done: 0
+      },
+      totalHighPriority: 0
+    });
+
+    const includeArchivedList = await request(app).get('/api/issues?includeArchived=true').expect(200);
+
+    expect(includeArchivedList.body.items.map((issue: { id: string }) => issue.id)).toEqual(
+      expect.arrayContaining([archivedCandidate.body.id, activeIssue.body.id])
+    );
+    expect(includeArchivedList.body.pagination.total).toBe(2);
+    expect(includeArchivedList.body.summary.totalHighPriority).toBe(1);
+
+    await request(app).get(`/api/issues/${archivedCandidate.body.id}`).expect(200, archived.body);
+    await request(app).get(`/api/issues/${archivedCandidate.body.id}/comments`).expect(200, [
+      comment.body
+    ]);
+
+    const archivedActivity = await request(app)
+      .get(`/api/issues/${archivedCandidate.body.id}/activity`)
+      .expect(200);
+
+    expect(archivedActivity.body.map((event: { type: string }) => event.type)).toEqual([
+      'issue_created',
+      'comment_added',
+      'issue_archived'
+    ]);
+
+    const archivedAgain = await request(app)
+      .post(`/api/issues/${archivedCandidate.body.id}/archive`)
+      .expect(200);
+
+    expect(archivedAgain.body).toEqual(archived.body);
+    await request(app)
+      .get(`/api/issues/${archivedCandidate.body.id}/activity`)
+      .expect(200, archivedActivity.body);
+
+    const unarchived = await request(app)
+      .post(`/api/issues/${archivedCandidate.body.id}/unarchive`)
+      .expect(200);
+
+    expect(unarchived.body).toMatchObject({
+      id: archivedCandidate.body.id,
+      archivedAt: null
+    });
+
+    const restoredList = await request(app).get('/api/issues').expect(200);
+    expect(restoredList.body.pagination.total).toBe(2);
+
+    const finalActivity = await request(app)
+      .get(`/api/issues/${archivedCandidate.body.id}/activity`)
+      .expect(200);
+
+    expect(finalActivity.body.map((event: { type: string }) => event.type)).toEqual([
+      'issue_created',
+      'comment_added',
+      'issue_archived',
+      'issue_unarchived'
+    ]);
+  });
+
   it('returns validation errors for invalid issue payloads', async () => {
     const app = createApp({ databasePath: ':memory:' });
 
@@ -330,6 +427,10 @@ describe('issues API', () => {
       error: 'Invalid limit parameter'
     });
 
+    await request(app).get('/api/issues?includeArchived=yes').expect(400, {
+      error: 'Invalid includeArchived parameter'
+    });
+
     await request(app)
       .put(`/api/issues/${created.body.id}`)
       .send({ labels: [''] })
@@ -368,6 +469,14 @@ describe('issues API', () => {
     });
 
     await request(app).post('/api/issues/not-found/reopen').expect(404, {
+      error: 'Issue not found'
+    });
+
+    await request(app).post('/api/issues/not-found/archive').expect(404, {
+      error: 'Issue not found'
+    });
+
+    await request(app).post('/api/issues/not-found/unarchive').expect(404, {
       error: 'Issue not found'
     });
   });

@@ -293,6 +293,62 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
   await expect(detail.getByLabel('Issue activity').getByText('Issue created')).toBeVisible();
 });
 
+test('archives hides restores and preserves issue activity', async ({ page }) => {
+  const issue = await createIssueThroughApi(page, {
+    title: 'Archive recovery issue',
+    description: 'Archived issues stay recoverable.',
+    priority: 'high'
+  });
+
+  await page.goto('/?search=Archive%20recovery%20issue');
+
+  const filters = page.getByLabel('Issue filters');
+  const includeArchived = filters.getByLabel('Include archived');
+  const issueRow = page.getByRole('row', { name: /Archive recovery issue.*Todo.*High/ });
+
+  await expect(includeArchived).not.toBeChecked();
+  await expect(issueRow).toBeVisible();
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Archive "Archive recovery issue"?');
+    await dialog.accept();
+  });
+  await page.getByRole('button', { name: 'Archive Archive recovery issue' }).click();
+
+  await expect(issueRow).toHaveCount(0);
+  await expect(page.getByText('No issues match the active filters.')).toBeVisible();
+
+  await includeArchived.check();
+  await expect(page.getByLabel('Active filters')).toContainText('Archived: Included');
+  await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBe('true');
+  await expect(issueRow).toBeVisible();
+  await expect(issueRow.locator('.archived-pill')).toHaveText('Archived');
+
+  await page.getByRole('button', { name: 'Open Archive recovery issue' }).click();
+
+  const detail = page.getByRole('region', { name: issue.title });
+
+  await expect(detail.getByRole('heading', { name: issue.title })).toBeVisible();
+  await expect(detail.getByText('Hidden from the active dashboard since')).toBeVisible();
+  await expect(detail.getByLabel('Issue activity').getByText('Issue archived')).toBeVisible();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${issue.id}`);
+  await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBe('true');
+
+  await detail.getByRole('button', { name: 'Unarchive' }).click();
+
+  await expect(detail.getByText('Hidden from the active dashboard since')).toHaveCount(0);
+  await expect(detail.getByLabel('Issue activity').getByText('Issue restored')).toBeVisible();
+
+  await detail.getByRole('button', { name: `Close issue detail for ${issue.title}` }).click();
+
+  await expect(issueRow).toBeVisible();
+  await expect(issueRow.locator('.archived-pill')).toHaveCount(0);
+
+  await includeArchived.uncheck();
+  await expect(issueRow).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBeNull();
+});
+
 test('keyboard users can create open comment edit and close an issue', async ({ page }) => {
   await page.goto('/');
 

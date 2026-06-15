@@ -34,6 +34,8 @@ type IssueDetailPanelProps = {
   commentsHeadingRef: RefObject<HTMLHeadingElement | null>;
   editCommentTextareaRef: RefObject<HTMLTextAreaElement | null>;
   onCloseIssueDetail: () => void;
+  onArchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
+  onUnarchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
   onSubmitComment: (event: FormEvent<HTMLFormElement>) => void;
   onStartEditComment: (comment: Comment, trigger: HTMLElement) => void;
   onCancelEditComment: (commentId: string) => void;
@@ -64,6 +66,8 @@ export function IssueDetailPanel({
   commentsHeadingRef,
   editCommentTextareaRef,
   onCloseIssueDetail,
+  onArchiveIssue,
+  onUnarchiveIssue,
   onSubmitComment,
   onStartEditComment,
   onCancelEditComment,
@@ -94,17 +98,43 @@ export function IssueDetailPanel({
               </h2>
               <p>Updated {formatDate(selectedIssue.updatedAt)}</p>
             </div>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={onCloseIssueDetail}
-              aria-label={`Close issue detail for ${selectedIssue.title}`}
-            >
-              Close
-            </button>
+            <div className="panel-actions">
+              {selectedIssue.archivedAt ? (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={(event) => onUnarchiveIssue(selectedIssue, event.currentTarget)}
+                >
+                  Unarchive
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={(event) => onArchiveIssue(selectedIssue, event.currentTarget)}
+                >
+                  Archive
+                </button>
+              )}
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={onCloseIssueDetail}
+                aria-label={`Close issue detail for ${selectedIssue.title}`}
+              >
+                Close
+              </button>
+            </div>
           </div>
 
           <div className="detail-content">
+            {selectedIssue.archivedAt ? (
+              <div className="archive-banner" role="status">
+                <strong>Archived</strong>
+                <span>Hidden from the active dashboard since {formatDate(selectedIssue.archivedAt)}.</span>
+              </div>
+            ) : null}
+
             <div className="issue-detail-grid" aria-label="Issue details">
               <div>
                 <span>Status</span>
@@ -126,6 +156,10 @@ export function IssueDetailPanel({
               <div>
                 <span>Comments</span>
                 <strong>{comments.length}</strong>
+              </div>
+              <div>
+                <span>Archive</span>
+                <strong>{selectedIssue.archivedAt ? 'Archived' : 'Active'}</strong>
               </div>
             </div>
 

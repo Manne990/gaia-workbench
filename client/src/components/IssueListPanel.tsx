@@ -25,12 +25,16 @@ type IssueListPanelProps = {
   onStatusFilterChange: (value: StatusFilter) => void;
   priorityFilter: PriorityFilter;
   onPriorityFilterChange: (value: PriorityFilter) => void;
+  includeArchived: boolean;
+  onIncludeArchivedChange: (value: boolean) => void;
   issueListHeadingRef: RefObject<HTMLHeadingElement | null>;
   onClearFilters: () => void;
   onPreviousPage: () => void;
   onNextPage: () => void;
   onOpenIssue: (issue: Issue, trigger: HTMLElement) => void;
   onEditIssue: (issue: Issue, trigger: HTMLElement) => void;
+  onArchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
+  onUnarchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
 };
 
 export function IssueListPanel({
@@ -48,12 +52,16 @@ export function IssueListPanel({
   onStatusFilterChange,
   priorityFilter,
   onPriorityFilterChange,
+  includeArchived,
+  onIncludeArchivedChange,
   issueListHeadingRef,
   onClearFilters,
   onPreviousPage,
   onNextPage,
   onOpenIssue,
-  onEditIssue
+  onEditIssue,
+  onArchiveIssue,
+  onUnarchiveIssue
 }: IssueListPanelProps) {
   return (
     <section className="issue-panel" aria-labelledby="issue-list-heading" aria-busy={loadState === 'loading'}>
@@ -111,6 +119,16 @@ export function IssueListPanel({
           </select>
         </label>
 
+        <label className="filter-toggle" htmlFor="issue-include-archived-filter">
+          <input
+            id="issue-include-archived-filter"
+            type="checkbox"
+            checked={includeArchived}
+            onChange={(event) => onIncludeArchivedChange(event.target.checked)}
+          />
+          <span>Include archived</span>
+        </label>
+
         <div className="filter-actions">
           <button type="button" className="secondary-button" onClick={onClearFilters} disabled={!hasActiveFilters}>
             Clear Filters
@@ -140,15 +158,17 @@ export function IssueListPanel({
       ) : null}
 
       {loadState === 'loaded' && issues.length === 0 ? (
-        totalIssueCount === 0 ? (
-          <div className="state-message">No issues yet.</div>
-        ) : pagination.total === 0 ? (
-          <div className="state-message filtered-empty">
-            <strong>No issues match the active filters.</strong>
-            <button type="button" className="secondary-button" onClick={onClearFilters}>
-              Clear Filters
-            </button>
-          </div>
+        pagination.total === 0 ? (
+          hasActiveFilters || totalIssueCount > 0 ? (
+            <div className="state-message filtered-empty">
+              <strong>No issues match the active filters.</strong>
+              <button type="button" className="secondary-button" onClick={onClearFilters}>
+                Clear Filters
+              </button>
+            </div>
+          ) : (
+            <div className="state-message">No issues yet.</div>
+          )
         ) : (
           <div className="state-message filtered-empty">
             <strong>No issues on this page.</strong>
@@ -180,9 +200,16 @@ export function IssueListPanel({
               </thead>
               <tbody>
                 {filteredIssues.map((issue) => (
-                  <tr key={issue.id} className={issue.isOverdue ? 'overdue-row' : undefined}>
+                  <tr
+                    key={issue.id}
+                    className={[
+                      issue.isOverdue ? 'overdue-row' : '',
+                      issue.archivedAt ? 'archived-row' : ''
+                    ].filter(Boolean).join(' ') || undefined}
+                  >
                     <td>
                       <strong>{issue.title}</strong>
+                      {issue.archivedAt ? <span className="archived-pill">Archived</span> : null}
                       {issue.description ? <span>{issue.description}</span> : null}
                       {issue.labels.length > 0 ? (
                         <div className="label-row" aria-label={`Labels for ${issue.title}`}>
@@ -227,6 +254,25 @@ export function IssueListPanel({
                         >
                           Edit
                         </button>
+                        {issue.archivedAt ? (
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={(event) => onUnarchiveIssue(issue, event.currentTarget)}
+                            aria-label={`Unarchive ${issue.title}`}
+                          >
+                            Unarchive
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={(event) => onArchiveIssue(issue, event.currentTarget)}
+                            aria-label={`Archive ${issue.title}`}
+                          >
+                            Archive
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

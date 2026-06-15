@@ -18,6 +18,7 @@ type ExportedComment = {
 type ExportedIssue = {
   id: string;
   status: string;
+  archivedAt?: string | null;
   comments: ExportedComment[];
   activityEvents: Array<{ id: string; issueId: string }>;
 };
@@ -108,6 +109,30 @@ async function createExportFixture(): Promise<TrackerExport> {
   return exported.body as TrackerExport;
 }
 
+async function createArchivedExportFixture(): Promise<TrackerExport> {
+  const app = createApp({ databasePath: ':memory:' });
+
+  const created = await request(app)
+    .post('/api/issues')
+    .send({
+      title: 'Archived import source',
+      description: 'Hidden by default after import',
+      priority: 'high'
+    })
+    .expect(201);
+
+  await request(app)
+    .post(`/api/issues/${created.body.id}/comments`)
+    .send({ body: 'Archived issue comment remains available' })
+    .expect(201);
+
+  await request(app).post(`/api/issues/${created.body.id}/archive`).expect(200);
+
+  const exported = await request(app).get('/api/export').expect(200);
+
+  return exported.body as TrackerExport;
+}
+
 describe('tracker import API', () => {
   it('previews a valid export without mutating the target database', async () => {
     const targetApp = createApp({ databasePath: ':memory:' });
@@ -163,6 +188,61 @@ describe('tracker import API', () => {
       }
     });
     expect(exportedAfterImport.body).toEqual(payload);
+  });
+
+  it('applies archived issues and keeps them hidden from the default list', async () => {
+    const targetApp = createApp({ databasePath: ':memory:' });
+    const payload = await createArchivedExportFixture();
+    const [sourceIssue] = payload.issues;
+
+    expect(sourceIssue.archivedAt).toEqual(expect.any(String));
+
+    await request(targetApp).post('/api/import/apply').send(payload).expect(200);
+
+    const defaultList = await request(targetApp).get('/api/issues').expect(200);
+    const includeArchivedList = await request(targetApp).get('/api/issues?includeArchived=true').expect(200);
+    const importedDetail = await request(targetApp).get(`/api/issues/${sourceIssue.id}`).expect(200);
+    const importedComments = await request(targetApp).get(`/api/issues/${sourceIssue.id}/comments`).expect(200);
+    const importedActivity = await request(targetApp).get(`/api/issues/${sourceIssue.id}/activity`).expect(200);
+    const exportedAfterImport = await request(targetApp).get('/api/export').expect(200);
+
+    expect(defaultList.body.pagination.total).toBe(0);
+    expect(includeArchivedList.body.pagination.total).toBe(1);
+    expect(includeArchivedList.body.items[0]).toMatchObject({
+      id: sourceIssue.id,
+      archivedAt: sourceIssue.archivedAt
+    });
+    expect(importedDetail.body).toMatchObject({
+      id: sourceIssue.id,
+      archivedAt: sourceIssue.archivedAt
+    });
+    expect(importedComments.body).toHaveLength(1);
+    expect(importedActivity.body.map((event: { type: string }) => event.type)).toEqual([
+      'issue_created',
+      'comment_added',
+      'issue_archived'
+    ]);
+    expect(exportedAfterImport.body).toEqual(payload);
+  });
+
+  it('treats missing archivedAt in legacy exports as active issues', async () => {
+    const targetApp = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const legacyPayload = cloneExport(payload);
+
+    legacyPayload.issues.forEach((issue) => {
+      delete issue.archivedAt;
+    });
+
+    await request(targetApp).post('/api/import/apply').send(legacyPayload).expect(200);
+
+    const defaultList = await request(targetApp).get('/api/issues').expect(200);
+    const exportedAfterImport = await request(targetApp).get('/api/export').expect(200);
+
+    expect(defaultList.body.pagination.total).toBe(payload.issues.length);
+    expect(exportedAfterImport.body.issues.map((issue: ExportedIssue) => issue.archivedAt)).toEqual(
+      payload.issues.map(() => null)
+    );
   });
 
   it('re-imports the same export as a deterministic no-op', async () => {
@@ -263,6 +343,28 @@ describe('tracker import API', () => {
       ])
     );
     expect(afterImport.body).toEqual(beforeImport.body);
+  });
+
+  it('rejects invalid archivedAt values without mutating existing data', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const invalidArchivePayload = cloneExport(payload);
+
+    invalidArchivePayload.issues[0].archivedAt = 'not-a-timestamp';
+
+    const response = await request(app).post('/api/import/apply').send(invalidArchivePayload).expect(400);
+    const afterImport = await request(app).get('/api/export').expect(200);
+
+    expect(response.body.valid).toBe(false);
+    expect(response.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'invalid_timestamp',
+          path: '$.issues[0].archivedAt'
+        })
+      ])
+    );
+    expect(afterImport.body.issues).toEqual([]);
   });
 
   it('rejects duplicate IDs inside the import payload', async () => {

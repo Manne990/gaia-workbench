@@ -256,9 +256,10 @@ data/tinytracker.sqlite
 ### Schema Versioning
 
 TinyTracker stores its SQLite schema version in `PRAGMA user_version`. The
-current application schema is version `3`, which includes issues, comments,
+current application schema is version `6`, which includes issues, comments,
 comment edit history, activity events, labels, due dates, archive state, saved
-filter views, issue dependency links, and the current query indexes. This is
+filter views with blocked, stale, and label filters, issue dependency links,
+and the current query indexes. This is
 separate from tracker JSON `exportVersion`.
 
 Startup runs the schema migration path through `createDatabase()`. Fresh

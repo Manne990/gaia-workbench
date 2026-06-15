@@ -44,7 +44,14 @@ export function DashboardHeader({
         <a className="button-link secondary-button" href="/api/export" download="tinytracker-export.json">
           Download JSON
         </a>
-        <input ref={importInputRef} type="file" accept="application/json,.json" hidden onChange={onChooseImportFile} />
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json,.json"
+          aria-label="Import JSON file"
+          hidden
+          onChange={onChooseImportFile}
+        />
         <button type="button" className="secondary-button" onClick={() => importInputRef.current?.click()}>
           Import JSON
         </button>

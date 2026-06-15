@@ -101,6 +101,7 @@ const validationErrorMessages = new Set([
   'Invalid limit parameter',
   'Invalid includeArchived parameter',
   'Invalid blockedOnly parameter',
+  'Invalid staleOnly parameter',
   'Saved view name is required',
   'Invalid saved view name',
   'Invalid saved view search',
@@ -108,6 +109,7 @@ const validationErrorMessages = new Set([
   'Invalid saved view priority',
   'Invalid saved view includeArchived',
   'Invalid saved view blockedOnly',
+  'Invalid saved view staleOnly',
   'Invalid saved view pageSize'
 ]);
 
@@ -363,7 +365,8 @@ export function createApp(config: AppConfig = {}) {
           false,
           'Invalid includeArchived parameter'
         ),
-        blockedOnly: parseOptionalBooleanQuery(req.query.blockedOnly, false, 'Invalid blockedOnly parameter')
+        blockedOnly: parseOptionalBooleanQuery(req.query.blockedOnly, false, 'Invalid blockedOnly parameter'),
+        staleOnly: parseOptionalBooleanQuery(req.query.staleOnly, false, 'Invalid staleOnly parameter')
       };
 
       return res.status(200).json(issueRepository.list(filters, getIssueListPagination(req.query)));
@@ -386,7 +389,8 @@ export function createApp(config: AppConfig = {}) {
           false,
           'Invalid includeArchived parameter'
         ),
-        blockedOnly: parseOptionalBooleanQuery(req.query.blockedOnly, false, 'Invalid blockedOnly parameter')
+        blockedOnly: parseOptionalBooleanQuery(req.query.blockedOnly, false, 'Invalid blockedOnly parameter'),
+        staleOnly: parseOptionalBooleanQuery(req.query.staleOnly, false, 'Invalid staleOnly parameter')
       };
 
       return res.status(200).json(issueRepository.getAuditSummary(filters));

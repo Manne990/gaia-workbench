@@ -203,6 +203,7 @@ describe('persistence layer', () => {
         status: 'review',
         priority: 'high',
         includeArchived: true,
+        staleOnly: true,
         pageSize: 50
       });
 
@@ -229,6 +230,7 @@ describe('persistence layer', () => {
           status: 'review',
           priority: 'high',
           includeArchived: true,
+          staleOnly: true,
           pageSize: 10
         });
         expect(secondRepository.delete(created.id)).toBe(true);

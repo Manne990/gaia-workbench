@@ -86,6 +86,8 @@ export function App() {
     setIncludeArchived,
     blockedOnly,
     setBlockedOnly,
+    staleOnly,
+    setStaleOnly,
     pageSize,
     setPageSize,
     filteredIssues,
@@ -168,6 +170,7 @@ export function App() {
     priority: priorityFilter,
     includeArchived,
     blockedOnly,
+    staleOnly,
     pageSize
   };
   const commandPaletteCommands = useMemo(
@@ -463,6 +466,13 @@ export function App() {
     writeDashboardRoute(nextFilters, 'push');
   }
 
+  function handleStaleOnlyChange(value: boolean) {
+    const nextFilters = { ...dashboardFilters, staleOnly: value };
+
+    setStaleOnly(value);
+    writeDashboardRoute(nextFilters, 'push');
+  }
+
   function handlePageSizeChange(value: number) {
     const nextFilters = { ...dashboardFilters, pageSize: value };
 
@@ -537,6 +547,7 @@ export function App() {
         priority: view.priority,
         includeArchived: view.includeArchived,
         blockedOnly: view.blockedOnly,
+        staleOnly: view.staleOnly,
         pageSize: view.pageSize
       };
 
@@ -1287,6 +1298,8 @@ export function App() {
           onIncludeArchivedChange={handleIncludeArchivedChange}
           blockedOnly={blockedOnly}
           onBlockedOnlyChange={handleBlockedOnlyChange}
+          staleOnly={staleOnly}
+          onStaleOnlyChange={handleStaleOnlyChange}
           pageSize={pageSize}
           onPageSizeChange={handlePageSizeChange}
           dashboardDensity={dashboardDensity}

@@ -192,6 +192,7 @@ export type DashboardFilters = {
   priority: PriorityFilter;
   includeArchived: boolean;
   blockedOnly: boolean;
+  staleOnly: boolean;
   pageSize: number;
 };
 

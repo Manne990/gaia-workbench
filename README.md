@@ -14,13 +14,13 @@ The goal is not to compete with Jira, Linear, GitHub Issues, or any other existi
 
 The goal is to provide a sufficiently complex project to test:
 
-* Planning
-* Delegation
-* Ownership
-* Code review
-* Governance
-* Long-term coordination
-* Multi-agent collaboration
+- Planning
+- Delegation
+- Ownership
+- Code review
+- Governance
+- Long-term coordination
+- Multi-agent collaboration
 
 If Gaia can successfully build, maintain, and evolve TinyTracker, it demonstrates that the protocol is capable of producing real software through collective AI effort.
 
@@ -30,66 +30,66 @@ If Gaia can successfully build, maintain, and evolve TinyTracker, it demonstrate
 
 ### Issues
 
-* Create issue
-* Edit issue
-* Close issue
-* Reopen issue
-* Assign priority
-* Archive and unarchive issues without deleting history
-* Link issue dependencies and show blocked issues
+- Create issue
+- Edit issue
+- Close issue
+- Reopen issue
+- Assign priority
+- Archive and unarchive issues without deleting history
+- Link issue dependencies and show blocked issues
 
 ### Status Workflow
 
-* Todo
-* In Progress
-* Review
-* Done
+- Todo
+- In Progress
+- Review
+- Done
 
 ### Comments
 
-* Add comments
-* Edit comments
-* View comment history
-* Render safe markdown-lite formatting
+- Add comments
+- Edit comments
+- View comment history
+- Render safe markdown-lite formatting
 
 ### Search
 
-* Search by title
-* Search by description
-* Filter by status
-* Filter by priority
-* Filter by "blocked-only"
-* Include archived issues on demand
-* Save named dashboard filter views
+- Search by title
+- Search by description
+- Filter by status
+- Filter by priority
+- Filter by "blocked-only"
+- Include archived issues on demand
+- Save named dashboard filter views
 
 ### API
 
 REST API supporting:
 
-* Create issue
-* List issues
-* Update issue
-* Archive and unarchive issue
-* Add and remove issue dependencies
-* Add comments
-* Create, list, update, and delete saved filter views
-* Export tracker JSON
-* Preview and apply tracker JSON imports
+- Create issue
+- List issues
+- Update issue
+- Archive and unarchive issue
+- Add and remove issue dependencies
+- Add comments
+- Create, list, update, and delete saved filter views
+- Export tracker JSON
+- Preview and apply tracker JSON imports
 
 ### User Interface
 
 Simple web interface:
 
-* Dashboard
-* Issue list
-* Issue details
-* Search
-* Saved filter views
-* Archived issue recovery
-* Blocked issue visibility and dependency controls
-* Comfortable and compact dashboard density modes
-* Safe markdown-lite rendering for descriptions and comments
-* JSON export and import
+- Dashboard
+- Issue list
+- Issue details
+- Search
+- Saved filter views
+- Archived issue recovery
+- Blocked issue visibility and dependency controls
+- Comfortable and compact dashboard density modes
+- Safe markdown-lite rendering for descriptions and comments
+- JSON export and import
 
 No advanced enterprise features.
 
@@ -107,23 +107,23 @@ The system should remain intentionally small.
 
 ### Backend
 
-* TypeScript
-* Node.js
-* Express
+- TypeScript
+- Node.js
+- Express
 
 ### Database
 
-* SQLite
+- SQLite
 
 ### Frontend
 
-* React
-* TypeScript
+- React
+- TypeScript
 
 ### Testing
 
-* Vitest
-* Playwright
+- Vitest
+- Playwright
 
 ---
 
@@ -135,10 +135,10 @@ This project is developed entirely through Gaia governance.
 
 Citizens are responsible for:
 
-* Proposing changes
-* Reviewing changes
-* Voting on protocol evolution
-* Accepting completed work
+- Proposing changes
+- Reviewing changes
+- Voting on protocol evolution
+- Accepting completed work
 
 Citizens own outcomes, not tasks.
 
@@ -158,10 +158,10 @@ Workers exist only to help a citizen complete assigned work.
 
 The citizen that accepts a task remains accountable for:
 
-* Planning
-* Delegation
-* Integration
-* Final quality
+- Planning
+- Delegation
+- Integration
+- Final quality
 
 Responsibility cannot be delegated.
 
@@ -171,13 +171,13 @@ Responsibility cannot be delegated.
 
 Version 1.0 is considered complete when:
 
-* Issues can be created
-* Issues can be updated
-* Issues can be searched
-* Comments work
-* API works
-* Tests pass
-* Application can be started with a single command
+- Issues can be created
+- Issues can be updated
+- Issues can be searched
+- Comments work
+- API works
+- Tests pass
+- Application can be started with a single command
 
 ```bash
 npm install
@@ -188,8 +188,8 @@ npm run start
 
 Prerequisites:
 
-* Node.js 22
-* npm
+- Node.js 22
+- npm
 
 Install dependencies from a clean checkout:
 
@@ -205,12 +205,12 @@ npm run ci
 
 `npm run ci` performs:
 
-* Formatting check
-* ESLint check
-* TypeScript checks
-* Vitest tests
-* Production build
-* Playwright smoke verification
+- Formatting check
+- ESLint check
+- TypeScript checks
+- Vitest tests
+- Production build
+- Playwright smoke verification
 
 Run only the quality gate:
 
@@ -270,11 +270,11 @@ fail fast instead of attempting a downgrade.
 
 When adding a future schema change:
 
-* add an ordered migration in `server/src/db/schema.ts`
-* keep the migration idempotent with table, column, or index preconditions
-* bump `SCHEMA_VERSION` only for database schema changes
-* set the new `user_version` only after the migration succeeds
-* add tests for fresh init, repeated init, and upgrade from the previous schema
+- add an ordered migration in `server/src/db/schema.ts`
+- keep the migration idempotent with table, column, or index preconditions
+- bump `SCHEMA_VERSION` only for database schema changes
+- set the new `user_version` only after the migration succeeds
+- add tests for fresh init, repeated init, and upgrade from the previous schema
 
 For disposable local runs, use an in-memory database:
 
@@ -315,8 +315,8 @@ comment body was edited after seeding.
 
 The started application serves:
 
-* TinyTracker React UI at `/`
-* API routes under `/api`
+- TinyTracker React UI at `/`
+- API routes under `/api`
 
 ### Health API
 
@@ -367,12 +367,14 @@ new clients and smoke tests should use `/api/health`.
 
 Supported query parameters:
 
-* `search`: title or description search
-* `status`: `todo`, `in_progress`, `review`, or `done`
-* `priority`: `low`, `medium`, or `high`
-* `includeArchived`: `true` to include archived issues; default is active issues only
-* `page`: 1-based page number, default `1`
-* `limit`: items per page, default `25`, maximum `100`
+- `search`: title or description search
+- `status`: `todo`, `in_progress`, `review`, or `done`
+- `priority`: `low`, `medium`, or `high`
+- `includeArchived`: `true` to include archived issues; default is active issues only
+- `blockedOnly`: `true` to show only issues blocked by active unfinished dependencies
+- `staleOnly`: `true` to show only issues with no updates in 30 or more days
+- `page`: 1-based page number, default `1`
+- `limit`: items per page, default `25`, maximum `100`
 
 By default, the issue list and dashboard summary exclude archived issues. When
 `includeArchived=true`, archived issues are included in list results and summary
@@ -383,12 +385,19 @@ Each issue in the list and detail payload includes `isBlocked` and
 not `done`. Archived dependency targets remain visible in dependency detail data
 but do not make the issue blocked.
 
+Stale issue signals are derived from `updatedAt`. TinyTracker uses a
+conservative 30-day threshold: an issue becomes stale when it has not been
+updated for at least 30 days. Stale state is a dashboard triage signal only; it
+does not change workflow status, priority, due-date, archive, blocked,
+dependency, comment, or action behavior.
+
 ### Audit Summary API
 
 `GET /api/issues/audit-summary` returns a read-only aggregate for external
 verification tools. The filter parameters match `GET /api/issues`:
 
-* `search`, `status`, `priority`, `includeArchived`, and `blockedOnly`.
+- `search`, `status`, `priority`, `includeArchived`, `blockedOnly`, and
+  `staleOnly`.
 
 Response shape:
 
@@ -418,8 +427,8 @@ Response shape:
 ```
 
 `totalArchivedIssues` counts archived issues that match the non-archive filters.
-`totalStaleIssues` is currently aligned with `totalOverdueIssues` for
-compatibility.
+`totalStaleIssues` counts issues in the filtered scope whose `updatedAt` is at
+least 30 days old.
 
 ### Saved Filter Views API
 
@@ -444,6 +453,8 @@ Create and update payloads use this filter shape:
   "status": "review",
   "priority": "high",
   "includeArchived": true,
+  "blockedOnly": true,
+  "staleOnly": true,
   "pageSize": 50
 }
 ```
@@ -451,12 +462,14 @@ Create and update payloads use this filter shape:
 `name` is trimmed, required, limited to 120 characters, and unique
 case-insensitively. `status` may be `all`, `todo`, `in_progress`, `review`, or
 `done`; `priority` may be `all`, `low`, `medium`, or `high`; `pageSize` must be
-between `1` and `100`.
+between `1` and `100`; `blockedOnly` and `staleOnly` are booleans and default to
+`false`.
 
 Applying a saved view updates the dashboard URL query using `search`, `status`,
-`priority`, `includeArchived`, and non-default `limit`. Saved views persist page
-size but reset pagination to page `1` when applied so stale saved views do not
-open empty pages after data changes.
+`priority`, `includeArchived`, `blockedOnly`, `staleOnly`, and non-default
+`limit`. Saved views
+persist page size but reset pagination to page `1` when applied so old saved
+views do not open empty pages after data changes.
 
 ### Archive API
 
@@ -502,8 +515,8 @@ non-blocking.
 
 Dependency add/remove operations write activity events:
 
-* `issue_dependency_added`
-* `issue_dependency_removed`
+- `issue_dependency_added`
+- `issue_dependency_removed`
 
 ### Export API
 
@@ -526,14 +539,14 @@ is read-only and does not mutate tracker state.
 TinyTracker imports its own `exportVersion: 1` JSON through a preview-and-apply
 flow:
 
-* `POST /api/import/preview`
-* `POST /api/import/apply`
+- `POST /api/import/preview`
+- `POST /api/import/apply`
 
 Both endpoints accept the same JSON shape returned by `GET /api/export`. They
 also accept an optional top-level `conflictPolicy` value:
 
-* `skip-conflicts` (default): existing IDs are skipped.
-* `replace-conflicts`: changed existing issues are replaced, while existing
+- `skip-conflicts` (default): existing IDs are skipped.
+- `replace-conflicts`: changed existing issues are replaced, while existing
   comment, edit-history, and activity IDs remain immutable.
 
 Preview validates the payload, classifies existing records as exact or changed,
@@ -567,10 +580,10 @@ write partial data.
 Issue descriptions and comments are stored and exported as raw text, then
 rendered in the browser with a small safe markdown-lite subset:
 
-* paragraphs and line breaks
-* inline code and fenced code blocks
-* bold and italic text
-* links in `[label](url)` form
+- paragraphs and line breaks
+- inline code and fenced code blocks
+- bold and italic text
+- links in `[label](url)` form
 
 Raw HTML is not supported and is rendered as text. Images, headings, lists,
 tables, blockquotes, task lists, autolinks, and arbitrary markdown extensions
@@ -585,19 +598,20 @@ text exactly; markdown-lite rendering is a UI display behavior only.
 
 The Playwright smoke test starts TinyTracker with an in-memory SQLite database and verifies the V1 path:
 
-* Empty dashboard loads
-* Issue can be created
-* Created issue appears in the issue list
-* Issue can be updated
-* Issue can be archived and restored
-* Saved filter views can be created, applied, renamed, deleted, and composed with URLs
-* Markdown-lite descriptions and comments render safely
-* Issue dependencies can be added and removed, with blocked state shown in list and detail
-* Dashboard density can switch between comfortable and compact without hiding row information
-* Issue detail view opens
-* Comment can be added
-* Comment can be edited
-* Comment edit history is shown
+- Empty dashboard loads
+- Issue can be created
+- Created issue appears in the issue list
+- Issue can be updated
+- Issue can be archived and restored
+- Saved filter views can be created, applied, renamed, deleted, and composed with URLs
+- Markdown-lite descriptions and comments render safely
+- Issue dependencies can be added and removed, with blocked state shown in list and detail
+- Stale issues can be identified and filtered without hiding other operational signals
+- Dashboard density can switch between comfortable and compact without hiding row information
+- Issue detail view opens
+- Comment can be added
+- Comment can be edited
+- Comment edit history is shown
 
 Run it through the full CI command:
 
@@ -615,17 +629,17 @@ npm run test:e2e
 
 TinyTracker V1 intentionally does not include:
 
-* Authentication
-* User accounts or permissions
-* Notifications
-* Plugin support
-* File attachments
-* Assignment workflows
-* Blocked-only dashboard filter
-* Dependency reason metadata
-* Hard delete or retention purge workflows
-* External integrations
-* Arbitrary third-party import formats
+- Authentication
+- User accounts or permissions
+- Notifications
+- Plugin support
+- File attachments
+- Assignment workflows
+- Blocked-only dashboard filter
+- Dependency reason metadata
+- Hard delete or retention purge workflows
+- External integrations
+- Arbitrary third-party import formats
 
 Issue status transitions are intentionally unconstrained in V1. Any valid status can be selected directly.
 

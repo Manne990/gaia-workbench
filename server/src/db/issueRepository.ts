@@ -20,6 +20,8 @@ const VALID_STATUSES: IssueStatus[] = ['todo', 'in_progress', 'review', 'done'];
 const VALID_PRIORITIES: IssuePriority[] = ['low', 'medium', 'high'];
 const DEFAULT_STATUS: IssueStatus = 'todo';
 const DEFAULT_PRIORITY: IssuePriority = 'medium';
+export const STALE_ISSUE_THRESHOLD_DAYS = 30;
+const STALE_ISSUE_THRESHOLD_MS = STALE_ISSUE_THRESHOLD_DAYS * 24 * 60 * 60 * 1000;
 
 type IssueRow = {
   id: string;
@@ -138,6 +140,10 @@ function normalizeDueDate(value: unknown): string | null {
 
 function isIssueOverdue(dueDate: string | null, status: IssueStatus): boolean {
   return dueDate !== null && status !== 'done' && dueDate < todayLocalDate();
+}
+
+export function getStaleIssueCutoffIso(now = new Date()): string {
+  return new Date(now.getTime() - STALE_ISSUE_THRESHOLD_MS).toISOString();
 }
 
 function labelsEqual(left: string[], right: string[]): boolean {
@@ -280,6 +286,11 @@ function buildIssueListWhereClause(
   if (search) {
     clauses.push("(LOWER(title) LIKE @search ESCAPE '\\' OR LOWER(description) LIKE @search ESCAPE '\\')");
     values.search = `%${escapeLikePattern(search)}%`;
+  }
+
+  if (filters.staleOnly) {
+    clauses.push('updated_at <= @staleCutoff');
+    values.staleCutoff = getStaleIssueCutoffIso();
   }
 
   return {
@@ -518,6 +529,19 @@ export class IssueRepository {
         .get({ ...scopedFilters.values, today: todayLocalDate() }) as CountRow
     ).count;
 
+    const totalStaleIssues = (
+      this.database
+        .prepare(
+          `
+        SELECT COUNT(*) AS count
+        FROM issues
+        ${scopedFilters.whereClause}
+        ${scopedFilters.whereClause ? 'AND' : 'WHERE'} updated_at <= @staleCutoff
+        `
+        )
+        .get({ ...scopedFilters.values, staleCutoff: getStaleIssueCutoffIso() }) as CountRow
+    ).count;
+
     const dependencyRow = this.database
       .prepare(
         `
@@ -546,7 +570,7 @@ export class IssueRepository {
       totalArchivedIssues,
       totalBlockedIssues,
       totalOverdueIssues,
-      totalStaleIssues: totalOverdueIssues,
+      totalStaleIssues,
       byStatus,
       byPriority,
       dependencyEdges: {

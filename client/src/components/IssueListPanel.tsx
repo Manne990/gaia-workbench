@@ -12,6 +12,7 @@ import type {
 } from '../types';
 import { formatDate, formatDueDate } from '../utils/formatters';
 import { renderMarkdownLiteInline } from '../utils/markdown';
+import { isIssueStale } from '../utils/stale';
 
 type IssueListPanelProps = {
   loadState: LoadState;
@@ -32,6 +33,8 @@ type IssueListPanelProps = {
   onIncludeArchivedChange: (value: boolean) => void;
   blockedOnly: boolean;
   onBlockedOnlyChange: (value: boolean) => void;
+  staleOnly: boolean;
+  onStaleOnlyChange: (value: boolean) => void;
   pageSize: number;
   onPageSizeChange: (value: number) => void;
   dashboardDensity: DashboardDensity;
@@ -80,6 +83,8 @@ export function IssueListPanel({
   onIncludeArchivedChange,
   blockedOnly,
   onBlockedOnlyChange,
+  staleOnly,
+  onStaleOnlyChange,
   pageSize,
   onPageSizeChange,
   dashboardDensity,
@@ -223,6 +228,16 @@ export function IssueListPanel({
             onChange={(event) => onBlockedOnlyChange(event.target.checked)}
           />
           <span>Blocked only</span>
+        </label>
+
+        <label className="filter-toggle" htmlFor="issue-stale-only-filter">
+          <input
+            id="issue-stale-only-filter"
+            type="checkbox"
+            checked={staleOnly}
+            onChange={(event) => onStaleOnlyChange(event.target.checked)}
+          />
+          <span>Stale only</span>
         </label>
 
         <div className="filter-actions">
@@ -388,92 +403,98 @@ export function IssueListPanel({
                 </tr>
               </thead>
               <tbody>
-                {filteredIssues.map((issue) => (
-                  <tr
-                    key={issue.id}
-                    className={
-                      [
-                        issue.isOverdue ? 'overdue-row' : '',
-                        issue.isBlocked ? 'blocked-row' : '',
-                        issue.archivedAt ? 'archived-row' : ''
-                      ]
-                        .filter(Boolean)
-                        .join(' ') || undefined
-                    }
-                  >
-                    <td>
-                      <strong>{issue.title}</strong>
-                      {issue.archivedAt ? <span className="archived-pill">Archived</span> : null}
-                      {issue.isBlocked ? <span className="blocked-pill">Blocked</span> : null}
-                      {issue.description
-                        ? renderMarkdownLiteInline(issue.description, { className: 'issue-description-snippet' })
-                        : null}
-                      {issue.labels.length > 0 ? (
-                        <div className="label-row" aria-label={`Labels for ${issue.title}`}>
-                          {issue.labels.map((label) => (
-                            <span key={label} className="label-pill">
-                              {label}
-                            </span>
-                          ))}
+                {filteredIssues.map((issue) => {
+                  const issueIsStale = isIssueStale(issue.updatedAt);
+
+                  return (
+                    <tr
+                      key={issue.id}
+                      className={
+                        [
+                          issue.isOverdue ? 'overdue-row' : '',
+                          issue.isBlocked ? 'blocked-row' : '',
+                          issue.archivedAt ? 'archived-row' : '',
+                          issueIsStale ? 'stale-row' : ''
+                        ]
+                          .filter(Boolean)
+                          .join(' ') || undefined
+                      }
+                    >
+                      <td>
+                        <strong>{issue.title}</strong>
+                        {issue.archivedAt ? <span className="archived-pill">Archived</span> : null}
+                        {issue.isBlocked ? <span className="blocked-pill">Blocked</span> : null}
+                        {issueIsStale ? <span className="stale-pill">Stale</span> : null}
+                        {issue.description
+                          ? renderMarkdownLiteInline(issue.description, { className: 'issue-description-snippet' })
+                          : null}
+                        {issue.labels.length > 0 ? (
+                          <div className="label-row" aria-label={`Labels for ${issue.title}`}>
+                            {issue.labels.map((label) => (
+                              <span key={label} className="label-pill">
+                                {label}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td>
+                        <span className={`pill status-${issue.status}`}>{statusLabels[issue.status]}</span>
+                      </td>
+                      <td>
+                        <span className={`pill priority-${issue.priority}`}>{priorityLabels[issue.priority]}</span>
+                      </td>
+                      <td>
+                        <div className="due-date-cell">
+                          <span className={issue.isOverdue ? 'due-date-text overdue' : 'due-date-text'}>
+                            {issue.dueDate ? formatDueDate(issue.dueDate) : 'No due date'}
+                          </span>
+                          {issue.isOverdue ? <span className="overdue-pill">Overdue</span> : null}
                         </div>
-                      ) : null}
-                    </td>
-                    <td>
-                      <span className={`pill status-${issue.status}`}>{statusLabels[issue.status]}</span>
-                    </td>
-                    <td>
-                      <span className={`pill priority-${issue.priority}`}>{priorityLabels[issue.priority]}</span>
-                    </td>
-                    <td>
-                      <div className="due-date-cell">
-                        <span className={issue.isOverdue ? 'due-date-text overdue' : 'due-date-text'}>
-                          {issue.dueDate ? formatDueDate(issue.dueDate) : 'No due date'}
-                        </span>
-                        {issue.isOverdue ? <span className="overdue-pill">Overdue</span> : null}
-                      </div>
-                    </td>
-                    <td>{formatDate(issue.updatedAt)}</td>
-                    <td>
-                      <div className="row-actions">
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={(event) => onOpenIssue(issue, event.currentTarget)}
-                          aria-label={`Open ${issue.title}`}
-                        >
-                          Open
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={(event) => onEditIssue(issue, event.currentTarget)}
-                          aria-label={`Edit ${issue.title}`}
-                        >
-                          Edit
-                        </button>
-                        {issue.archivedAt ? (
+                      </td>
+                      <td>{formatDate(issue.updatedAt)}</td>
+                      <td>
+                        <div className="row-actions">
                           <button
                             type="button"
                             className="ghost-button"
-                            onClick={(event) => onUnarchiveIssue(issue, event.currentTarget)}
-                            aria-label={`Unarchive ${issue.title}`}
+                            onClick={(event) => onOpenIssue(issue, event.currentTarget)}
+                            aria-label={`Open ${issue.title}`}
                           >
-                            Unarchive
+                            Open
                           </button>
-                        ) : (
                           <button
                             type="button"
                             className="ghost-button"
-                            onClick={(event) => onArchiveIssue(issue, event.currentTarget)}
-                            aria-label={`Archive ${issue.title}`}
+                            onClick={(event) => onEditIssue(issue, event.currentTarget)}
+                            aria-label={`Edit ${issue.title}`}
                           >
-                            Archive
+                            Edit
                           </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          {issue.archivedAt ? (
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              onClick={(event) => onUnarchiveIssue(issue, event.currentTarget)}
+                              aria-label={`Unarchive ${issue.title}`}
+                            >
+                              Unarchive
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              onClick={(event) => onArchiveIssue(issue, event.currentTarget)}
+                              aria-label={`Archive ${issue.title}`}
+                            >
+                              Archive
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

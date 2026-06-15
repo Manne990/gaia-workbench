@@ -56,6 +56,7 @@ export interface IssueListFilters {
   search?: string;
   includeArchived?: boolean;
   blockedOnly?: boolean;
+  staleOnly?: boolean;
 }
 
 export interface IssueListPaginationInput {
@@ -115,6 +116,7 @@ export interface SavedFilterView {
   priority: SavedFilterPriority;
   includeArchived: boolean;
   blockedOnly: boolean;
+  staleOnly: boolean;
   pageSize: number;
   createdAt: string;
   updatedAt: string;
@@ -127,6 +129,7 @@ export interface NewSavedFilterView {
   priority?: SavedFilterPriority;
   includeArchived?: boolean;
   blockedOnly?: boolean;
+  staleOnly?: boolean;
   pageSize?: number;
 }
 
@@ -137,6 +140,7 @@ export interface SavedFilterViewUpdate {
   priority?: SavedFilterPriority;
   includeArchived?: boolean;
   blockedOnly?: boolean;
+  staleOnly?: boolean;
   pageSize?: number;
 }
 

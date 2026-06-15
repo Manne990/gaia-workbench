@@ -10,6 +10,7 @@ export const defaultDashboardFilters: DashboardFilters = {
   priority: 'all',
   includeArchived: false,
   blockedOnly: false,
+  staleOnly: false,
   pageSize: defaultPageSize
 };
 
@@ -38,6 +39,7 @@ export function parseDashboardFiltersFromSearch(search: string | URLSearchParams
   const priorityFilter = parsePriorityFilter(params.get('priority'));
   const includeArchived = params.get('includeArchived') === 'true';
   const blockedOnly = params.get('blockedOnly') === 'true';
+  const staleOnly = params.get('staleOnly') === 'true';
   const pageSize = parsePageSize(params.get('limit'));
 
   return {
@@ -46,6 +48,7 @@ export function parseDashboardFiltersFromSearch(search: string | URLSearchParams
     priority: priorityFilter,
     includeArchived,
     blockedOnly,
+    staleOnly,
     pageSize
   };
 }
@@ -123,6 +126,10 @@ function buildDashboardQuery(filters: DashboardFilters): string {
   }
   if (filters.blockedOnly) {
     params.set('blockedOnly', 'true');
+  }
+
+  if (filters.staleOnly) {
+    params.set('staleOnly', 'true');
   }
 
   if (filters.pageSize !== defaultPageSize) {

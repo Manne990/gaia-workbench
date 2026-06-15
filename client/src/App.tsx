@@ -17,15 +17,27 @@ import type {
   CommentEditCancelOptions,
   CommentEditHistory,
   CommentLoadState,
+  DashboardFilters,
   Issue,
   IssueDetailLoadState,
   IssueFormValues,
+  PriorityFilter,
+  StatusFilter,
 } from './types';
 import { restoreFocus } from './utils/focus';
 import { parseDueDateInput, parseLabelsInput } from './utils/parse';
-import { getIssueIdFromLocation, pushIssuePath } from './utils/routing';
+import { defaultDashboardFilters, getRouteStateFromLocation, writeRoute } from './utils/routing';
 
 export function App() {
+  const initialRouteStateRef = useRef<{
+    issueId: string | null;
+    filters: DashboardFilters;
+  } | null>(null);
+
+  if (!initialRouteStateRef.current) {
+    initialRouteStateRef.current = getRouteStateFromLocation();
+  }
+
   const {
     issues,
     setIssues,
@@ -42,9 +54,12 @@ export function App() {
     hasActiveFilters,
     statusCounts,
     issueListSummary,
-    clearFilters
-  } = useIssueDirectory();
-  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(() => getIssueIdFromLocation());
+    clearFilters,
+    setDashboardFilters
+  } = useIssueDirectory(initialRouteStateRef.current.filters);
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(
+    () => initialRouteStateRef.current?.issueId ?? null
+  );
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [selectedIssueLoadState, setSelectedIssueLoadState] = useState<IssueDetailLoadState>('idle');
   const [activeForm, setActiveForm] = useState<ActiveForm | null>(null);
@@ -73,6 +88,13 @@ export function App() {
   const formReturnFocusRef = useRef<HTMLElement | null>(null);
   const detailReturnFocusRef = useRef<HTMLElement | null>(null);
   const commentEditReturnFocusRef = useRef<HTMLElement | null>(null);
+  const didCanonicalizeInitialRouteRef = useRef(false);
+
+  const dashboardFilters: DashboardFilters = {
+    search: searchFilter,
+    status: statusFilter,
+    priority: priorityFilter
+  };
 
   const isIssueDetailLoading = Boolean(
     selectedIssueId && selectedIssueLoadState === 'loading' && !selectedIssue
@@ -107,15 +129,61 @@ export function App() {
   }, [editingCommentId]);
 
   useEffect(() => {
+    if (didCanonicalizeInitialRouteRef.current) {
+      return;
+    }
+
+    didCanonicalizeInitialRouteRef.current = true;
+    writeRoute(selectedIssueId, dashboardFilters, 'replace');
+  }, []);
+
+  useEffect(() => {
     function syncSelectedIssueFromLocation() {
+      const routeState = getRouteStateFromLocation();
+
       detailReturnFocusRef.current = null;
-      setSelectedIssueId(getIssueIdFromLocation());
+      setDashboardFilters(routeState.filters);
+      setSelectedIssueId(routeState.issueId);
     }
 
     window.addEventListener('popstate', syncSelectedIssueFromLocation);
 
     return () => window.removeEventListener('popstate', syncSelectedIssueFromLocation);
   }, []);
+
+  function writeDashboardRoute(filters: DashboardFilters, mode: 'push' | 'replace') {
+    writeRoute(selectedIssueId, filters, mode);
+  }
+
+  function handleSearchFilterChange(value: string) {
+    const nextFilters = { ...dashboardFilters, search: value };
+
+    setSearchFilter(value);
+    writeDashboardRoute(nextFilters, 'replace');
+  }
+
+  function handleStatusFilterChange(value: StatusFilter) {
+    const nextFilters = { ...dashboardFilters, status: value };
+
+    setStatusFilter(value);
+    writeDashboardRoute(nextFilters, 'push');
+  }
+
+  function handlePriorityFilterChange(value: PriorityFilter) {
+    const nextFilters = { ...dashboardFilters, priority: value };
+
+    setPriorityFilter(value);
+    writeDashboardRoute(nextFilters, 'push');
+  }
+
+  function handleClearFilters() {
+    clearFilters();
+    writeRoute(null, defaultDashboardFilters, 'replace');
+    setSelectedIssueId(null);
+    setSelectedIssue(null);
+    setSelectedIssueLoadState('idle');
+    detailReturnFocusRef.current = null;
+  }
 
   useEffect(() => {
     if (!selectedIssueId) {
@@ -267,7 +335,7 @@ export function App() {
     detailReturnFocusRef.current = trigger ?? null;
     setSelectedIssue(issue);
     setSelectedIssueLoadState('loaded');
-    pushIssuePath(issue.id);
+    writeRoute(issue.id, dashboardFilters, 'push');
     setSelectedIssueId(issue.id);
     cancelForm({ restoreFocus: false });
   }
@@ -278,7 +346,7 @@ export function App() {
     setSelectedIssueId(null);
     setSelectedIssue(null);
     setSelectedIssueLoadState('idle');
-    pushIssuePath(null);
+    writeRoute(null, dashboardFilters, detailReturnFocusRef.current ? 'replace' : 'push');
     setCommentBody('');
     setCommentError(null);
     setEditingCommentId(null);
@@ -520,13 +588,13 @@ export function App() {
           hasActiveFilters={hasActiveFilters}
           activeFilterSummaries={activeFilterSummaries}
           searchFilter={searchFilter}
-          setSearchFilter={setSearchFilter}
+          onSearchFilterChange={handleSearchFilterChange}
           statusFilter={statusFilter}
-          setStatusFilter={setStatusFilter}
+          onStatusFilterChange={handleStatusFilterChange}
           priorityFilter={priorityFilter}
-          setPriorityFilter={setPriorityFilter}
+          onPriorityFilterChange={handlePriorityFilterChange}
           issueListHeadingRef={issueListHeadingRef}
-          onClearFilters={clearFilters}
+          onClearFilters={handleClearFilters}
           onOpenIssue={openIssue}
           onEditIssue={startEdit}
         />

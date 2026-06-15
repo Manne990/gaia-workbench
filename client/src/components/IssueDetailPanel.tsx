@@ -95,6 +95,9 @@ export function IssueDetailPanel({
   const blockers = issueDependencies?.dependencies ?? [];
   const dependents = issueDependencies?.dependents ?? [];
   const selectedIssueIsStale = selectedIssue ? isIssueStale(selectedIssue.updatedAt) : false;
+  const selectedIssueCanBlockDependents = selectedIssue
+    ? selectedIssue.archivedAt === null && selectedIssue.status !== 'done'
+    : false;
 
   return (
     <>
@@ -296,7 +299,10 @@ export function IssueDetailPanel({
                       ) : (
                         <ul className="dependency-list">
                           {dependents.map((dependent) => {
-                            const blocksCurrent = dependent.archivedAt === null && dependent.status !== 'done';
+                            const blocksCurrent =
+                              selectedIssueCanBlockDependents &&
+                              dependent.archivedAt === null &&
+                              dependent.status !== 'done';
 
                             return (
                               <li

@@ -245,6 +245,36 @@ function restoreFocus(element: HTMLElement | null, fallback?: () => HTMLElement 
   }, 0);
 }
 
+function getIssueIdFromPath(pathname: string): string | null {
+  const match = /^\/issues\/([^/]+)\/?$/.exec(pathname);
+
+  if (!match) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
+function getIssueIdFromLocation(): string | null {
+  return getIssueIdFromPath(window.location.pathname);
+}
+
+function buildIssuePath(issueId: string): string {
+  return `/issues/${encodeURIComponent(issueId)}`;
+}
+
+function pushIssuePath(issueId: string | null) {
+  const nextPath = issueId ? buildIssuePath(issueId) : '/';
+
+  if (window.location.pathname !== nextPath || window.location.search || window.location.hash) {
+    window.history.pushState(null, '', nextPath);
+  }
+}
+
 function activityTitle(event: ActivityEvent): string {
   switch (event.type) {
     case 'issue_created':
@@ -306,7 +336,7 @@ export function App() {
   const [searchFilter, setSearchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
-  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(() => getIssueIdFromLocation());
   const [activeForm, setActiveForm] = useState<ActiveForm | null>(null);
   const [formValues, setFormValues] = useState<IssueFormValues>(emptyFormValues);
   const [formError, setFormError] = useState<string | null>(null);
@@ -327,6 +357,7 @@ export function App() {
   const issueListHeadingRef = useRef<HTMLHeadingElement>(null);
   const issueTitleInputRef = useRef<HTMLInputElement>(null);
   const issueDetailHeadingRef = useRef<HTMLHeadingElement>(null);
+  const missingIssueHeadingRef = useRef<HTMLHeadingElement>(null);
   const commentsHeadingRef = useRef<HTMLHeadingElement>(null);
   const editCommentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const formReturnFocusRef = useRef<HTMLElement | null>(null);
@@ -336,6 +367,7 @@ export function App() {
   const selectedIssue = useMemo(() => {
     return issues.find((issue) => issue.id === selectedIssueId) ?? null;
   }, [issues, selectedIssueId]);
+  const isMissingSelectedIssue = Boolean(selectedIssueId && loadState === 'loaded' && !selectedIssue);
 
   useEffect(() => {
     if (activeForm) {
@@ -350,10 +382,27 @@ export function App() {
   }, [selectedIssue]);
 
   useEffect(() => {
+    if (isMissingSelectedIssue) {
+      missingIssueHeadingRef.current?.focus();
+    }
+  }, [isMissingSelectedIssue]);
+
+  useEffect(() => {
     if (editingCommentId) {
       editCommentTextareaRef.current?.focus();
     }
   }, [editingCommentId]);
+
+  useEffect(() => {
+    function syncSelectedIssueFromLocation() {
+      detailReturnFocusRef.current = null;
+      setSelectedIssueId(getIssueIdFromLocation());
+    }
+
+    window.addEventListener('popstate', syncSelectedIssueFromLocation);
+
+    return () => window.removeEventListener('popstate', syncSelectedIssueFromLocation);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -539,6 +588,7 @@ export function App() {
 
   function openIssue(issue: Issue, trigger?: HTMLElement) {
     detailReturnFocusRef.current = trigger ?? null;
+    pushIssuePath(issue.id);
     setSelectedIssueId(issue.id);
     cancelForm({ restoreFocus: false });
   }
@@ -547,6 +597,7 @@ export function App() {
     const returnFocusTarget = detailReturnFocusRef.current;
 
     setSelectedIssueId(null);
+    pushIssuePath(null);
     setCommentBody('');
     setCommentError(null);
     setEditingCommentId(null);
@@ -1342,6 +1393,22 @@ export function App() {
                   </ul>
                 ) : null}
               </section>
+            </div>
+          </section>
+        ) : null}
+
+        {isMissingSelectedIssue ? (
+          <section className="detail-panel" aria-labelledby="missing-issue-heading">
+            <div className="panel-header">
+              <div>
+                <h2 id="missing-issue-heading" ref={missingIssueHeadingRef} tabIndex={-1}>
+                  Issue not found
+                </h2>
+                <p>No issue matches this link.</p>
+              </div>
+              <button type="button" className="secondary-button" onClick={closeIssueDetail}>
+                Back to issue list
+              </button>
             </div>
           </section>
         ) : null}

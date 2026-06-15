@@ -7,6 +7,12 @@ type ExportedIssue = {
   activityEvents: Array<{ type: string }>;
 };
 
+type CreatedIssue = {
+  id: string;
+  title: string;
+  description: string;
+};
+
 async function isFocused(locator: Locator): Promise<boolean> {
   return locator.evaluate((element) => element === document.activeElement).catch(() => false);
 }
@@ -21,6 +27,17 @@ async function pressTabUntilFocused(page: Page, locator: Locator, maxTabs = 40):
   }
 
   throw new Error('Expected target to receive focus through keyboard tab navigation.');
+}
+
+async function createIssueThroughApi(
+  page: Page,
+  issue: { title: string; description?: string }
+): Promise<CreatedIssue> {
+  const response = await page.request.post('/api/issues', { data: issue });
+
+  expect(response.ok()).toBe(true);
+
+  return (await response.json()) as CreatedIssue;
 }
 
 test('TinyTracker smoke creates lists updates and comments on an issue', async ({ page }) => {
@@ -265,4 +282,56 @@ test('keyboard users can create open comment edit and close an issue', async ({ 
 
   await expect(detail).toHaveCount(0);
   await expect(openIssueButton).toBeFocused();
+});
+
+test('shareable issue detail URLs support direct load refresh and history', async ({ page }) => {
+  const issue = await createIssueThroughApi(page, {
+    title: 'Shareable URL issue',
+    description: 'Opened directly from a path.'
+  });
+
+  await page.goto(`/issues/${issue.id}`);
+
+  const detail = page.getByRole('region', { name: issue.title });
+  await expect(detail.getByRole('heading', { name: issue.title })).toBeVisible();
+  await expect(detail.locator('.detail-description')).toHaveText('Opened directly from a path.');
+  await expect(page).toHaveURL(new RegExp(`/issues/${issue.id}$`));
+
+  await page.reload();
+  await expect(detail.getByRole('heading', { name: issue.title })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/issues/${issue.id}$`));
+
+  await detail.getByRole('button', { name: `Close issue detail for ${issue.title}` }).click();
+  await expect(detail).toHaveCount(0);
+  await expect(page).toHaveURL('/');
+
+  await page.goBack();
+  await expect(detail.getByRole('heading', { name: issue.title })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/issues/${issue.id}$`));
+
+  await page.goForward();
+  await expect(detail).toHaveCount(0);
+  await expect(page).toHaveURL('/');
+});
+
+test('dashboard issue open updates the URL and unknown issue links can return to list', async ({ page }) => {
+  const issue = await createIssueThroughApi(page, {
+    title: 'Dashboard URL issue',
+    description: 'Opened from the issue list.'
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: `Open ${issue.title}` }).click();
+  await expect(page.getByRole('region', { name: issue.title })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/issues/${issue.id}$`));
+
+  await page.goto('/issues/not-found');
+  const missingIssue = page.getByRole('region', { name: 'Issue not found' });
+  await expect(missingIssue.getByRole('heading', { name: 'Issue not found' })).toBeVisible();
+  await expect(missingIssue).toContainText('No issue matches this link.');
+  await expect(page.getByRole('row', { name: /Dashboard URL issue.*Todo.*Medium/ })).toBeVisible();
+
+  await missingIssue.getByRole('button', { name: 'Back to issue list' }).click();
+  await expect(missingIssue).toHaveCount(0);
+  await expect(page).toHaveURL('/');
 });

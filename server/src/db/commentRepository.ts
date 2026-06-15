@@ -55,6 +55,10 @@ function mapCommentEditHistoryRow(row: CommentEditHistoryRow): CommentEditHistor
   };
 }
 
+function placeholdersFor(values: string[]): string {
+  return values.map(() => '?').join(', ');
+}
+
 export class CommentRepository {
   constructor(private readonly database: Database.Database) {}
 
@@ -122,6 +126,23 @@ export class CommentRepository {
     return rows.map(mapCommentRow);
   }
 
+  listByIssueIds(issueIds: string[]): Comment[] {
+    if (issueIds.length === 0) {
+      return [];
+    }
+
+    const rows = this.database
+      .prepare(`
+        SELECT id, issue_id, body, created_at, updated_at
+        FROM comments
+        WHERE issue_id IN (${placeholdersFor(issueIds)})
+        ORDER BY issue_id ASC, created_at ASC, rowid ASC
+      `)
+      .all(...issueIds) as CommentRow[];
+
+    return rows.map(mapCommentRow);
+  }
+
   update(id: string, input: CommentUpdate): Comment | null {
     assertNonEmptyString(input.body, 'body');
 
@@ -183,6 +204,23 @@ export class CommentRepository {
         ORDER BY edited_at ASC, rowid ASC
       `)
       .all({ commentId }) as CommentEditHistoryRow[];
+
+    return rows.map(mapCommentEditHistoryRow);
+  }
+
+  getHistoryByCommentIds(commentIds: string[]): CommentEditHistory[] {
+    if (commentIds.length === 0) {
+      return [];
+    }
+
+    const rows = this.database
+      .prepare(`
+        SELECT id, comment_id, previous_body, new_body, edited_at
+        FROM comment_edit_history
+        WHERE comment_id IN (${placeholdersFor(commentIds)})
+        ORDER BY comment_id ASC, edited_at ASC, rowid ASC
+      `)
+      .all(...commentIds) as CommentEditHistoryRow[];
 
     return rows.map(mapCommentEditHistoryRow);
   }

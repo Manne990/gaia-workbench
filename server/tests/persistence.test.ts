@@ -401,4 +401,88 @@ describe('persistence layer', () => {
       database.close();
     }
   });
+
+  it('bulk reads comments, comment history, and activity for export assembly', () => {
+    const database = createDatabase(':memory:');
+    const activityRepository = new ActivityRepository(database);
+    const issueRepository = new IssueRepository(database);
+    const commentRepository = new CommentRepository(database);
+
+    function groupIdsBy<T extends { id: string }>(
+      items: T[],
+      keySelector: (item: T) => string
+    ): Map<string, string[]> {
+      const groups = new Map<string, string[]>();
+
+      for (const item of items) {
+        const key = keySelector(item);
+        groups.set(key, [...(groups.get(key) ?? []), item.id]);
+      }
+
+      return groups;
+    }
+
+    try {
+      const firstIssue = issueRepository.create({ title: 'Bulk export first issue' });
+      const secondIssue = issueRepository.create({ title: 'Bulk export second issue' });
+      const firstComment = commentRepository.create({
+        issueId: firstIssue.id,
+        body: 'First issue first comment'
+      });
+      const secondComment = commentRepository.create({
+        issueId: firstIssue.id,
+        body: 'First issue second comment'
+      });
+      const thirdComment = commentRepository.create({
+        issueId: secondIssue.id,
+        body: 'Second issue comment'
+      });
+
+      commentRepository.update(firstComment.id, { body: 'First issue first comment edit one' });
+      commentRepository.update(firstComment.id, { body: 'First issue first comment edit two' });
+      commentRepository.update(thirdComment.id, { body: 'Second issue comment edit' });
+
+      const commentsByIssueId = groupIdsBy(
+        commentRepository.listByIssueIds([secondIssue.id, firstIssue.id]),
+        (comment) => comment.issueId
+      );
+      const historyByCommentId = groupIdsBy(
+        commentRepository.getHistoryByCommentIds([
+          thirdComment.id,
+          secondComment.id,
+          firstComment.id
+        ]),
+        (history) => history.commentId
+      );
+      const activityByIssueId = groupIdsBy(
+        activityRepository.listByIssueIds([secondIssue.id, firstIssue.id]),
+        (event) => event.issueId
+      );
+
+      expect(commentsByIssueId.get(firstIssue.id)).toEqual(
+        commentRepository.listByIssueId(firstIssue.id).map((comment) => comment.id)
+      );
+      expect(commentsByIssueId.get(secondIssue.id)).toEqual(
+        commentRepository.listByIssueId(secondIssue.id).map((comment) => comment.id)
+      );
+      expect(historyByCommentId.get(firstComment.id)).toEqual(
+        commentRepository.getHistory(firstComment.id).map((history) => history.id)
+      );
+      expect(historyByCommentId.get(secondComment.id)).toBeUndefined();
+      expect(historyByCommentId.get(thirdComment.id)).toEqual(
+        commentRepository.getHistory(thirdComment.id).map((history) => history.id)
+      );
+      expect(activityByIssueId.get(firstIssue.id)).toEqual(
+        activityRepository.listByIssueId(firstIssue.id).map((event) => event.id)
+      );
+      expect(activityByIssueId.get(secondIssue.id)).toEqual(
+        activityRepository.listByIssueId(secondIssue.id).map((event) => event.id)
+      );
+      expect(commentRepository.listByIssueIds([])).toEqual([]);
+      expect(commentRepository.getHistoryByCommentIds([])).toEqual([]);
+      expect(activityRepository.listByIssueIds([])).toEqual([]);
+    } finally {
+      database.close();
+    }
+  });
 });

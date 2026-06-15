@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
 type ExportedIssue = {
@@ -6,6 +6,22 @@ type ExportedIssue = {
   comments: Array<{ body: string; editHistory: Array<{ previousBody: string; newBody: string }> }>;
   activityEvents: Array<{ type: string }>;
 };
+
+async function isFocused(locator: Locator): Promise<boolean> {
+  return locator.evaluate((element) => element === document.activeElement).catch(() => false);
+}
+
+async function pressTabUntilFocused(page: Page, locator: Locator, maxTabs = 40): Promise<void> {
+  for (let count = 0; count <= maxTabs; count += 1) {
+    if (await isFocused(locator)) {
+      return;
+    }
+
+    await page.keyboard.press('Tab');
+  }
+
+  throw new Error('Expected target to receive focus through keyboard tab navigation.');
+}
 
 test('TinyTracker smoke creates lists updates and comments on an issue', async ({ page }) => {
   await page.goto('/');
@@ -96,10 +112,15 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
 
   await commentForm.getByLabel('New comment').fill('Initial detail comment');
   await commentForm.getByRole('button', { name: 'Add Comment' }).click();
-  await expect(page.getByLabel('Issue comments').getByText('Initial detail comment')).toBeVisible();
+  const commentsList = page.getByLabel('Issue comments');
+  const initialCommentItem = commentsList
+    .getByRole('listitem')
+    .filter({ hasText: 'Initial detail comment' });
+
+  await expect(initialCommentItem.getByText('Initial detail comment')).toBeVisible();
   await expect(activity.getByText('Comment added')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Edit comment Initial detail comment' }).click();
+  await initialCommentItem.getByRole('button', { name: 'Edit comment' }).click();
   const editCommentForm = page.getByRole('form', { name: 'Edit comment form' });
 
   await editCommentForm.getByLabel('Comment').fill('Edited detail comment');
@@ -139,4 +160,103 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   expect(exportedActivityTypes).toContain('issue_created');
   expect(exportedActivityTypes).toContain('comment_added');
   expect(exportedActivityTypes).toContain('comment_edited');
+});
+
+test('keyboard users can create open comment edit and close an issue', async ({ page }) => {
+  await page.goto('/');
+
+  const downloadLink = page.getByRole('link', { name: 'Download JSON' });
+  const newIssueButton = page.getByRole('button', { name: 'New Issue' });
+
+  await page.keyboard.press('Tab');
+  await expect(downloadLink).toBeFocused();
+  const keyboardExportDownloadPromise = page.waitForEvent('download');
+  await page.keyboard.press('Enter');
+  const keyboardExportDownload = await keyboardExportDownloadPromise;
+  expect(keyboardExportDownload.suggestedFilename()).toBe('tinytracker-export.json');
+
+  await page.keyboard.press('Tab');
+  await expect(newIssueButton).toBeFocused();
+  await page.keyboard.press('Enter');
+
+  const issueForm = page.getByRole('form', { name: 'Issue form' });
+  const issueTitle = issueForm.getByLabel('Title');
+  const issueDescription = issueForm.getByLabel('Description');
+  const createIssueButton = issueForm.getByRole('button', { name: 'Create Issue' });
+
+  await expect(issueTitle).toBeFocused();
+  await page.keyboard.type('Keyboard issue');
+  await page.keyboard.press('Tab');
+  await expect(issueDescription).toBeFocused();
+  await page.keyboard.type('Created with keyboard navigation.');
+  await pressTabUntilFocused(page, createIssueButton);
+  await page.keyboard.press('Enter');
+
+  const keyboardRow = page.getByRole('row', { name: /Keyboard issue.*Todo.*Medium/ });
+  await expect(keyboardRow).toBeVisible();
+  await expect(newIssueButton).toBeFocused();
+
+  const editIssueButton = page.getByRole('button', { name: 'Edit Keyboard issue' });
+  await pressTabUntilFocused(page, editIssueButton);
+  await page.keyboard.press('Enter');
+  await expect(issueTitle).toBeFocused();
+
+  const cancelIssueButton = issueForm.getByRole('button', { name: 'Cancel' });
+  await pressTabUntilFocused(page, cancelIssueButton);
+  await page.keyboard.press('Enter');
+  await expect(editIssueButton).toBeFocused();
+
+  const openIssueButton = page.getByRole('button', { name: 'Open Keyboard issue' });
+  await pressTabUntilFocused(page, openIssueButton);
+  await page.keyboard.press('Enter');
+
+  const detail = page.getByRole('region', { name: 'Keyboard issue' });
+  const detailHeading = detail.getByRole('heading', { name: 'Keyboard issue' });
+  await expect(detailHeading).toBeFocused();
+
+  const commentForm = detail.getByRole('form', { name: 'Comment form' });
+  const commentTextarea = commentForm.getByLabel('New comment');
+  const addCommentButton = commentForm.getByRole('button', { name: 'Add Comment' });
+
+  await pressTabUntilFocused(page, commentTextarea);
+  await page.keyboard.type('Keyboard comment one');
+  await pressTabUntilFocused(page, addCommentButton);
+  await page.keyboard.press('Enter');
+
+  const keyboardCommentsList = detail.getByLabel('Issue comments');
+  const keyboardCommentItem = keyboardCommentsList
+    .getByRole('listitem')
+    .filter({ hasText: 'Keyboard comment one' });
+
+  await expect(keyboardCommentItem.getByText('Keyboard comment one')).toBeVisible();
+
+  const editCommentButton = keyboardCommentItem.getByRole('button', { name: 'Edit comment' });
+  await pressTabUntilFocused(page, editCommentButton);
+  await page.keyboard.press('Enter');
+
+  const editCommentForm = detail.getByRole('form', { name: 'Edit comment form' });
+  const editCommentTextarea = editCommentForm.getByLabel('Comment');
+  const saveCommentButton = editCommentForm.getByRole('button', { name: 'Save Comment' });
+
+  await expect(editCommentTextarea).toBeFocused();
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+  await page.keyboard.type('Keyboard comment edited');
+  await pressTabUntilFocused(page, saveCommentButton);
+  await page.keyboard.press('Enter');
+
+  const editedKeyboardCommentItem = keyboardCommentsList
+    .getByRole('listitem')
+    .filter({ hasText: 'Keyboard comment edited' });
+
+  await expect(editedKeyboardCommentItem.getByText('Keyboard comment edited')).toBeVisible();
+  await expect(editedKeyboardCommentItem.getByRole('button', { name: 'Edit comment' })).toBeFocused();
+
+  const closeDetailButton = detail.getByRole('button', {
+    name: 'Close issue detail for Keyboard issue'
+  });
+  await pressTabUntilFocused(page, closeDetailButton);
+  await page.keyboard.press('Enter');
+
+  await expect(detail).toHaveCount(0);
+  await expect(openIssueButton).toBeFocused();
 });

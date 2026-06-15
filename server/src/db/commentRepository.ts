@@ -115,7 +115,7 @@ export class CommentRepository {
         SELECT id, issue_id, body, created_at, updated_at
         FROM comments
         WHERE issue_id = @issueId
-        ORDER BY created_at ASC, id ASC
+        ORDER BY created_at ASC, rowid ASC
       `)
       .all({ issueId }) as CommentRow[];
 
@@ -180,7 +180,7 @@ export class CommentRepository {
         SELECT id, comment_id, previous_body, new_body, edited_at
         FROM comment_edit_history
         WHERE comment_id = @commentId
-        ORDER BY edited_at ASC, id ASC
+        ORDER BY edited_at ASC, rowid ASC
       `)
       .all({ commentId }) as CommentEditHistoryRow[];
 

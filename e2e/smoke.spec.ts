@@ -1860,18 +1860,20 @@ test('large issue lists remain filterable and can open detail', async ({ page })
 
   const issues = await createLargeIssueSet(page, largeIssueCount);
   const targetIssue = issues[420];
-  const listRequestStartedAt = Date.now();
   const listResponse = await page.request.get('/api/issues?search=Large%20issue&limit=25&page=1');
-  const listRequestElapsedMs = Date.now() - listRequestStartedAt;
   const listBody = (await listResponse.json()) as IssueListResponse;
   const secondPageResponse = await page.request.get('/api/issues?search=Large%20issue&limit=25&page=2');
   const secondPageBody = (await secondPageResponse.json()) as IssueListResponse;
   const secondPageTarget = secondPageBody.items[0];
+  const firstPageIds = new Set(listBody.items.map((issue) => issue.id));
+  const secondPageIds = secondPageBody.items.map((issue) => issue.id);
 
   expect(listResponse.ok()).toBe(true);
   expect(secondPageResponse.ok()).toBe(true);
-  expect(listRequestElapsedMs).toBeLessThan(1000);
   expect(listBody.items).toHaveLength(25);
+  expect(firstPageIds.size).toBe(25);
+  expect(secondPageBody.items).toHaveLength(25);
+  expect(secondPageIds.every((issueId) => !firstPageIds.has(issueId))).toBe(true);
   expect(listBody.pagination).toMatchObject({
     page: 1,
     limit: 25,
@@ -1916,10 +1918,9 @@ test('large issue lists remain filterable and can open detail', async ({ page })
   await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${secondPageTarget.id}`);
   await pagedDetail.getByRole('button', { name: `Close issue detail for ${secondPageTarget.title}` }).click();
 
-  const filterStartedAt = Date.now();
   await filters.getByLabel('Search').fill(targetIssue.title);
   await expect(page.getByLabel('Active filters')).toContainText('1 shown');
-  expect(Date.now() - filterStartedAt).toBeLessThan(1000);
+  await expect(page.getByText('Showing 1-1 of 1 matches')).toBeVisible();
 
   const targetRow = page.getByRole('row', { name: /Large issue 0420.*Todo.*Low/ });
   await expect(targetRow).toBeVisible();

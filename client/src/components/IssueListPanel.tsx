@@ -2,6 +2,7 @@ import type { RefObject } from 'react';
 import { priorityLabels, priorityOrder, statusLabels, statusOrder } from '../constants';
 import type {
   ActiveFilterSummary,
+  DashboardDensity,
   Issue,
   IssueListPagination,
   LoadState,
@@ -31,6 +32,8 @@ type IssueListPanelProps = {
   onIncludeArchivedChange: (value: boolean) => void;
   pageSize: number;
   onPageSizeChange: (value: number) => void;
+  dashboardDensity: DashboardDensity;
+  onDashboardDensityChange: (value: DashboardDensity) => void;
   savedViews: SavedFilterView[];
   selectedSavedViewId: string;
   savedViewName: string;
@@ -71,6 +74,8 @@ export function IssueListPanel({
   onIncludeArchivedChange,
   pageSize,
   onPageSizeChange,
+  dashboardDensity,
+  onDashboardDensityChange,
   savedViews,
   selectedSavedViewId,
   savedViewName,
@@ -100,9 +105,30 @@ export function IssueListPanel({
           </h2>
           <p>{issueListSummary}</p>
         </div>
-        <span className="panel-count" aria-label={`${filteredIssues.length} issues shown`}>
-          {filteredIssues.length}
-        </span>
+        <div className="panel-header-tools">
+          <div className="density-toggle" role="group" aria-label="Dashboard density">
+            <span>Density</span>
+            <button
+              type="button"
+              className={dashboardDensity === 'comfortable' ? 'is-active' : undefined}
+              aria-pressed={dashboardDensity === 'comfortable'}
+              onClick={() => onDashboardDensityChange('comfortable')}
+            >
+              Comfortable
+            </button>
+            <button
+              type="button"
+              className={dashboardDensity === 'compact' ? 'is-active' : undefined}
+              aria-pressed={dashboardDensity === 'compact'}
+              onClick={() => onDashboardDensityChange('compact')}
+            >
+              Compact
+            </button>
+          </div>
+          <span className="panel-count" aria-label={`${filteredIssues.length} issues shown`}>
+            {filteredIssues.length}
+          </span>
+        </div>
       </div>
 
       <div className="filter-panel" role="search" aria-label="Issue filters">
@@ -295,7 +321,7 @@ export function IssueListPanel({
 
       {loadState === 'loaded' && filteredIssues.length > 0 ? (
         <>
-          <div className="table-wrap">
+          <div className={`table-wrap issue-table-density-${dashboardDensity}`}>
             <table>
               <thead>
                 <tr>

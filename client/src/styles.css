@@ -243,6 +243,56 @@ h3 {
   color: #245d61;
 }
 
+.panel-header-tools {
+  display: flex;
+  align-items: center;
+  justify-content: end;
+  gap: 14px;
+}
+
+.density-toggle {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid #cfd6dd;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.density-toggle > span {
+  padding: 0 10px;
+  color: #4c5661;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.density-toggle button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-left: 1px solid #cfd6dd;
+  border-radius: 0;
+  background: #ffffff;
+  color: #30363d;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.density-toggle button:hover,
+.density-toggle button:focus-visible {
+  background: #eef5f6;
+}
+
+.density-toggle button:focus-visible {
+  outline: 3px solid #d9ecee;
+  outline-offset: -3px;
+}
+
+.density-toggle button.is-active {
+  background: #245d61;
+  color: #ffffff;
+}
+
 .filter-panel {
   display: grid;
   grid-template-columns:
@@ -613,6 +663,56 @@ td > span:not(.pill) {
   max-width: 52ch;
   color: #64707c;
   line-height: 1.45;
+}
+
+.issue-table-density-compact th,
+.issue-table-density-compact td {
+  padding: 10px 16px;
+}
+
+.issue-table-density-compact th {
+  font-size: 0.74rem;
+}
+
+.issue-table-density-compact td {
+  font-size: 0.88rem;
+}
+
+.issue-table-density-compact td strong {
+  margin-bottom: 3px;
+}
+
+.issue-table-density-compact td > span:not(.pill),
+.issue-table-density-compact .issue-description-snippet {
+  line-height: 1.28;
+}
+
+.issue-table-density-compact .label-row {
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.issue-table-density-compact .pill,
+.issue-table-density-compact .label-pill,
+.issue-table-density-compact .overdue-pill,
+.issue-table-density-compact .archived-pill,
+.issue-table-density-compact .blocked-pill {
+  min-height: 22px;
+  padding: 3px 7px;
+  font-size: 0.74rem;
+}
+
+.issue-table-density-compact .archived-pill,
+.issue-table-density-compact .blocked-pill {
+  margin-bottom: 5px;
+}
+
+.issue-table-density-compact .due-date-cell {
+  gap: 4px;
+}
+
+.issue-table-density-compact .row-actions {
+  gap: 6px;
 }
 
 .markdown-lite p {
@@ -1228,6 +1328,11 @@ td > span:not(.pill) {
 
   .total-summary {
     text-align: left;
+  }
+
+  .panel-header-tools {
+    align-items: flex-start;
+    flex-direction: column-reverse;
   }
 
   h1 {

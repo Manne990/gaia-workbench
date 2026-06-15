@@ -34,6 +34,7 @@ import type {
   CommentEditCancelOptions,
   CommentEditHistory,
   CommentLoadState,
+  DashboardDensity,
   DashboardFilters,
   Issue,
   IssueDependencyState,
@@ -123,6 +124,7 @@ export function App() {
   const [savedViewName, setSavedViewName] = useState('');
   const [savedViewError, setSavedViewError] = useState<string | null>(null);
   const [isSavedViewBusy, setIsSavedViewBusy] = useState(false);
+  const [dashboardDensity, setDashboardDensity] = useState<DashboardDensity>('comfortable');
   const newIssueButtonRef = useRef<HTMLButtonElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const issueListHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -1007,6 +1009,8 @@ export function App() {
           onIncludeArchivedChange={handleIncludeArchivedChange}
           pageSize={pageSize}
           onPageSizeChange={handlePageSizeChange}
+          dashboardDensity={dashboardDensity}
+          onDashboardDensityChange={setDashboardDensity}
           savedViews={savedViews}
           selectedSavedViewId={selectedSavedViewId}
           savedViewName={savedViewName}

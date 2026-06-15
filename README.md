@@ -86,6 +86,7 @@ Simple web interface:
 * Saved filter views
 * Archived issue recovery
 * Blocked issue visibility and dependency controls
+* Comfortable and compact dashboard density modes
 * Safe markdown-lite rendering for descriptions and comments
 * JSON export and import
 
@@ -530,6 +531,7 @@ The Playwright smoke test starts TinyTracker with an in-memory SQLite database a
 * Saved filter views can be created, applied, renamed, deleted, and composed with URLs
 * Markdown-lite descriptions and comments render safely
 * Issue dependencies can be added and removed, with blocked state shown in list and detail
+* Dashboard density can switch between comfortable and compact without hiding row information
 * Issue detail view opens
 * Comment can be added
 * Comment can be edited

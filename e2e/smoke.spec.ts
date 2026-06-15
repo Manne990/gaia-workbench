@@ -1471,6 +1471,19 @@ test('dashboard density toggle compacts rows without hiding issue information', 
 
   await comfortableButton.click();
   await expect(comfortableButton).toHaveAttribute('aria-pressed', 'true');
+
+  await compactButton.click();
+  await expect(compactButton).toHaveAttribute('aria-pressed', 'true');
+  await page.reload();
+  await expect(compactButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(issueRow).toBeVisible();
+  await expect(issueRow).toContainText('Operational row text remains visible in every density.');
+
+  await comfortableButton.click();
+  await expect(comfortableButton).toHaveAttribute('aria-pressed', 'true');
+  await page.reload();
+  await expect(comfortableButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(issueRow).toBeVisible();
 });
 
 test('secondary dashboard controls are discoverable and accessible on mobile', async ({ page }) => {

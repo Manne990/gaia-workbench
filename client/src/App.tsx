@@ -57,10 +57,37 @@ import { parseDueDateInput, parseLabelsInput } from './utils/parse';
 import { buildDashboardQuery, defaultDashboardFilters, getRouteStateFromLocation, writeRoute } from './utils/routing';
 
 const DEFAULT_IMPORT_POLICY: ImportConflictPolicy = 'skip-conflicts';
+const DASHBOARD_DENSITY_STORAGE_KEY = 'tinytracker.dashboardDensity';
 type IssueAnchorTarget = {
   type: 'comment' | 'activity';
   id: string;
 };
+
+function isDashboardDensity(value: string | null): value is DashboardDensity {
+  return value === 'comfortable' || value === 'compact';
+}
+
+function readStoredDashboardDensity(): DashboardDensity {
+  try {
+    if (typeof window === 'undefined') {
+      return 'comfortable';
+    }
+
+    const storedDensity = window.localStorage.getItem(DASHBOARD_DENSITY_STORAGE_KEY);
+
+    return isDashboardDensity(storedDensity) ? storedDensity : 'comfortable';
+  } catch {
+    return 'comfortable';
+  }
+}
+
+function writeStoredDashboardDensity(value: DashboardDensity): void {
+  try {
+    window.localStorage.setItem(DASHBOARD_DENSITY_STORAGE_KEY, value);
+  } catch {
+    // Density is a local preference; storage failures should not block UI changes.
+  }
+}
 
 function importReadyMessage(plan: ImportPlan): string {
   return `Ready to create ${plan.summary.toCreate.issues} issues, replace ${plan.summary.toReplace.issues} changed issues, and skip ${plan.summary.skip.issues}.`;
@@ -187,7 +214,7 @@ export function App() {
   const [savedViewName, setSavedViewName] = useState('');
   const [savedViewError, setSavedViewError] = useState<string | null>(null);
   const [isSavedViewBusy, setIsSavedViewBusy] = useState(false);
-  const [dashboardDensity, setDashboardDensity] = useState<DashboardDensity>('comfortable');
+  const [dashboardDensity, setDashboardDensity] = useState<DashboardDensity>(() => readStoredDashboardDensity());
   const [serviceHealthState, setServiceHealthState] = useState<ServiceHealthState>('checking');
   const [selectedBulkIssueIds, setSelectedBulkIssueIds] = useState<string[]>([]);
   const [bulkStatus, setBulkStatus] = useState<IssueStatus>('in_progress');
@@ -299,6 +326,10 @@ export function App() {
   useEffect(() => {
     dashboardFiltersRef.current = dashboardFilters;
   }, [dashboardFilters]);
+
+  useEffect(() => {
+    writeStoredDashboardDensity(dashboardDensity);
+  }, [dashboardDensity]);
 
   function openCommandPalette(trigger?: HTMLElement | null) {
     if (isCommandPaletteOpen) {

@@ -1022,6 +1022,70 @@ test('bulk visible selection changes issue status with confirmation and scoped a
   expect(hiddenIssue.status).toBe('todo');
 });
 
+test('bulk status refreshes selected dependency detail when a blocker resolves', async ({ page }) => {
+  const blocker = await createIssueThroughApi(page, {
+    title: 'Bulk blocker refresh source',
+    description: 'Resolving this issue should unblock the selected dependent.',
+    status: 'todo',
+    priority: 'high'
+  });
+  const dependent = await createIssueThroughApi(page, {
+    title: 'Bulk blocker refresh dependent',
+    description: 'Open detail must reflect derived dependency state after bulk status.',
+    status: 'in_progress',
+    priority: 'low'
+  });
+  const dependencyResponse = await page.request.post(`/api/issues/${dependent.id}/dependencies`, {
+    data: {
+      dependsOnIssueId: blocker.id
+    }
+  });
+
+  expect(dependencyResponse.ok()).toBe(true);
+
+  await page.goto(`/issues/${dependent.id}?search=Bulk%20blocker%20refresh`);
+
+  const detail = page.getByRole('region', { name: dependent.title });
+  const blockerRow = page.getByRole('row', { name: /Bulk blocker refresh source/ });
+  const dependentRow = page.getByRole('row', { name: /Bulk blocker refresh dependent/ });
+
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(blockerRow).toContainText('Todo');
+  await expect(blockerRow).toContainText('High');
+  await expect(dependentRow).toContainText('In Progress');
+  await expect(dependentRow).toContainText('Low');
+  await expect(dependentRow.locator('.blocked-pill')).toHaveText('Blocked');
+  await blockerRow.getByLabel(`Select ${blocker.title}`).check();
+
+  const bulkActions = page.getByLabel('Bulk status actions');
+
+  await expect(bulkActions).toContainText('1 selected');
+  await bulkActions.getByLabel('Status').selectOption('done');
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toBe('Change 1 selected issue to Done?');
+    await dialog.accept();
+  });
+  await bulkActions.getByRole('button', { name: 'Change Status' }).click();
+
+  await expect(bulkActions).toContainText('Changed 1 issue to Done.');
+  await expect(blockerRow).toContainText('Done');
+  await expect(dependentRow.locator('.blocked-pill')).toHaveCount(0);
+
+  const blockerItem = detail.getByLabel('Issue blockers').getByRole('listitem').filter({ hasText: blocker.title });
+  const selectedIssueResponse = await page.request.get(`/api/issues/${dependent.id}`);
+  const selectedIssue = (await selectedIssueResponse.json()) as ApiIssue;
+
+  expect(selectedIssueResponse.ok()).toBe(true);
+  expect(selectedIssue).toMatchObject({
+    isBlocked: false,
+    dependsOnIssueIds: [blocker.id]
+  });
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toHaveCount(0);
+  await expect(blockerItem.getByText('Done')).toBeVisible();
+  await expect(blockerItem.locator('.blocked-pill')).toHaveCount(0);
+});
+
 test('stale issue signal filters and persists through saved views', async ({ page }) => {
   const staleIssueId = '00000000-0000-4000-8000-000000000215';
   const importResponse = await page.request.post('/api/import/apply', {

@@ -168,6 +168,7 @@ export type CommentEditCancelOptions = CancelOptions & {
 
 export type StatusFilter = 'all' | IssueStatus;
 export type PriorityFilter = 'all' | IssuePriority;
+export type DashboardDensity = 'comfortable' | 'compact';
 
 export type DashboardFilters = {
   search: string;

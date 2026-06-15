@@ -389,6 +389,48 @@ test('dependency links show and clear blocked issue visibility', async ({ page }
   await expect(blockedRow.locator('.blocked-pill')).toHaveCount(0);
 });
 
+test('dashboard density toggle compacts rows without hiding issue information', async ({ page }) => {
+  await createIssueThroughApi(page, {
+    title: 'Density toggle issue',
+    description: 'Operational row text remains visible in every density.',
+    status: 'review',
+    priority: 'high'
+  });
+
+  await page.goto('/');
+
+  const densityControls = page.getByLabel('Dashboard density');
+  const compactButton = densityControls.getByRole('button', { name: 'Compact' });
+  const comfortableButton = densityControls.getByRole('button', { name: 'Comfortable' });
+  const issueRow = page.getByRole('row', { name: /Density toggle issue.*Review.*High/ });
+
+  await expect(densityControls).toBeVisible();
+  await expect(page.locator('.issue-table-density-comfortable')).toHaveCount(1);
+  await expect(issueRow).toBeVisible();
+  await expect(issueRow).toContainText('Operational row text remains visible in every density.');
+  await expect(issueRow).toContainText('No due date');
+  await expect(issueRow.getByRole('button', { name: 'Open Density toggle issue' })).toBeVisible();
+  await expect(issueRow.getByRole('button', { name: 'Edit Density toggle issue' })).toBeVisible();
+  await expect(issueRow.getByRole('button', { name: 'Archive Density toggle issue' })).toBeVisible();
+
+  await compactButton.click();
+  await expect(compactButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.issue-table-density-compact')).toHaveCount(1);
+  await expect(issueRow).toBeVisible();
+  await expect(issueRow).toContainText('Density toggle issue');
+  await expect(issueRow).toContainText('Operational row text remains visible in every density.');
+  await expect(issueRow).toContainText('Review');
+  await expect(issueRow).toContainText('High');
+  await expect(issueRow).toContainText('No due date');
+  await expect(issueRow.getByRole('button', { name: 'Open Density toggle issue' })).toBeVisible();
+  await expect(issueRow.getByRole('button', { name: 'Edit Density toggle issue' })).toBeVisible();
+  await expect(issueRow.getByRole('button', { name: 'Archive Density toggle issue' })).toBeVisible();
+
+  await comfortableButton.click();
+  await expect(comfortableButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.issue-table-density-comfortable')).toHaveCount(1);
+});
+
 test('markdown-lite renders safe formatting and keeps unsafe input inert', async ({ page }) => {
   const rawDescription = [
     'Description with **bold text**, _italic text_, `inline code`, and [Example](https://example.com/docs?q=1#top).',
@@ -556,7 +598,7 @@ test('keyboard users can create open comment edit and close an issue', async ({ 
   const closeDetailButton = detail.getByRole('button', {
     name: 'Close issue detail for Keyboard issue'
   });
-  await pressTabUntilFocused(page, closeDetailButton);
+  await pressTabUntilFocused(page, closeDetailButton, 80);
   await page.keyboard.press('Enter');
 
   await expect(detail).toHaveCount(0);

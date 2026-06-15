@@ -17,6 +17,7 @@ import {
   IssueListFilters,
   type IssueUpdate,
   IssueRepository,
+  type SavedFilterView,
   SavedFilterViewRepository
 } from './db/index.js';
 import { applyTrackerImport, ImportValidationError, previewTrackerImport, type ImportPlan } from './trackerImport.js';
@@ -38,6 +39,7 @@ type ExportedIssue = Issue & {
 type TrackerExport = {
   exportVersion: 1;
   issues: ExportedIssue[];
+  savedFilterViews: SavedFilterView[];
 };
 
 const DEFAULT_ISSUE_PAGE = 1;
@@ -53,37 +55,43 @@ const emptyImportPlan = (error: ImportPlan['errors'][number]): ImportPlan => ({
       issues: 0,
       comments: 0,
       editHistory: 0,
-      activityEvents: 0
+      activityEvents: 0,
+      savedFilterViews: 0
     },
     toCreate: {
       issues: 0,
       comments: 0,
       editHistory: 0,
-      activityEvents: 0
+      activityEvents: 0,
+      savedFilterViews: 0
     },
     toReplace: {
       issues: 0,
       comments: 0,
       editHistory: 0,
-      activityEvents: 0
+      activityEvents: 0,
+      savedFilterViews: 0
     },
     skip: {
       issues: 0,
       comments: 0,
       editHistory: 0,
-      activityEvents: 0
+      activityEvents: 0,
+      savedFilterViews: 0
     },
     exactMatches: {
       issues: 0,
       comments: 0,
       editHistory: 0,
-      activityEvents: 0
+      activityEvents: 0,
+      savedFilterViews: 0
     },
     changed: {
       issues: 0,
       comments: 0,
       editHistory: 0,
-      activityEvents: 0
+      activityEvents: 0,
+      savedFilterViews: 0
     },
     reject: 1
   },
@@ -305,7 +313,8 @@ function groupBy<T>(items: T[], keySelector: (item: T) => string): Map<string, T
 function buildTrackerExport(
   issueRepository: IssueRepository,
   commentRepository: CommentRepository,
-  activityRepository: ActivityRepository
+  activityRepository: ActivityRepository,
+  savedFilterViewRepository: SavedFilterViewRepository
 ): TrackerExport {
   const issues = issueRepository.listForExport();
   const issueIds = issues.map((issue) => issue.id);
@@ -330,7 +339,8 @@ function buildTrackerExport(
         comments: exportedComments,
         activityEvents: activityByIssueId.get(issue.id) ?? []
       };
-    })
+    }),
+    savedFilterViews: savedFilterViewRepository.list()
   };
 }
 
@@ -356,7 +366,9 @@ export function createApp(config: AppConfig = {}) {
   });
 
   app.get('/api/export', (_req, res) => {
-    res.status(200).json(buildTrackerExport(issueRepository, commentRepository, activityRepository));
+    res
+      .status(200)
+      .json(buildTrackerExport(issueRepository, commentRepository, activityRepository, savedFilterViewRepository));
   });
 
   app.get('/api/export.csv', (req, res) => {

@@ -626,7 +626,15 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
   const reportData = JSON.parse(readFileSync(reportPath ?? '', 'utf8')) as {
     sourceFileName: string | null;
     policy: string;
-    summary: { toCreate: { issues: number; comments: number; editHistory: number; activityEvents: number } };
+    summary: {
+      toCreate: {
+        issues: number;
+        comments: number;
+        editHistory: number;
+        activityEvents: number;
+        savedFilterViews: number;
+      };
+    };
     decisions: unknown[];
     warnings: string[];
     errors: unknown[];
@@ -634,7 +642,13 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
 
   expect(reportData.sourceFileName).toBe('tinytracker-import.json');
   expect(reportData.policy).toBe('skip-conflicts');
-  expect(reportData.summary.toCreate).toEqual({ issues: 1, comments: 1, editHistory: 0, activityEvents: 1 });
+  expect(reportData.summary.toCreate).toEqual({
+    issues: 1,
+    comments: 1,
+    editHistory: 0,
+    activityEvents: 1,
+    savedFilterViews: 0
+  });
   expect(Array.isArray(reportData.decisions)).toBe(true);
   expect(reportData.errors).toEqual([]);
   expect(reportData.warnings).toEqual([]);

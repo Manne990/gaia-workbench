@@ -58,21 +58,14 @@ export function buildDashboardPath(filters: DashboardFilters = defaultDashboardF
   return query ? `/?${query}` : '/';
 }
 
-export function buildIssuePath(
-  issueId: string,
-  filters: DashboardFilters = defaultDashboardFilters
-): string {
+export function buildIssuePath(issueId: string, filters: DashboardFilters = defaultDashboardFilters): string {
   const query = buildDashboardQuery(filters);
   const path = `/issues/${encodeURIComponent(issueId)}`;
 
   return query ? `${path}?${query}` : path;
 }
 
-export function writeRoute(
-  issueId: string | null,
-  filters: DashboardFilters,
-  mode: 'push' | 'replace'
-): void {
+export function writeRoute(issueId: string | null, filters: DashboardFilters, mode: 'push' | 'replace'): void {
   const nextPath = issueId ? buildIssuePath(issueId, filters) : buildDashboardPath(filters);
   const currentPath = `${window.location.pathname}${window.location.search}`;
 

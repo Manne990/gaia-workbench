@@ -118,9 +118,7 @@ describe('tracker export API', () => {
     const secondIssueActivityBefore = await request(app)
       .get(`/api/issues/${createdSecond.body.id}/activity`)
       .expect(200);
-    const emptyIssueActivityBefore = await request(app)
-      .get(`/api/issues/${createdEmpty.body.id}/activity`)
-      .expect(200);
+    const emptyIssueActivityBefore = await request(app).get(`/api/issues/${createdEmpty.body.id}/activity`).expect(200);
 
     const firstExport = await request(app).get('/api/export').expect(200);
     const secondExport = await request(app).get('/api/export').expect(200);
@@ -139,9 +137,7 @@ describe('tracker export API', () => {
     expect(firstExport.body).not.toHaveProperty('items');
     expect(firstExport.body).not.toHaveProperty('pagination');
     expect(exported.exportVersion).toBe(1);
-    expect(exported.issues.map((issue) => issue.id)).toEqual(
-      sortedIssueSnapshots.map((issue) => issue.id)
-    );
+    expect(exported.issues.map((issue) => issue.id)).toEqual(sortedIssueSnapshots.map((issue) => issue.id));
     expect(exportedFirstIssue).toBeDefined();
     expect(exportedSecondIssue).toBeDefined();
     expect(exportedEmptyIssue).toBeDefined();
@@ -206,22 +202,14 @@ describe('tracker export API', () => {
     await request(app).get(`/api/issues/${createdSecond.body.id}`).expect(200, secondIssueBefore.body);
     await request(app).get(`/api/issues/${createdEmpty.body.id}`).expect(200, emptyIssueBefore.body);
     await request(app).get(`/api/issues/${createdFirst.body.id}/comments`).expect(200, commentsBefore.body);
-    await request(app)
-      .get(`/api/issues/${createdSecond.body.id}/comments`)
-      .expect(200, secondIssueCommentsBefore.body);
+    await request(app).get(`/api/issues/${createdSecond.body.id}/comments`).expect(200, secondIssueCommentsBefore.body);
     await request(app).get(`/api/comments/${firstComment.body.id}/history`).expect(200, historyBefore.body);
     await request(app)
       .get(`/api/comments/${secondComment.body.id}/history`)
       .expect(200, secondCommentHistoryBefore.body);
-    await request(app)
-      .get(`/api/issues/${createdFirst.body.id}/activity`)
-      .expect(200, activityBefore.body);
-    await request(app)
-      .get(`/api/issues/${createdSecond.body.id}/activity`)
-      .expect(200, secondIssueActivityBefore.body);
-    await request(app)
-      .get(`/api/issues/${createdEmpty.body.id}/activity`)
-      .expect(200, emptyIssueActivityBefore.body);
+    await request(app).get(`/api/issues/${createdFirst.body.id}/activity`).expect(200, activityBefore.body);
+    await request(app).get(`/api/issues/${createdSecond.body.id}/activity`).expect(200, secondIssueActivityBefore.body);
+    await request(app).get(`/api/issues/${createdEmpty.body.id}/activity`).expect(200, emptyIssueActivityBefore.body);
   });
 
   it('exports archived issues with archive state and activity', async () => {

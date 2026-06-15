@@ -77,10 +77,12 @@ export class CommentRepository {
 
     const transaction = this.database.transaction(() => {
       this.database
-        .prepare(`
+        .prepare(
+          `
           INSERT INTO comments (id, issue_id, body, created_at, updated_at)
           VALUES (@id, @issueId, @body, @createdAt, @updatedAt)
-        `)
+        `
+        )
         .run({
           id: comment.id,
           issueId: comment.issueId,
@@ -103,11 +105,13 @@ export class CommentRepository {
 
   getById(id: string): Comment | null {
     const row = this.database
-      .prepare(`
+      .prepare(
+        `
         SELECT id, issue_id, body, created_at, updated_at
         FROM comments
         WHERE id = @id
-      `)
+      `
+      )
       .get({ id }) as CommentRow | undefined;
 
     return row ? mapCommentRow(row) : null;
@@ -115,12 +119,14 @@ export class CommentRepository {
 
   listByIssueId(issueId: string): Comment[] {
     const rows = this.database
-      .prepare(`
+      .prepare(
+        `
         SELECT id, issue_id, body, created_at, updated_at
         FROM comments
         WHERE issue_id = @issueId
         ORDER BY created_at ASC, rowid ASC
-      `)
+      `
+      )
       .all({ issueId }) as CommentRow[];
 
     return rows.map(mapCommentRow);
@@ -132,12 +138,14 @@ export class CommentRepository {
     }
 
     const rows = this.database
-      .prepare(`
+      .prepare(
+        `
         SELECT id, issue_id, body, created_at, updated_at
         FROM comments
         WHERE issue_id IN (${placeholdersFor(issueIds)})
         ORDER BY issue_id ASC, created_at ASC, rowid ASC
-      `)
+      `
+      )
       .all(...issueIds) as CommentRow[];
 
     return rows.map(mapCommentRow);
@@ -159,18 +167,22 @@ export class CommentRepository {
 
     const transaction = this.database.transaction(() => {
       this.database
-        .prepare(`
+        .prepare(
+          `
           UPDATE comments
           SET body = @body, updated_at = @updatedAt
           WHERE id = @id
-        `)
+        `
+        )
         .run({ id, body: nextBody, updatedAt });
 
       this.database
-        .prepare(`
+        .prepare(
+          `
           INSERT INTO comment_edit_history (id, comment_id, previous_body, new_body, edited_at)
           VALUES (@id, @commentId, @previousBody, @newBody, @editedAt)
-        `)
+        `
+        )
         .run({
           id: randomUUID(),
           commentId: id,
@@ -197,12 +209,14 @@ export class CommentRepository {
 
   getHistory(commentId: string): CommentEditHistory[] {
     const rows = this.database
-      .prepare(`
+      .prepare(
+        `
         SELECT id, comment_id, previous_body, new_body, edited_at
         FROM comment_edit_history
         WHERE comment_id = @commentId
         ORDER BY edited_at ASC, rowid ASC
-      `)
+      `
+      )
       .all({ commentId }) as CommentEditHistoryRow[];
 
     return rows.map(mapCommentEditHistoryRow);
@@ -214,12 +228,14 @@ export class CommentRepository {
     }
 
     const rows = this.database
-      .prepare(`
+      .prepare(
+        `
         SELECT id, comment_id, previous_body, new_body, edited_at
         FROM comment_edit_history
         WHERE comment_id IN (${placeholdersFor(commentIds)})
         ORDER BY comment_id ASC, edited_at ASC, rowid ASC
-      `)
+      `
+      )
       .all(...commentIds) as CommentEditHistoryRow[];
 
     return rows.map(mapCommentEditHistoryRow);

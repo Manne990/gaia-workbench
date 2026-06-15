@@ -91,7 +91,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
         setPagination(body.pagination);
         setSummary(body.summary);
         setLoadState('loaded');
-      } catch (error) {
+      } catch {
         if (!controller.signal.aborted) {
           setLoadState('error');
         }
@@ -135,10 +135,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     }));
   }, [summary]);
 
-  const totalIssueCount = useMemo(
-    () => statusCounts.reduce((total, item) => total + item.count, 0),
-    [statusCounts]
-  );
+  const totalIssueCount = useMemo(() => statusCounts.reduce((total, item) => total + item.count, 0), [statusCounts]);
   const pageStart = pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.limit + 1;
   const pageEnd = Math.min(pagination.page * pagination.limit, pagination.total);
 

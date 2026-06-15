@@ -3,12 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import {
-  ActivityRepository,
-  CommentRepository,
-  createDatabase,
-  IssueRepository
-} from '../src/db/index.js';
+import { ActivityRepository, CommentRepository, createDatabase, IssueRepository } from '../src/db/index.js';
 import { seedDemoData } from '../src/seedDemoData.js';
 
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -82,9 +77,7 @@ describe('demo data seed command', () => {
         });
 
         const comments = commentRepository.listByIssueId(onboarding!.id);
-        const editedComment = comments.find((comment) =>
-          comment.body.includes('grouped by dashboard area')
-        );
+        const editedComment = comments.find((comment) => comment.body.includes('grouped by dashboard area'));
 
         expect(comments).toHaveLength(2);
         expect(editedComment).toBeDefined();
@@ -92,9 +85,7 @@ describe('demo data seed command', () => {
         expect(activityRepository.listByIssueId(onboarding!.id).map((event) => event.type)).toEqual(
           expect.arrayContaining(['issue_created', 'comment_added', 'comment_edited'])
         );
-        expect(
-          activityRepository.listByIssueId(exportSnapshot!.id).map((event) => event.type)
-        ).toEqual(
+        expect(activityRepository.listByIssueId(exportSnapshot!.id).map((event) => event.type)).toEqual(
           expect.arrayContaining(['issue_created', 'issue_status_changed', 'issue_priority_changed'])
         );
       } finally {

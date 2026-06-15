@@ -42,10 +42,7 @@ function placeholdersFor(values: string[]): string {
   return values.map(() => '?').join(', ');
 }
 
-export function recordActivityEvent(
-  database: Database.Database,
-  input: NewActivityEvent
-): ActivityEvent {
+export function recordActivityEvent(database: Database.Database, input: NewActivityEvent): ActivityEvent {
   const event: ActivityEvent = {
     id: randomUUID(),
     issueId: input.issueId,
@@ -55,10 +52,12 @@ export function recordActivityEvent(
   };
 
   database
-    .prepare(`
+    .prepare(
+      `
       INSERT INTO activity_events (id, issue_id, event_type, metadata, created_at)
       VALUES (@id, @issueId, @type, @metadata, @createdAt)
-    `)
+    `
+    )
     .run({
       id: event.id,
       issueId: event.issueId,
@@ -79,12 +78,14 @@ export class ActivityRepository {
 
   listByIssueId(issueId: string): ActivityEvent[] {
     const rows = this.database
-      .prepare(`
+      .prepare(
+        `
         SELECT id, issue_id, event_type, metadata, created_at
         FROM activity_events
         WHERE issue_id = @issueId
         ORDER BY created_at ASC, rowid ASC
-      `)
+      `
+      )
       .all({ issueId }) as ActivityEventRow[];
 
     return rows.map(mapActivityEventRow);
@@ -96,12 +97,14 @@ export class ActivityRepository {
     }
 
     const rows = this.database
-      .prepare(`
+      .prepare(
+        `
         SELECT id, issue_id, event_type, metadata, created_at
         FROM activity_events
         WHERE issue_id IN (${placeholdersFor(issueIds)})
         ORDER BY issue_id ASC, created_at ASC, rowid ASC
-      `)
+      `
+      )
       .all(...issueIds) as ActivityEventRow[];
 
     return rows.map(mapActivityEventRow);

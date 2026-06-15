@@ -211,10 +211,7 @@ describe('tracker import API', () => {
       })
       .expect(201);
 
-    await request(sourceApp)
-      .post(`/api/issues/${created.body.id}/comments`)
-      .send({ body: rawComment })
-      .expect(201);
+    await request(sourceApp).post(`/api/issues/${created.body.id}/comments`).send({ body: rawComment }).expect(201);
 
     const payload = await request(sourceApp).get('/api/export').expect(200);
 

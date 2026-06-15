@@ -1,11 +1,7 @@
 import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import {
-  normalizeMarkdownLinkUrl,
-  renderMarkdownLite,
-  renderMarkdownLiteInline
-} from './markdown';
+import { normalizeMarkdownLinkUrl, renderMarkdownLite, renderMarkdownLiteInline } from './markdown';
 
 function renderBlock(source: string): string {
   return renderToStaticMarkup(createElement(Fragment, null, renderMarkdownLite(source)));
@@ -58,9 +54,7 @@ describe('markdown-lite renderer', () => {
     expect(normalizeMarkdownLinkUrl('/relative/path')).toBeNull();
     expect(normalizeMarkdownLinkUrl('https://exa mple.com')).toBeNull();
 
-    const rendered = renderInline(
-      '[bad](javascript:alert(1)) [data](data:text/html,alert) [relative](/issues/1)'
-    );
+    const rendered = renderInline('[bad](javascript:alert(1)) [data](data:text/html,alert) [relative](/issues/1)');
 
     expect(rendered).not.toContain('<a ');
     expect(rendered).toContain('[bad](javascript:alert(1))');

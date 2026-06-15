@@ -129,10 +129,12 @@ describe('persistence layer', () => {
 
     try {
       database
-        .prepare(`
+        .prepare(
+          `
           INSERT INTO issues (id, title, description, status, priority, labels, due_date, created_at, updated_at)
           VALUES (@id, @title, @description, @status, @priority, @labels, @dueDate, @createdAt, @updatedAt)
-        `)
+        `
+        )
         .run({
           id: 'legacy-issue',
           title: 'Legacy issue',
@@ -218,12 +220,8 @@ describe('persistence layer', () => {
           dueDate: 20260615
         })
       ).toThrow('Invalid issue due date');
-      expect(() => issueRepository.update(issue.id, { dueDate: '2026-02-30' })).toThrow(
-        'Invalid issue due date'
-      );
-      expect(() => issueRepository.update(issue.id, { dueDate: 'tomorrow' })).toThrow(
-        'Invalid issue due date'
-      );
+      expect(() => issueRepository.update(issue.id, { dueDate: '2026-02-30' })).toThrow('Invalid issue due date');
+      expect(() => issueRepository.update(issue.id, { dueDate: 'tomorrow' })).toThrow('Invalid issue due date');
       expect(() => commentRepository.create({ issueId: issue.id, body: '' })).toThrow('body is required');
     } finally {
       database.close();
@@ -394,9 +392,7 @@ describe('persistence layer', () => {
       expect(issueRepository.list({ priority: 'high' }).items).toEqual([bug]);
       expect(issueRepository.list({ search: 'oauth' }).items).toEqual([bug]);
       expect(issueRepository.list({ search: 'SETUP' }).items).toEqual([docs]);
-      expect(issueRepository.list({ status: 'todo', priority: 'high', search: 'login' }).items).toEqual([
-        bug
-      ]);
+      expect(issueRepository.list({ status: 'todo', priority: 'high', search: 'login' }).items).toEqual([bug]);
       expect(issueRepository.list({ status: 'done', priority: 'high' }).items).toEqual([]);
     } finally {
       database.close();
@@ -459,10 +455,7 @@ describe('persistence layer', () => {
     const issueRepository = new IssueRepository(database);
     const commentRepository = new CommentRepository(database);
 
-    function groupIdsBy<T extends { id: string }>(
-      items: T[],
-      keySelector: (item: T) => string
-    ): Map<string, string[]> {
+    function groupIdsBy<T extends { id: string }>(items: T[], keySelector: (item: T) => string): Map<string, string[]> {
       const groups = new Map<string, string[]>();
 
       for (const item of items) {
@@ -498,11 +491,7 @@ describe('persistence layer', () => {
         (comment) => comment.issueId
       );
       const historyByCommentId = groupIdsBy(
-        commentRepository.getHistoryByCommentIds([
-          thirdComment.id,
-          secondComment.id,
-          firstComment.id
-        ]),
+        commentRepository.getHistoryByCommentIds([thirdComment.id, secondComment.id, firstComment.id]),
         (history) => history.commentId
       );
       const activityByIssueId = groupIdsBy(

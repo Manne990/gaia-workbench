@@ -37,10 +37,7 @@ export function parseDueDateInput(value: string): string | null {
 
   const [year, month, day] = dueDate.split('-').map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
-  const isRealDate =
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day;
+  const isRealDate = date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 
   if (!isRealDate) {
     throw new Error('Due date must be a valid date.');

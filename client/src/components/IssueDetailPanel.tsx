@@ -1,12 +1,6 @@
 import type { Dispatch, FormEvent, RefObject, SetStateAction } from 'react';
 import { priorityLabels, statusLabels } from '../constants';
-import type {
-  ActivityEvent,
-  Comment,
-  CommentEditHistory,
-  CommentLoadState,
-  Issue
-} from '../types';
+import type { ActivityEvent, Comment, CommentEditHistory, CommentLoadState, Issue } from '../types';
 import { activityDetail, activityTitle } from '../utils/activity';
 import { formatDate, formatDueDate } from '../utils/formatters';
 import { renderMarkdownLite, renderMarkdownLiteInline } from '../utils/markdown';
@@ -286,7 +280,11 @@ export function IssueDetailPanel({
                         </div>
 
                         {isEditingComment ? (
-                          <form className="comment-edit-form" aria-label="Edit comment form" onSubmit={onSubmitCommentEdit}>
+                          <form
+                            className="comment-edit-form"
+                            aria-label="Edit comment form"
+                            onSubmit={onSubmitCommentEdit}
+                          >
                             <label htmlFor={`comment-edit-${comment.id}`}>
                               <span>Comment</span>
                               <textarea

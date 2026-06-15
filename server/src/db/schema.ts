@@ -169,17 +169,13 @@ function setTinyTrackerSchemaVersion(database: Database.Database, version: numbe
 }
 
 function getExistingTableNames(database: Database.Database): Set<string> {
-  const rows = database
-    .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
-    .all() as SchemaNameRow[];
+  const rows = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as SchemaNameRow[];
 
   return new Set(rows.map((row) => row.name));
 }
 
 function getExistingIndexNames(database: Database.Database): Set<string> {
-  const rows = database
-    .prepare("SELECT name FROM sqlite_master WHERE type = 'index'")
-    .all() as SchemaNameRow[];
+  const rows = database.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as SchemaNameRow[];
 
   return new Set(rows.map((row) => row.name));
 }
@@ -222,9 +218,7 @@ export function ensureTinyTrackerSchema(database: Database.Database): void {
   const currentVersion = getTinyTrackerSchemaVersion(database);
 
   if (currentVersion > SCHEMA_VERSION) {
-    throw new Error(
-      `Unsupported TinyTracker schema version ${currentVersion}; expected ${SCHEMA_VERSION} or lower`
-    );
+    throw new Error(`Unsupported TinyTracker schema version ${currentVersion}; expected ${SCHEMA_VERSION} or lower`);
   }
 
   if (currentVersion === SCHEMA_VERSION) {
@@ -237,9 +231,7 @@ export function ensureTinyTrackerSchema(database: Database.Database): void {
   );
 
   if (pendingMigrations.length === 0) {
-    throw new Error(
-      `No TinyTracker schema migration path from version ${currentVersion} to ${SCHEMA_VERSION}`
-    );
+    throw new Error(`No TinyTracker schema migration path from version ${currentVersion} to ${SCHEMA_VERSION}`);
   }
 
   for (const migration of MIGRATIONS) {

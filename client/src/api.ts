@@ -1,9 +1,6 @@
 import type { ActivityEvent, CommentEditHistory, ImportPlan, Issue } from './types';
 
-export async function fetchCommentHistory(
-  commentId: string,
-  signal?: AbortSignal
-): Promise<CommentEditHistory[]> {
+export async function fetchCommentHistory(commentId: string, signal?: AbortSignal): Promise<CommentEditHistory[]> {
   const response = await fetch(`/api/comments/${commentId}/history`, { signal });
 
   if (!response.ok) {

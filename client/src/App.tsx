@@ -32,7 +32,7 @@ import type {
   IssueFormValues,
   ImportPlan,
   PriorityFilter,
-  StatusFilter,
+  StatusFilter
 } from './types';
 import { restoreFocus } from './utils/focus';
 import { parseDueDateInput, parseLabelsInput } from './utils/parse';
@@ -121,12 +121,8 @@ export function App() {
     includeArchived
   };
 
-  const isIssueDetailLoading = Boolean(
-    selectedIssueId && selectedIssueLoadState === 'loading' && !selectedIssue
-  );
-  const isIssueDetailError = Boolean(
-    selectedIssueId && selectedIssueLoadState === 'error' && !selectedIssue
-  );
+  const isIssueDetailLoading = Boolean(selectedIssueId && selectedIssueLoadState === 'loading' && !selectedIssue);
+  const isIssueDetailError = Boolean(selectedIssueId && selectedIssueLoadState === 'error' && !selectedIssue);
   const isMissingSelectedIssue = selectedIssueLoadState === 'not_found';
   const isImportPanelVisible = Boolean(
     importFileName || importPlan || importError || isImportPreviewing || importMessage
@@ -268,9 +264,7 @@ export function App() {
     } catch (error) {
       setImportPayload(null);
       setImportPlan(null);
-      setImportError(
-        error instanceof SyntaxError ? 'File is not valid JSON.' : 'Import preview failed.'
-      );
+      setImportError(error instanceof SyntaxError ? 'File is not valid JSON.' : 'Import preview failed.');
     } finally {
       setIsImportPreviewing(false);
       resetImportInput();
@@ -340,7 +334,7 @@ export function App() {
 
         setSelectedIssue(loadedIssue);
         setSelectedIssueLoadState('loaded');
-      } catch (error) {
+      } catch {
         if (!controller.signal.aborted) {
           setSelectedIssueLoadState(issueWasAlreadyDisplayed ? 'loaded' : 'error');
 
@@ -405,7 +399,7 @@ export function App() {
         setActivityEvents(loadedActivityEvents);
         setCommentLoadState('loaded');
         setActivityLoadState('loaded');
-      } catch (error) {
+      } catch {
         if (!controller.signal.aborted) {
           setCommentLoadState('error');
           setActivityLoadState('error');
@@ -564,8 +558,7 @@ export function App() {
       labels,
       dueDate
     };
-    const endpoint =
-      activeForm.mode === 'create' ? '/api/issues' : `/api/issues/${activeForm.issueId}`;
+    const endpoint = activeForm.mode === 'create' ? '/api/issues' : `/api/issues/${activeForm.issueId}`;
     const method = activeForm.mode === 'create' ? 'POST' : 'PUT';
 
     try {
@@ -665,9 +658,7 @@ export function App() {
 
     if (shouldRestoreFocus) {
       restoreFocus(returnFocusTarget, () =>
-        commentId
-          ? getCommentEditButton(commentId) ?? commentsHeadingRef.current
-          : commentsHeadingRef.current
+        commentId ? (getCommentEditButton(commentId) ?? commentsHeadingRef.current) : commentsHeadingRef.current
       );
     }
 
@@ -707,9 +698,7 @@ export function App() {
 
       const savedComment = (await response.json()) as Comment;
       const history = await fetchCommentHistory(savedComment.id);
-      setComments((current) =>
-        current.map((comment) => (comment.id === savedComment.id ? savedComment : comment))
-      );
+      setComments((current) => current.map((comment) => (comment.id === savedComment.id ? savedComment : comment)));
       setCommentHistory((current) => ({ ...current, [savedComment.id]: history }));
       await refreshActivity(savedComment.issueId);
       cancelEditComment({ commentId });

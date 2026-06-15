@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  buildDashboardPath,
-  buildIssuePath,
-  parseDashboardFiltersFromSearch,
-  getIssueIdFromPath
-} from './routing';
+import { buildDashboardPath, buildIssuePath, parseDashboardFiltersFromSearch, getIssueIdFromPath } from './routing';
 
 describe('client routing helpers', () => {
   it('extracts issue ids from canonical detail paths', () => {
@@ -37,7 +32,9 @@ describe('client routing helpers', () => {
   });
 
   it('normalizes unknown and empty dashboard filter values', () => {
-    expect(parseDashboardFiltersFromSearch('?search=%20%20&status=blocked&priority=urgent&includeArchived=yes')).toEqual({
+    expect(
+      parseDashboardFiltersFromSearch('?search=%20%20&status=blocked&priority=urgent&includeArchived=yes')
+    ).toEqual({
       search: '',
       status: 'all',
       priority: 'all',
@@ -55,9 +52,9 @@ describe('client routing helpers', () => {
   });
 
   it('builds canonical dashboard paths with stable query order', () => {
-    expect(buildDashboardPath({ search: 'ready for review', status: 'review', priority: 'high', includeArchived: true })).toBe(
-      '/?search=ready+for+review&status=review&priority=high&includeArchived=true'
-    );
+    expect(
+      buildDashboardPath({ search: 'ready for review', status: 'review', priority: 'high', includeArchived: true })
+    ).toBe('/?search=ready+for+review&status=review&priority=high&includeArchived=true');
     expect(buildDashboardPath({ search: '  ', status: 'all', priority: 'all', includeArchived: false })).toBe('/');
   });
 

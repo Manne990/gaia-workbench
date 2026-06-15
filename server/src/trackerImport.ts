@@ -98,13 +98,7 @@ const emptyCounts = (): ImportCounts => ({
   activityEvents: 0
 });
 
-function pushError(
-  errors: ImportErrorDetail[],
-  code: string,
-  path: string,
-  message: string,
-  value?: unknown
-) {
+function pushError(errors: ImportErrorDetail[], code: string, path: string, message: string, value?: unknown) {
   const error: ImportErrorDetail = { code, path, message };
 
   if (value !== undefined) {
@@ -196,12 +190,7 @@ function readStringOrNull(
   return field;
 }
 
-function readBoolean(
-  value: Record<string, unknown>,
-  key: string,
-  path: string,
-  errors: ImportErrorDetail[]
-): boolean {
+function readBoolean(value: Record<string, unknown>, key: string, path: string, errors: ImportErrorDetail[]): boolean {
   const field = value[key];
 
   if (typeof field !== 'boolean') {
@@ -212,12 +201,7 @@ function readBoolean(
   return field;
 }
 
-function readArray(
-  value: Record<string, unknown>,
-  key: string,
-  path: string,
-  errors: ImportErrorDetail[]
-): unknown[] {
+function readArray(value: Record<string, unknown>, key: string, path: string, errors: ImportErrorDetail[]): unknown[] {
   const field = value[key];
 
   if (!Array.isArray(field)) {
@@ -236,11 +220,7 @@ function isValidDateOnly(value: string): boolean {
   const [year, month, day] = value.split('-').map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
 
-  return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
-  );
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
 function isValidTimestamp(value: string): boolean {
@@ -270,11 +250,7 @@ function validateMetadataValue(
   return false;
 }
 
-function validateMetadata(
-  value: unknown,
-  path: string,
-  errors: ImportErrorDetail[]
-): ActivityMetadata {
+function validateMetadata(value: unknown, path: string, errors: ImportErrorDetail[]): ActivityMetadata {
   if (!isRecord(value)) {
     pushError(errors, 'invalid_type', path, 'Activity metadata must be an object.', value);
     return {};
@@ -393,13 +369,7 @@ function validateTrackerExport(input: unknown): ValidationResult {
 
   const exportVersion = root.exportVersion;
   if (exportVersion !== 1) {
-    pushError(
-      errors,
-      'unsupported_version',
-      '$.exportVersion',
-      'Unsupported export version.',
-      exportVersion
-    );
+    pushError(errors, 'unsupported_version', '$.exportVersion', 'Unsupported export version.', exportVersion);
   }
 
   const issuesInput = readArray(root, 'issues', '$', errors);
@@ -448,9 +418,7 @@ function validateTrackerExport(input: unknown): ValidationResult {
     const dueDate = readStringOrNull(issueObject, 'dueDate', issuePath, errors);
     const isOverdue = readBoolean(issueObject, 'isOverdue', issuePath, errors);
     const archivedAt =
-      issueObject.archivedAt === undefined
-        ? null
-        : readStringOrNull(issueObject, 'archivedAt', issuePath, errors);
+      issueObject.archivedAt === undefined ? null : readStringOrNull(issueObject, 'archivedAt', issuePath, errors);
     const createdAt = readString(issueObject, 'createdAt', issuePath, errors, { nonEmpty: true });
     const updatedAt = readString(issueObject, 'updatedAt', issuePath, errors, { nonEmpty: true });
 
@@ -479,13 +447,7 @@ function validateTrackerExport(input: unknown): ValidationResult {
     }
 
     if (archivedAt !== null && !isValidTimestamp(archivedAt)) {
-      pushError(
-        errors,
-        'invalid_timestamp',
-        `${issuePath}.archivedAt`,
-        'Invalid archivedAt timestamp.',
-        archivedAt
-      );
+      pushError(errors, 'invalid_timestamp', `${issuePath}.archivedAt`, 'Invalid archivedAt timestamp.', archivedAt);
     }
 
     const commentsInput = readArray(issueObject, 'comments', issuePath, errors);
@@ -613,13 +575,7 @@ function validateTrackerExport(input: unknown): ValidationResult {
         }
 
         if (!isValidTimestamp(editedAt)) {
-          pushError(
-            errors,
-            'invalid_timestamp',
-            `${historyPath}.editedAt`,
-            'Invalid editedAt timestamp.',
-            editedAt
-          );
+          pushError(errors, 'invalid_timestamp', `${historyPath}.editedAt`, 'Invalid editedAt timestamp.', editedAt);
         }
 
         editHistory.push({
@@ -919,9 +875,7 @@ export function applyTrackerImport(database: Database.Database, input: unknown):
   const commentIdsToImport = decisionSet(plan, 'comment');
   const historyIdsToImport = decisionSet(plan, 'commentEditHistory');
   const activityIdsToImport = decisionSet(plan, 'activityEvent');
-  const issues = validation.exportData.issues
-    .filter((issue) => issueIdsToImport.has(issue.id))
-    .sort(byCreatedAtThenId);
+  const issues = validation.exportData.issues.filter((issue) => issueIdsToImport.has(issue.id)).sort(byCreatedAtThenId);
   const comments = validation.exportData.issues
     .flatMap((issue) => issue.comments)
     .filter((comment) => commentIdsToImport.has(comment.id));

@@ -1926,6 +1926,71 @@ test('saved filter views persist restore and compose with detail routes', async 
   expect(savedViewListBody).toEqual([]);
 });
 
+test('saved filter view apply preserves the local view after transient fetch failures', async ({ page }) => {
+  await createIssueThroughApi(page, {
+    title: 'Saved view transient target',
+    description: 'Saved view should survive a temporary fetch failure.',
+    status: 'review',
+    priority: 'high',
+    labels: ['transient']
+  });
+  await createIssueThroughApi(page, {
+    title: 'Saved view transient other',
+    description: 'Should not match the saved view after retry.',
+    status: 'todo',
+    priority: 'low',
+    labels: ['other']
+  });
+
+  await page.goto('/');
+
+  const filters = page.getByLabel('Issue filters');
+  const settings = await expandDashboardSettings(page);
+  const savedViews = settings.getByLabel('Saved filter views');
+  const savedViewSelect = savedViews.getByLabel('Saved views');
+
+  await filters.getByLabel('Search').fill('Saved view transient target');
+  await filters.getByLabel('Status').selectOption('review');
+  await filters.getByLabel('Priority').selectOption('high');
+  await filters.getByLabel('Label').fill('transient');
+  await savedViews.getByLabel('View name').fill('Transient saved view');
+  await savedViews.getByRole('button', { name: 'Save View' }).click();
+  await expect(savedViewSelect).toContainText('Transient saved view');
+
+  await filters.getByRole('button', { name: 'Clear Filters' }).click();
+  await expect(filters.getByLabel('Search')).toHaveValue('');
+
+  let failedApply = false;
+
+  await page.route('**/api/filter-views/*', async (route) => {
+    if (route.request().method() === 'GET' && !failedApply) {
+      failedApply = true;
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Temporary saved view outage' })
+      });
+      return;
+    }
+
+    await route.continue();
+  });
+
+  await savedViews.getByRole('button', { name: 'Apply View' }).click();
+  await expect(savedViews.getByText('Temporary saved view outage')).toBeVisible();
+  await expect(savedViewSelect).toContainText('Transient saved view');
+  await expect(savedViewSelect).not.toHaveValue('');
+  await expect(savedViews.getByRole('button', { name: 'Apply View' })).toBeEnabled();
+
+  await savedViews.getByRole('button', { name: 'Apply View' }).click();
+  await expect(filters.getByLabel('Search')).toHaveValue('Saved view transient target');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(filters.getByLabel('Priority')).toHaveValue('high');
+  await expect(filters.getByLabel('Label')).toHaveValue('transient');
+  await expect(page.getByRole('row', { name: /Saved view transient target.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Saved view transient other.*Todo.*Low/ })).toHaveCount(0);
+});
+
 test('blocked-only filter is shareable and restores from saved views', async ({ page }) => {
   const blocker = await createIssueThroughApi(page, {
     title: 'Blocked filter blocker',

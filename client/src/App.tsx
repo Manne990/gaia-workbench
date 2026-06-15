@@ -671,9 +671,14 @@ export function App() {
       setDashboardFilters(nextFilters);
       writeRouteState(selectedIssueId, nextFilters, 'push');
     } catch (error) {
-      setSavedViewError(error instanceof Error ? error.message : 'Saved view apply failed.');
-      setSavedViews((current) => current.filter((view) => view.id !== selectedSavedViewId));
-      setSelectedSavedViewId('');
+      const message = error instanceof Error ? error.message : 'Saved view apply failed.';
+
+      setSavedViewError(message);
+
+      if (message === 'Saved view not found') {
+        setSavedViews((current) => current.filter((view) => view.id !== selectedSavedViewId));
+        setSelectedSavedViewId('');
+      }
     } finally {
       setIsSavedViewBusy(false);
     }

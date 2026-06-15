@@ -77,6 +77,20 @@ export interface IssueListSummary {
   totalHighPriority: number;
 }
 
+export interface IssueAuditSummary {
+  totalIssues: number;
+  totalArchivedIssues: number;
+  totalBlockedIssues: number;
+  totalOverdueIssues: number;
+  totalStaleIssues: number;
+  byStatus: Record<IssueStatus, number>;
+  byPriority: Record<IssuePriority, number>;
+  dependencyEdges: {
+    total: number;
+    blocked: number;
+  };
+}
+
 export interface IssueListSort {
   field: 'created_at,id';
   direction: 'desc,desc';

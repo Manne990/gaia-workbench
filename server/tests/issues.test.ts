@@ -165,6 +165,94 @@ describe('issues API', () => {
     });
   });
 
+  it('returns an audit summary matching list filter semantics', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const activeOverdueTodo = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Active overdue todo', dueDate: '2000-01-01' })
+      .expect(201);
+    const activeBlocked = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Active blocked issue', status: 'in_progress', priority: 'high', dueDate: '2000-01-01' })
+      .expect(201);
+    await request(app)
+      .post('/api/issues')
+      .send({ title: 'Active done but past due', status: 'done', dueDate: '2000-01-01' })
+      .expect(201);
+    await request(app).post('/api/issues').send({ title: 'Active future todo', dueDate: '2999-12-31' }).expect(201);
+    const archivedOverdue = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Archived overdue todo', dueDate: '2000-01-01', status: 'todo', priority: 'low' })
+      .expect(201);
+
+    await request(app).post(`/api/issues/${archivedOverdue.body.id}/archive`).expect(200);
+    await request(app)
+      .post(`/api/issues/${activeBlocked.body.id}/dependencies`)
+      .send({ dependsOnIssueId: activeOverdueTodo.body.id })
+      .expect(201);
+
+    const summary = await request(app).get('/api/issues/audit-summary').expect(200);
+
+    expect(summary.body).toMatchObject({
+      totalIssues: 4,
+      totalArchivedIssues: 1,
+      totalBlockedIssues: 1,
+      totalOverdueIssues: 2,
+      totalStaleIssues: 2,
+      byStatus: {
+        todo: 2,
+        in_progress: 1,
+        review: 0,
+        done: 1
+      },
+      byPriority: {
+        low: 0,
+        medium: 3,
+        high: 1
+      },
+      dependencyEdges: {
+        total: 1,
+        blocked: 1
+      }
+    });
+
+    const includeArchivedSummary = await request(app).get('/api/issues/audit-summary?includeArchived=true').expect(200);
+
+    expect(includeArchivedSummary.body.totalIssues).toBe(5);
+    expect(includeArchivedSummary.body.byStatus).toMatchObject({
+      todo: 3,
+      in_progress: 1,
+      review: 0,
+      done: 1
+    });
+
+    const blockedOnlySummary = await request(app).get('/api/issues/audit-summary?blockedOnly=true').expect(200);
+
+    expect(blockedOnlySummary.body).toMatchObject({
+      totalIssues: 1,
+      totalArchivedIssues: 0,
+      totalBlockedIssues: 1,
+      totalOverdueIssues: 1,
+      totalStaleIssues: 1,
+      byStatus: {
+        todo: 0,
+        in_progress: 1,
+        review: 0,
+        done: 0
+      },
+      byPriority: {
+        low: 0,
+        medium: 0,
+        high: 1
+      },
+      dependencyEdges: {
+        total: 1,
+        blocked: 1
+      }
+    });
+  });
+
   it('filters issues by blocked state derived from active dependencies', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

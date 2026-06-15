@@ -10,6 +10,7 @@ import {
   IssueListSummary,
   IssuePriority,
   IssueStatus,
+  IssueAuditSummary,
   IssueUpdate,
   NewActivityEvent,
   NewIssue
@@ -229,15 +230,22 @@ function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (match) => `\\${match}`);
 }
 
-function buildIssueListWhereClause(filters: IssueListFilters): {
+type ArchiveFilterMode = 'active' | 'archivedOnly' | 'all';
+
+function buildIssueListWhereClause(
+  filters: IssueListFilters,
+  archiveMode: ArchiveFilterMode = 'active'
+): {
   whereClause: string;
   values: Record<string, string>;
 } {
   const clauses: string[] = [];
   const values: Record<string, string> = {};
 
-  if (!filters.includeArchived) {
+  if (archiveMode === 'active') {
     clauses.push('archived_at IS NULL');
+  } else if (archiveMode === 'archivedOnly') {
+    clauses.push('archived_at IS NOT NULL');
   }
 
   if (filters.status !== undefined) {
@@ -359,7 +367,8 @@ export class IssueRepository {
   }
 
   list(filters: IssueListFilters = {}, pagination: IssueListPaginationInput = { page: 1, limit: 25 }): IssueListResult {
-    const { whereClause, values } = buildIssueListWhereClause(filters);
+    const archiveMode: ArchiveFilterMode = filters.includeArchived === true ? 'all' : 'active';
+    const { whereClause, values } = buildIssueListWhereClause(filters, archiveMode);
     const total = (
       this.database
         .prepare(
@@ -399,6 +408,150 @@ export class IssueRepository {
       sort: {
         field: 'created_at,id',
         direction: 'desc,desc'
+      }
+    };
+  }
+
+  getAuditSummary(filters: IssueListFilters = {}): IssueAuditSummary {
+    const scopeArchiveMode: ArchiveFilterMode = filters.includeArchived === true ? 'all' : 'active';
+    const scopedFilters = buildIssueListWhereClause(filters, scopeArchiveMode);
+    const archivedFilters = buildIssueListWhereClause(filters, 'archivedOnly');
+
+    const statusRows = this.database
+      .prepare(
+        `
+        SELECT status, COUNT(*) AS count
+        FROM issues
+        ${scopedFilters.whereClause}
+        GROUP BY status
+        `
+      )
+      .all(scopedFilters.values) as StatusCountRow[];
+
+    const byStatus: IssueAuditSummary['byStatus'] = {
+      todo: 0,
+      in_progress: 0,
+      review: 0,
+      done: 0
+    };
+    for (const row of statusRows) {
+      byStatus[row.status] = row.count;
+    }
+
+    const priorityRows = this.database
+      .prepare(
+        `
+        SELECT priority, COUNT(*) AS count
+        FROM issues
+        ${scopedFilters.whereClause}
+        GROUP BY priority
+        `
+      )
+      .all(scopedFilters.values) as Array<{ priority: IssuePriority; count: number }>;
+
+    const byPriority: IssueAuditSummary['byPriority'] = {
+      low: 0,
+      medium: 0,
+      high: 0
+    };
+    for (const row of priorityRows) {
+      byPriority[row.priority] = row.count;
+    }
+
+    const totalIssues = (
+      this.database
+        .prepare(
+          `
+        SELECT COUNT(*) AS count
+        FROM issues
+        ${scopedFilters.whereClause}
+        `
+        )
+        .get(scopedFilters.values) as CountRow
+    ).count;
+
+    const totalArchivedIssues = (
+      this.database
+        .prepare(
+          `
+          SELECT COUNT(*) AS count
+          FROM issues
+          ${archivedFilters.whereClause}
+          `
+        )
+        .get(archivedFilters.values) as CountRow
+    ).count;
+
+    const totalBlockedIssues = (
+      this.database
+        .prepare(
+          `
+        SELECT COUNT(*) AS count
+        FROM issues
+        ${scopedFilters.whereClause}
+        ${scopedFilters.whereClause ? 'AND' : 'WHERE'} EXISTS (
+            SELECT 1
+            FROM issue_dependencies AS dependencies
+            INNER JOIN issues AS blocked_dependencies
+              ON blocked_dependencies.id = dependencies.depends_on_issue_id
+            WHERE dependencies.issue_id = issues.id
+              AND blocked_dependencies.archived_at IS NULL
+              AND blocked_dependencies.status != 'done'
+          )
+          `
+        )
+        .get(scopedFilters.values) as CountRow
+    ).count;
+
+    const totalOverdueIssues = (
+      this.database
+        .prepare(
+          `
+        SELECT COUNT(*) AS count
+        FROM issues
+        ${scopedFilters.whereClause}
+        ${scopedFilters.whereClause ? 'AND' : 'WHERE'} due_date IS NOT NULL
+        AND status != 'done'
+        AND due_date < @today
+        `
+        )
+        .get({ ...scopedFilters.values, today: todayLocalDate() }) as CountRow
+    ).count;
+
+    const dependencyRow = this.database
+      .prepare(
+        `
+        WITH filtered_issues AS (
+          SELECT id
+          FROM issues
+          ${scopedFilters.whereClause}
+        )
+        SELECT
+          (SELECT COUNT(*) FROM issue_dependencies AS dependencies WHERE dependencies.issue_id IN (SELECT id FROM filtered_issues)) AS total,
+          (
+            SELECT COUNT(*)
+            FROM issue_dependencies AS dependencies
+            INNER JOIN issues AS blocked_dependencies
+              ON blocked_dependencies.id = dependencies.depends_on_issue_id
+            WHERE dependencies.issue_id IN (SELECT id FROM filtered_issues)
+              AND blocked_dependencies.archived_at IS NULL
+              AND blocked_dependencies.status != 'done'
+          ) AS blocked
+        `
+      )
+      .get(scopedFilters.values) as { total: number; blocked: number };
+
+    return {
+      totalIssues,
+      totalArchivedIssues,
+      totalBlockedIssues,
+      totalOverdueIssues,
+      totalStaleIssues: totalOverdueIssues,
+      byStatus,
+      byPriority,
+      dependencyEdges: {
+        total: dependencyRow.total,
+        blocked: dependencyRow.blocked
       }
     };
   }

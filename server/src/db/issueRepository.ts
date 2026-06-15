@@ -405,6 +405,22 @@ export class IssueRepository {
     return issue;
   }
 
+  duplicate(id: string): Issue | null {
+    const source = this.getById(id);
+
+    if (!source) {
+      return null;
+    }
+
+    return this.create({
+      title: `Copy of: ${source.title}`,
+      description: source.description,
+      priority: source.priority,
+      labels: source.labels,
+      dueDate: source.dueDate
+    });
+  }
+
   getById(id: string): Issue | null {
     const row = this.database
       .prepare(

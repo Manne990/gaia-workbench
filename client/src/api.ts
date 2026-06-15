@@ -76,7 +76,7 @@ export async function removeIssueDependency(issueId: string, dependsOnIssueId: s
   return readJsonOrThrow<IssueDependencyState>(response, 'Dependency remove failed');
 }
 
-async function postIssueAction(issueId: string, action: 'archive' | 'unarchive'): Promise<Issue> {
+async function postIssueAction(issueId: string, action: 'archive' | 'unarchive' | 'duplicate'): Promise<Issue> {
   const response = await fetch(`/api/issues/${issueId}/${action}`, {
     method: 'POST'
   });
@@ -94,6 +94,10 @@ export function archiveIssue(issueId: string): Promise<Issue> {
 
 export function unarchiveIssue(issueId: string): Promise<Issue> {
   return postIssueAction(issueId, 'unarchive');
+}
+
+export function duplicateIssue(issueId: string): Promise<Issue> {
+  return postIssueAction(issueId, 'duplicate');
 }
 
 export async function bulkUpdateIssueStatus(issueIds: string[], status: IssueStatus): Promise<BulkIssueStatusResult> {

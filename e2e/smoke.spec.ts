@@ -77,7 +77,14 @@ async function expandDashboardSettings(page: Page): Promise<Locator> {
 
 async function createIssueThroughApi(
   page: Page,
-  issue: { title: string; description?: string; status?: string; priority?: string }
+  issue: {
+    title: string;
+    description?: string;
+    status?: string;
+    priority?: string;
+    labels?: string[];
+    dueDate?: string | null;
+  }
 ): Promise<CreatedIssue> {
   const response = await page.request.post('/api/issues', { data: issue });
 
@@ -279,6 +286,100 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   expect(csvLines[1]).toContain('Edit issue from UI');
   expect(csvLines[1]).toContain('done');
   expect(csvLines[1]).toContain('low');
+});
+
+test('duplicates an issue from detail without copying history or dependencies', async ({ page }) => {
+  const blocker = await createIssueThroughApi(page, {
+    title: 'Duplicate source blocker'
+  });
+  const source = await createIssueThroughApi(page, {
+    title: 'Duplicate source issue',
+    description: 'Duplicate should keep this description.',
+    status: 'review',
+    priority: 'high',
+    labels: ['copy-me', 'triage'],
+    dueDate: '2999-12-31'
+  });
+
+  const commentResponse = await page.request.post(`/api/issues/${source.id}/comments`, {
+    data: { body: 'Source-only comment' }
+  });
+  const dependencyResponse = await page.request.post(`/api/issues/${source.id}/dependencies`, {
+    data: { dependsOnIssueId: blocker.id }
+  });
+
+  expect(commentResponse.ok()).toBe(true);
+  expect(dependencyResponse.ok()).toBe(true);
+
+  await page.goto(`/issues/${source.id}`);
+  const sourceDetail = page.getByRole('region', { name: 'Duplicate source issue' });
+
+  await expect(sourceDetail.getByRole('heading', { name: 'Duplicate source issue' })).toBeVisible();
+  await expect(
+    sourceDetail.getByLabel('Issue comments').getByText('Source-only comment', { exact: true })
+  ).toBeVisible();
+  await sourceDetail.getByRole('button', { name: 'Duplicate', exact: true }).click();
+
+  const duplicateTitle = 'Copy of: Duplicate source issue';
+  const duplicateDetail = page.getByRole('region', { name: duplicateTitle });
+
+  await expect(duplicateDetail.getByRole('heading', { name: duplicateTitle })).toBeVisible();
+  await expect(duplicateDetail.locator('.detail-description')).toHaveText('Duplicate should keep this description.');
+  await expect(duplicateDetail.getByLabel('Issue labels').getByText('copy-me', { exact: true })).toBeVisible();
+  await expect(duplicateDetail.getByLabel('Issue labels').getByText('triage', { exact: true })).toBeVisible();
+  await expect(duplicateDetail.getByText('No comments yet.')).toBeVisible();
+  await expect(duplicateDetail.getByText('No blockers.')).toBeVisible();
+  await expect(duplicateDetail.getByText('No dependents.')).toBeVisible();
+
+  const duplicateActivity = duplicateDetail.getByLabel('Issue activity');
+  await expect(duplicateActivity.getByRole('listitem')).toHaveCount(1);
+  await expect(duplicateActivity.getByText('Issue created')).toBeVisible();
+
+  const duplicateListResponse = await page.request.get('/api/issues?includeArchived=true&limit=100');
+  expect(duplicateListResponse.ok()).toBe(true);
+  const duplicateList = (await duplicateListResponse.json()) as {
+    items: Array<{
+      id: string;
+      title: string;
+      description: string;
+      status: string;
+      priority: string;
+      labels: string[];
+      dueDate: string | null;
+      archivedAt: string | null;
+      dependsOnIssueIds: string[];
+    }>;
+  };
+  const duplicatedIssue = duplicateList.items.find((issue) => issue.title === duplicateTitle);
+
+  expect(duplicatedIssue).toMatchObject({
+    title: duplicateTitle,
+    description: 'Duplicate should keep this description.',
+    status: 'todo',
+    priority: 'high',
+    labels: ['copy-me', 'triage'],
+    dueDate: '2999-12-31',
+    archivedAt: null,
+    dependsOnIssueIds: []
+  });
+  expect(duplicatedIssue?.id).not.toBe(source.id);
+
+  const originalIssueResponse = await page.request.get(`/api/issues/${source.id}`);
+  const originalCommentsResponse = await page.request.get(`/api/issues/${source.id}/comments`);
+
+  expect(originalIssueResponse.ok()).toBe(true);
+  expect(originalCommentsResponse.ok()).toBe(true);
+  expect(await originalIssueResponse.json()).toMatchObject({
+    title: 'Duplicate source issue',
+    status: 'review',
+    priority: 'high',
+    dependsOnIssueIds: [blocker.id]
+  });
+  expect(await originalCommentsResponse.json()).toEqual([
+    expect.objectContaining({
+      body: 'Source-only comment'
+    })
+  ]);
 });
 
 test('command palette opens with keyboard shortcut, restores focus, and runs commands', async ({ page }) => {

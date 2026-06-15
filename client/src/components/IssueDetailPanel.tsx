@@ -43,6 +43,7 @@ type IssueDetailPanelProps = {
   commentsHeadingRef: RefObject<HTMLHeadingElement | null>;
   editCommentTextareaRef: RefObject<HTMLTextAreaElement | null>;
   onCloseIssueDetail: () => void;
+  onDuplicateIssue: (issue: Issue, trigger: HTMLElement) => void;
   onArchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
   onUnarchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
   onSubmitIssueDependency: (event: FormEvent<HTMLFormElement>) => void;
@@ -83,6 +84,7 @@ export function IssueDetailPanel({
   commentsHeadingRef,
   editCommentTextareaRef,
   onCloseIssueDetail,
+  onDuplicateIssue,
   onArchiveIssue,
   onUnarchiveIssue,
   onSubmitIssueDependency,
@@ -125,6 +127,13 @@ export function IssueDetailPanel({
               <p>Updated {formatDate(selectedIssue.updatedAt)}</p>
             </div>
             <div className="panel-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={(event) => onDuplicateIssue(selectedIssue, event.currentTarget)}
+              >
+                Duplicate
+              </button>
               {selectedIssue.archivedAt ? (
                 <button
                   type="button"

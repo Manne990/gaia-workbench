@@ -699,6 +699,78 @@ describe('issues API', () => {
     ]);
   });
 
+  it('duplicates issue fields without copying comments activity archive state or dependencies', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const blocker = await request(app).post('/api/issues').send({ title: 'Original blocker' }).expect(201);
+    const source = await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'Source issue to copy',
+        description: 'Copy the planning fields only.',
+        status: 'review',
+        priority: 'high',
+        labels: ['duplication', 'qa'],
+        dueDate: '2999-12-31'
+      })
+      .expect(201);
+    const comment = await request(app)
+      .post(`/api/issues/${source.body.id}/comments`)
+      .send({ body: 'Original comment should stay behind' })
+      .expect(201);
+
+    await request(app)
+      .post(`/api/issues/${source.body.id}/dependencies`)
+      .send({ dependsOnIssueId: blocker.body.id })
+      .expect(201);
+    const archivedSource = await request(app).post(`/api/issues/${source.body.id}/archive`).expect(200);
+    const duplicated = await request(app).post(`/api/issues/${source.body.id}/duplicate`).expect(201);
+
+    expect(duplicated.body).toMatchObject({
+      title: 'Copy of: Source issue to copy',
+      description: 'Copy the planning fields only.',
+      status: 'todo',
+      priority: 'high',
+      labels: ['duplication', 'qa'],
+      dueDate: '2999-12-31',
+      archivedAt: null,
+      dependsOnIssueIds: [],
+      isBlocked: false
+    });
+    expect(duplicated.body.id).not.toBe(source.body.id);
+
+    await request(app).get(`/api/issues/${source.body.id}`).expect(200, archivedSource.body);
+    await request(app).get(`/api/issues/${source.body.id}/comments`).expect(200, [comment.body]);
+    await request(app).get(`/api/issues/${duplicated.body.id}/comments`).expect(200, []);
+    await request(app)
+      .get(`/api/issues/${duplicated.body.id}/dependencies`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          issueId: duplicated.body.id,
+          dependencies: [],
+          dependents: [],
+          isBlocked: false
+        });
+      });
+
+    const sourceActivity = await request(app).get(`/api/issues/${source.body.id}/activity`).expect(200);
+    expect(sourceActivity.body.map((event: { type: string }) => event.type)).toEqual([
+      'issue_created',
+      'comment_added',
+      'issue_dependency_added',
+      'issue_archived'
+    ]);
+
+    await request(app)
+      .get(`/api/issues/${duplicated.body.id}/activity`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.map((event: { type: string }) => event.type)).toEqual(['issue_created']);
+      });
+    await request(app).post('/api/issues/missing-issue/duplicate').expect(404, { error: 'Issue not found' });
+  });
+
   it('adds removes and derives issue dependencies without changing workflow status', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

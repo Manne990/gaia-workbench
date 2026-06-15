@@ -1376,30 +1376,44 @@ test('dashboard filters hydrate from URL and compose with issue detail routes', 
     title: 'URL filter target',
     description: 'Restored from a copied dashboard URL.',
     status: 'review',
-    priority: 'high'
+    priority: 'high',
+    labels: ['api']
+  });
+  await createIssueThroughApi(page, {
+    title: 'URL filter label mismatch',
+    description: 'Matches the other URL filters but not the label.',
+    status: 'review',
+    priority: 'high',
+    labels: ['docs']
   });
   await createIssueThroughApi(page, {
     title: 'URL filter other',
     description: 'Should be hidden by composed filters.',
     status: 'todo',
-    priority: 'low'
+    priority: 'low',
+    labels: ['api']
   });
 
-  await page.goto('/?search=URL%20filter%20target&status=review&priority=high');
+  await page.goto('/?search=URL%20filter&status=review&priority=high&label=api');
 
   const filters = page.getByLabel('Issue filters');
-  await expect(filters.getByLabel('Search')).toHaveValue('URL filter target');
+  await expect(filters.getByLabel('Search')).toHaveValue('URL filter');
   await expect(filters.getByLabel('Status')).toHaveValue('review');
   await expect(filters.getByLabel('Priority')).toHaveValue('high');
-  await expect(page.getByLabel('Active filters')).toContainText('Search: URL filter target');
+  await expect(filters.getByLabel('Label')).toHaveValue('api');
+  await expect(page.getByLabel('Active filters')).toContainText('Search: URL filter');
   await expect(page.getByLabel('Active filters')).toContainText('Status: Review');
   await expect(page.getByLabel('Active filters')).toContainText('Priority: High');
+  await expect(page.getByLabel('Active filters')).toContainText('Label: api');
+  await expect(page.getByLabel('Active filter count')).toHaveText('4 active filters');
   await expect(page.getByRole('row', { name: /URL filter target.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /URL filter label mismatch.*Review.*High/ })).toHaveCount(0);
   await expect(page.getByRole('row', { name: /URL filter other.*Todo.*Low/ })).toHaveCount(0);
 
   await filters.getByLabel('Search').fill('URL filter');
   await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('URL filter');
   await expect(page.getByRole('row', { name: /URL filter target.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /URL filter label mismatch.*Review.*High/ })).toHaveCount(0);
   await expect(page.getByRole('row', { name: /URL filter other.*Todo.*Low/ })).toHaveCount(0);
 
   await page.getByRole('button', { name: `Open ${targetIssue.title}` }).click();
@@ -1408,12 +1422,15 @@ test('dashboard filters hydrate from URL and compose with issue detail routes', 
   await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('URL filter');
   await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('review');
   await expect.poll(() => new URL(page.url()).searchParams.get('priority')).toBe('high');
+  await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('api');
 
   await page.goBack();
   await expect(page.getByRole('region', { name: targetIssue.title })).toHaveCount(0);
   await expect(filters.getByLabel('Search')).toHaveValue('URL filter');
+  await expect(filters.getByLabel('Label')).toHaveValue('api');
   await expect.poll(() => new URL(page.url()).pathname).toBe('/');
   await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('review');
+  await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('api');
 
   await page.goForward();
   await expect(page.getByRole('region', { name: targetIssue.title })).toBeVisible();
@@ -1427,17 +1444,29 @@ test('dashboard filters hydrate from URL and compose with issue detail routes', 
   await expect(filters.getByLabel('Search')).toHaveValue('URL filter');
   await expect.poll(() => new URL(page.url()).pathname).toBe('/');
   await expect.poll(() => new URL(page.url()).searchParams.get('priority')).toBe('high');
+  await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('api');
+
+  await filters.getByLabel('Label').fill('');
+  await expect(filters.getByLabel('Label')).toHaveValue('');
+  await expect(page.getByLabel('Active filters')).not.toContainText('Label: api');
+  await expect(page.getByLabel('Active filter count')).toHaveText('3 active filters');
+  await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBeNull();
+  await expect(page.getByRole('row', { name: /URL filter target.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /URL filter label mismatch.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /URL filter other.*Todo.*Low/ })).toHaveCount(0);
 
   await filters.getByRole('button', { name: 'Clear Filters' }).click();
   await expect(page.getByLabel('Active filters')).toHaveCount(0);
   await expect(page.getByRole('row', { name: /URL filter target.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /URL filter label mismatch.*Review.*High/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /URL filter other.*Todo.*Low/ })).toBeVisible();
   await expect(page).toHaveURL('/');
 
-  await page.goto('/?search=%20%20&status=bogus&priority=weird');
+  await page.goto('/?search=%20%20&status=bogus&priority=weird&label=%20%20');
   await expect(filters.getByLabel('Search')).toHaveValue('');
   await expect(filters.getByLabel('Status')).toHaveValue('all');
   await expect(filters.getByLabel('Priority')).toHaveValue('all');
+  await expect(filters.getByLabel('Label')).toHaveValue('');
   await expect(page.getByLabel('Active filters')).toHaveCount(0);
   await expect(page).toHaveURL('/');
 });

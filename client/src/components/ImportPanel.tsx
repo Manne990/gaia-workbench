@@ -10,6 +10,7 @@ type ImportPanelProps = {
   isApplying: boolean;
   canApply: boolean;
   onPolicyChange: (policy: ImportConflictPolicy) => void;
+  onDownloadReport: () => void;
   onApply: () => void;
   onCancel: () => void;
 };
@@ -76,6 +77,23 @@ function ImportErrors({ errors }: { errors: ImportErrorDetail[] }) {
   );
 }
 
+function ImportWarnings({ warnings }: { warnings: string[] }) {
+  if (warnings.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="import-warnings">
+      <h3>Warnings</h3>
+      <ul>
+        {warnings.map((warning) => (
+          <li key={warning}>{warning}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function ImportPanel({
   fileName,
   importPlan,
@@ -86,6 +104,7 @@ export function ImportPanel({
   isApplying,
   canApply,
   onPolicyChange,
+  onDownloadReport,
   onApply,
   onCancel
 }: ImportPanelProps) {
@@ -192,11 +211,20 @@ export function ImportPanel({
                 </tbody>
               </table>
             </div>
+            <ImportWarnings warnings={importPlan.warnings} />
             <ImportErrors errors={importPlan.errors} />
           </>
         ) : null}
 
         <div className="form-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={isPreviewing || isApplying || !importPlan}
+            onClick={onDownloadReport}
+          >
+            Download report
+          </button>
           <button type="button" className="primary-button" disabled={!canApply} onClick={onApply}>
             {isApplying ? 'Applying...' : 'Apply Import'}
           </button>

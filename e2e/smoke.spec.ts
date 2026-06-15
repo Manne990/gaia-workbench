@@ -335,6 +335,26 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
   await expect(importPanel.getByRole('radio', { name: 'Skip existing conflicts (default)' })).toBeChecked();
   await expect(importPanel.getByText('Ready to create 1 issues, replace 0 changed issues, and skip 0.')).toBeVisible();
   await expect(importPanel.getByRole('row', { name: /Issues\s+1\s+0\s+0\s+1\s+0\s+0/ })).toBeVisible();
+  const reportDownloadPromise = page.waitForEvent('download');
+
+  await importPanel.getByRole('button', { name: 'Download report' }).click();
+  const reportDownload = await reportDownloadPromise;
+  const reportPath = await reportDownload.path();
+  const reportData = JSON.parse(readFileSync(reportPath ?? '', 'utf8')) as {
+    sourceFileName: string | null;
+    policy: string;
+    summary: { toCreate: { issues: number; comments: number; editHistory: number; activityEvents: number } };
+    decisions: unknown[];
+    warnings: string[];
+    errors: unknown[];
+  };
+
+  expect(reportData.sourceFileName).toBe('tinytracker-import.json');
+  expect(reportData.policy).toBe('skip-conflicts');
+  expect(reportData.summary.toCreate).toEqual({ issues: 1, comments: 1, editHistory: 0, activityEvents: 1 });
+  expect(Array.isArray(reportData.decisions)).toBe(true);
+  expect(reportData.errors).toEqual([]);
+  expect(reportData.warnings).toEqual([]);
 
   await importPanel.getByRole('button', { name: 'Apply Import' }).click();
 

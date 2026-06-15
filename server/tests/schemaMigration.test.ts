@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import request from 'supertest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -497,6 +497,13 @@ function createPartialIssueColumnDatabase(databasePath: string): void {
 }
 
 describe('schema migrations', () => {
+  it('keeps README schema version guidance aligned with the application schema version', () => {
+    const readme = readFileSync(path.resolve(process.cwd(), 'README.md'), 'utf8');
+    const documentedVersion = readme.match(/current application schema is version `(?<version>\d+)`/);
+
+    expect(documentedVersion?.groups?.version).toBe(String(SCHEMA_VERSION));
+  });
+
   it('initializes a fresh database with the current schema version', async () => {
     await withTempDatabasePath((databasePath) => {
       const database = createDatabase(databasePath);

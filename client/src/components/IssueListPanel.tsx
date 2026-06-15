@@ -363,6 +363,9 @@ export function IssueListPanel({
       {hasActiveFilters ? (
         <div className="active-filter-summary" aria-label="Active filters">
           <span>{filteredIssues.length} shown</span>
+          <span className="active-filter-count" aria-label="Active filter count">
+            {activeFilterSummaries.length} active {activeFilterSummaries.length === 1 ? 'filter' : 'filters'}
+          </span>
           <div className="active-filter-list">
             {activeFilterSummaries.map((filter) => (
               <span key={filter.key} className="active-filter-chip">

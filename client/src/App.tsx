@@ -57,6 +57,7 @@ type ActivityEvent = {
 
 type LoadState = 'loading' | 'loaded' | 'error';
 type CommentLoadState = LoadState | 'idle';
+type IssueDetailLoadState = CommentLoadState | 'not_found';
 type FormMode = 'create' | 'edit';
 
 type IssueFormValues = {
@@ -145,6 +146,20 @@ async function fetchCommentHistory(
   }
 
   return (await response.json()) as CommentEditHistory[];
+}
+
+async function fetchIssue(issueId: string, signal?: AbortSignal): Promise<Issue | null> {
+  const response = await fetch(`/api/issues/${issueId}`, { signal });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error('Issue detail request failed');
+  }
+
+  return (await response.json()) as Issue;
 }
 
 async function fetchIssueActivity(issueId: string, signal?: AbortSignal): Promise<ActivityEvent[]> {
@@ -337,6 +352,8 @@ export function App() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(() => getIssueIdFromLocation());
+  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+  const [selectedIssueLoadState, setSelectedIssueLoadState] = useState<IssueDetailLoadState>('idle');
   const [activeForm, setActiveForm] = useState<ActiveForm | null>(null);
   const [formValues, setFormValues] = useState<IssueFormValues>(emptyFormValues);
   const [formError, setFormError] = useState<string | null>(null);
@@ -364,10 +381,13 @@ export function App() {
   const detailReturnFocusRef = useRef<HTMLElement | null>(null);
   const commentEditReturnFocusRef = useRef<HTMLElement | null>(null);
 
-  const selectedIssue = useMemo(() => {
-    return issues.find((issue) => issue.id === selectedIssueId) ?? null;
-  }, [issues, selectedIssueId]);
-  const isMissingSelectedIssue = Boolean(selectedIssueId && loadState === 'loaded' && !selectedIssue);
+  const isIssueDetailLoading = Boolean(
+    selectedIssueId && selectedIssueLoadState === 'loading' && !selectedIssue
+  );
+  const isIssueDetailError = Boolean(
+    selectedIssueId && selectedIssueLoadState === 'error' && !selectedIssue
+  );
+  const isMissingSelectedIssue = selectedIssueLoadState === 'not_found';
 
   useEffect(() => {
     if (activeForm) {
@@ -431,6 +451,54 @@ export function App() {
 
   useEffect(() => {
     if (!selectedIssueId) {
+      setSelectedIssue(null);
+      setSelectedIssueLoadState('idle');
+      return;
+    }
+
+    const issueId = selectedIssueId;
+    const issueWasAlreadyDisplayed = selectedIssue?.id === issueId;
+    const controller = new AbortController();
+
+    if (!issueWasAlreadyDisplayed) {
+      setSelectedIssue(null);
+      setSelectedIssueLoadState('loading');
+    }
+
+    async function loadSelectedIssue() {
+      try {
+        const loadedIssue = await fetchIssue(issueId, controller.signal);
+
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        if (!loadedIssue) {
+          setSelectedIssue(null);
+          setSelectedIssueLoadState('not_found');
+          return;
+        }
+
+        setSelectedIssue(loadedIssue);
+        setSelectedIssueLoadState('loaded');
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setSelectedIssueLoadState(issueWasAlreadyDisplayed ? 'loaded' : 'error');
+
+          if (!issueWasAlreadyDisplayed) {
+            setSelectedIssue(null);
+          }
+        }
+      }
+    }
+
+    void loadSelectedIssue();
+
+    return () => controller.abort();
+  }, [selectedIssueId]);
+
+  useEffect(() => {
+    if (!selectedIssueId || !selectedIssue || selectedIssue.id !== selectedIssueId) {
       setComments([]);
       setCommentHistory({});
       setCommentLoadState('idle');
@@ -439,7 +507,7 @@ export function App() {
       return;
     }
 
-    const issueId = selectedIssueId;
+    const issueId = selectedIssue.id;
     const controller = new AbortController();
 
     async function loadIssueDetailData() {
@@ -489,7 +557,7 @@ export function App() {
     void loadIssueDetailData();
 
     return () => controller.abort();
-  }, [selectedIssueId]);
+  }, [selectedIssueId, selectedIssue?.id]);
 
   const normalizedSearchFilter = searchFilter.trim().toLowerCase();
 
@@ -588,6 +656,8 @@ export function App() {
 
   function openIssue(issue: Issue, trigger?: HTMLElement) {
     detailReturnFocusRef.current = trigger ?? null;
+    setSelectedIssue(issue);
+    setSelectedIssueLoadState('loaded');
     pushIssuePath(issue.id);
     setSelectedIssueId(issue.id);
     cancelForm({ restoreFocus: false });
@@ -597,6 +667,8 @@ export function App() {
     const returnFocusTarget = detailReturnFocusRef.current;
 
     setSelectedIssueId(null);
+    setSelectedIssue(null);
+    setSelectedIssueLoadState('idle');
     pushIssuePath(null);
     setCommentBody('');
     setCommentError(null);
@@ -682,6 +754,8 @@ export function App() {
       );
       setLoadState('loaded');
       if (selectedIssueId === savedIssue.id) {
+        setSelectedIssue(savedIssue);
+        setSelectedIssueLoadState('loaded');
         await refreshActivity(savedIssue.id);
       }
       cancelForm();
@@ -1136,6 +1210,20 @@ export function App() {
           ) : null}
         </section>
 
+        {isIssueDetailLoading ? (
+          <section className="detail-panel" aria-labelledby="issue-detail-loading-heading">
+            <div className="panel-header">
+              <div>
+                <h2 id="issue-detail-loading-heading">Loading issue detail</h2>
+                <p>Fetching the shared issue link.</p>
+              </div>
+              <button type="button" className="secondary-button" onClick={closeIssueDetail}>
+                Back to issue list
+              </button>
+            </div>
+          </section>
+        ) : null}
+
         {selectedIssue ? (
           <section className="detail-panel" aria-labelledby="issue-detail-heading">
             <div className="panel-header">
@@ -1393,6 +1481,20 @@ export function App() {
                   </ul>
                 ) : null}
               </section>
+            </div>
+          </section>
+        ) : null}
+
+        {isIssueDetailError ? (
+          <section className="detail-panel" aria-labelledby="issue-detail-error-heading">
+            <div className="panel-header">
+              <div>
+                <h2 id="issue-detail-error-heading">Unable to load issue</h2>
+                <p>The issue detail request failed.</p>
+              </div>
+              <button type="button" className="secondary-button" onClick={closeIssueDetail}>
+                Back to issue list
+              </button>
             </div>
           </section>
         ) : null}

@@ -1,13 +1,17 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices, type ReporterDescription } from '@playwright/test';
 
 const port = Number(process.env.E2E_PORT ?? 3210);
+const isCi = Boolean(process.env.CI);
+const reporter: ReporterDescription[] | 'list' = isCi ? [['github'], ['html', { open: 'never' }], ['list']] : 'list';
 
 export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
+  reporter,
   use: {
     baseURL: `http://127.0.0.1:${port}`,
-    trace: 'on-first-retry'
+    screenshot: 'only-on-failure',
+    trace: isCi ? 'retain-on-failure' : 'on-first-retry'
   },
   webServer: {
     command: `DATABASE_PATH=:memory: PORT=${port} npm run start`,

@@ -363,13 +363,17 @@ export function ensureTinyTrackerSchema(database: Database.Database): void {
     throw new Error(`No TinyTracker schema migration path from version ${currentVersion} to ${SCHEMA_VERSION}`);
   }
 
-  for (const migration of MIGRATIONS) {
-    if (!pendingMigrations.includes(migration)) {
-      continue;
+  const migrate = database.transaction(() => {
+    for (const migration of MIGRATIONS) {
+      if (!pendingMigrations.includes(migration)) {
+        continue;
+      }
+      migration.up(database);
     }
-    migration.up(database);
-  }
 
-  verifyTinyTrackerSchema(database);
-  setTinyTrackerSchemaVersion(database, SCHEMA_VERSION);
+    verifyTinyTrackerSchema(database);
+    setTinyTrackerSchemaVersion(database, SCHEMA_VERSION);
+  });
+
+  migrate();
 }

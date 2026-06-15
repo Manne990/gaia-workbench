@@ -10,6 +10,7 @@ import {
   CommentRepository,
   createDatabase,
   getTinyTrackerSchemaVersion,
+  IssueDependencyRepository,
   IssueRepository,
   SCHEMA_VERSION,
   SavedFilterViewRepository,
@@ -155,6 +156,82 @@ function createVersionOneDatabase(databasePath: string): void {
   }
 }
 
+function seedVersionOneDurableData(databasePath: string): void {
+  const database = createRawDatabase(databasePath);
+  const createdAt = new Date('2026-06-15T00:00:00.000Z').toISOString();
+  const updatedAt = new Date('2026-06-15T01:00:00.000Z').toISOString();
+
+  try {
+    database
+      .prepare(
+        `
+        INSERT INTO issues (
+          id, title, description, status, priority, labels, due_date, archived_at, created_at, updated_at
+        )
+        VALUES (
+          @id, @title, @description, @status, @priority, @labels, @dueDate, @archivedAt, @createdAt, @updatedAt
+        )
+      `
+      )
+      .run({
+        id: 'version-one-issue',
+        title: 'Version one durable issue',
+        description: 'Preserve v1 issue rows',
+        status: 'in_progress',
+        priority: 'high',
+        labels: JSON.stringify(['migration', 'v1']),
+        dueDate: '2026-07-01',
+        archivedAt: null,
+        createdAt,
+        updatedAt
+      });
+    database
+      .prepare(
+        `
+        INSERT INTO comments (id, issue_id, body, created_at, updated_at)
+        VALUES (@id, @issueId, @body, @createdAt, @updatedAt)
+      `
+      )
+      .run({
+        id: 'version-one-comment',
+        issueId: 'version-one-issue',
+        body: 'Version one durable comment',
+        createdAt,
+        updatedAt
+      });
+    database
+      .prepare(
+        `
+        INSERT INTO comment_edit_history (id, comment_id, previous_body, new_body, edited_at)
+        VALUES (@id, @commentId, @previousBody, @newBody, @editedAt)
+      `
+      )
+      .run({
+        id: 'version-one-comment-history',
+        commentId: 'version-one-comment',
+        previousBody: 'Original v1 comment',
+        newBody: 'Version one durable comment',
+        editedAt: updatedAt
+      });
+    database
+      .prepare(
+        `
+        INSERT INTO activity_events (id, issue_id, event_type, metadata, created_at)
+        VALUES (@id, @issueId, @eventType, @metadata, @createdAt)
+      `
+      )
+      .run({
+        id: 'version-one-activity',
+        issueId: 'version-one-issue',
+        eventType: 'issue_created',
+        metadata: JSON.stringify({ title: 'Version one durable issue' }),
+        createdAt
+      });
+  } finally {
+    database.close();
+  }
+}
+
 function createVersionFourDatabaseWithoutStaleFilter(databasePath: string): void {
   createVersionOneDatabase(databasePath);
 
@@ -203,6 +280,78 @@ function createVersionFourDatabaseWithoutStaleFilter(databasePath: string): void
 
       PRAGMA user_version = 4;
     `);
+  } finally {
+    database.close();
+  }
+}
+
+function createVersionFourDatabaseWithDurableData(databasePath: string): void {
+  createVersionFourDatabaseWithoutStaleFilter(databasePath);
+
+  const database = createRawDatabase(databasePath);
+  const createdAt = new Date('2026-06-15T00:00:00.000Z').toISOString();
+  const updatedAt = new Date('2026-06-15T01:00:00.000Z').toISOString();
+
+  try {
+    database
+      .prepare(
+        `
+        INSERT INTO issues (
+          id, title, description, status, priority, labels, due_date, archived_at, created_at, updated_at
+        )
+        VALUES (
+          @id, @title, @description, @status, @priority, @labels, @dueDate, @archivedAt, @createdAt, @updatedAt
+        )
+      `
+      )
+      .run({
+        id: 'version-four-blocker',
+        title: 'Version four blocker',
+        description: 'Dependency source row',
+        status: 'in_progress',
+        priority: 'medium',
+        labels: JSON.stringify(['migration']),
+        dueDate: null,
+        archivedAt: null,
+        createdAt,
+        updatedAt
+      });
+    database
+      .prepare(
+        `
+        INSERT INTO issues (
+          id, title, description, status, priority, labels, due_date, archived_at, created_at, updated_at
+        )
+        VALUES (
+          @id, @title, @description, @status, @priority, @labels, @dueDate, @archivedAt, @createdAt, @updatedAt
+        )
+      `
+      )
+      .run({
+        id: 'version-four-blocked',
+        title: 'Version four blocked issue',
+        description: 'Dependency target row',
+        status: 'todo',
+        priority: 'high',
+        labels: JSON.stringify(['migration', 'blocked']),
+        dueDate: '2026-08-01',
+        archivedAt: null,
+        createdAt,
+        updatedAt
+      });
+    database
+      .prepare(
+        `
+        INSERT INTO issue_dependencies (issue_id, depends_on_issue_id, created_at, updated_at)
+        VALUES (@issueId, @dependsOnIssueId, @createdAt, @updatedAt)
+      `
+      )
+      .run({
+        issueId: 'version-four-blocked',
+        dependsOnIssueId: 'version-four-blocker',
+        createdAt,
+        updatedAt
+      });
   } finally {
     database.close();
   }
@@ -433,6 +582,119 @@ describe('schema migrations', () => {
         database.close();
       }
     });
+  });
+
+  it('migrates historical user-version states while preserving durable data', async () => {
+    const migrationCases = [
+      {
+        name: 'version 1 issue, comment, history, and activity rows',
+        createLegacyDatabase(databasePath: string) {
+          createVersionOneDatabase(databasePath);
+          seedVersionOneDurableData(databasePath);
+        },
+        assertPreservedData(database: Database.Database) {
+          const issueRepository = new IssueRepository(database);
+          const commentRepository = new CommentRepository(database);
+          const activityRepository = new ActivityRepository(database);
+
+          expect(issueRepository.getById('version-one-issue')).toMatchObject({
+            id: 'version-one-issue',
+            title: 'Version one durable issue',
+            description: 'Preserve v1 issue rows',
+            status: 'in_progress',
+            priority: 'high',
+            labels: ['migration', 'v1'],
+            dueDate: '2026-07-01',
+            archivedAt: null,
+            isBlocked: false,
+            dependsOnIssueIds: []
+          });
+          expect(commentRepository.listByIssueId('version-one-issue')).toMatchObject([
+            {
+              id: 'version-one-comment',
+              issueId: 'version-one-issue',
+              body: 'Version one durable comment'
+            }
+          ]);
+          expect(commentRepository.getHistory('version-one-comment')).toMatchObject([
+            {
+              id: 'version-one-comment-history',
+              commentId: 'version-one-comment',
+              previousBody: 'Original v1 comment',
+              newBody: 'Version one durable comment'
+            }
+          ]);
+          expect(activityRepository.listByIssueId('version-one-issue')).toMatchObject([
+            {
+              id: 'version-one-activity',
+              issueId: 'version-one-issue',
+              type: 'issue_created',
+              metadata: { title: 'Version one durable issue' }
+            }
+          ]);
+        }
+      },
+      {
+        name: 'version 4 saved views and dependency rows',
+        createLegacyDatabase(databasePath: string) {
+          createVersionFourDatabaseWithDurableData(databasePath);
+        },
+        assertPreservedData(database: Database.Database) {
+          const issueRepository = new IssueRepository(database);
+          const issueDependencyRepository = new IssueDependencyRepository(database);
+          const savedFilterViewRepository = new SavedFilterViewRepository(database);
+
+          expect(savedFilterViewRepository.getById('legacy-saved-view')).toMatchObject({
+            id: 'legacy-saved-view',
+            name: 'Legacy view',
+            search: 'legacy',
+            status: 'review',
+            priority: 'high',
+            label: '',
+            includeArchived: true,
+            blockedOnly: true,
+            staleOnly: false,
+            pageSize: 50
+          });
+          expect(issueRepository.getById('version-four-blocked')).toMatchObject({
+            id: 'version-four-blocked',
+            title: 'Version four blocked issue',
+            labels: ['migration', 'blocked'],
+            dueDate: '2026-08-01',
+            isBlocked: true,
+            dependsOnIssueIds: ['version-four-blocker']
+          });
+          expect(issueDependencyRepository.listByIssueId('version-four-blocked')).toMatchObject({
+            issueId: 'version-four-blocked',
+            isBlocked: true,
+            dependencies: [
+              {
+                id: 'version-four-blocker',
+                title: 'Version four blocker',
+                status: 'in_progress',
+                archivedAt: null
+              }
+            ],
+            dependents: []
+          });
+        }
+      }
+    ];
+
+    for (const migrationCase of migrationCases) {
+      await withTempDatabasePath((databasePath) => {
+        migrationCase.createLegacyDatabase(databasePath);
+
+        const database = createDatabase(databasePath);
+
+        try {
+          expectCurrentSchema(database);
+          migrationCase.assertPreservedData(database);
+        } finally {
+          database.close();
+        }
+      });
+    }
   });
 
   it('upgrades an unversioned issues-only legacy database and preserves API/export behavior', async () => {

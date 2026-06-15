@@ -570,6 +570,31 @@ describe('tracker import API', () => {
     expect(afterImport.body.issues).toEqual([]);
   });
 
+  it('rejects calendar-impossible timestamps without mutating existing data', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const invalidTimestampPayload = cloneExport(payload);
+
+    await request(app).post('/api/issues').send({ title: 'Keep timestamp validation intact' }).expect(201);
+    const beforeImport = await request(app).get('/api/export').expect(200);
+
+    invalidTimestampPayload.issues[0].createdAt = '2024-02-31T00:00:00.000Z';
+
+    const response = await request(app).post('/api/import/apply').send(invalidTimestampPayload).expect(400);
+    const afterImport = await request(app).get('/api/export').expect(200);
+
+    expect(response.body.valid).toBe(false);
+    expect(response.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'invalid_timestamp',
+          path: '$.issues[0].createdAt'
+        })
+      ])
+    );
+    expect(afterImport.body).toEqual(beforeImport.body);
+  });
+
   it('rejects duplicate IDs inside the import payload', async () => {
     const app = createApp({ databasePath: ':memory:' });
     const payload = await createExportFixture();

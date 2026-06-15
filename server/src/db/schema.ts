@@ -9,6 +9,7 @@ const createIssuesTable = `
     priority TEXT NOT NULL CHECK (priority IN ('low', 'medium', 'high')),
     labels TEXT NOT NULL DEFAULT '[]',
     due_date TEXT DEFAULT NULL,
+    archived_at TEXT DEFAULT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -59,6 +60,11 @@ const createActivityEventsIssueIndex = `
   ON activity_events (issue_id, created_at);
 `;
 
+const createIssuesArchivedIndex = `
+  CREATE INDEX IF NOT EXISTS idx_issues_archived_at_created_at
+  ON issues (archived_at, created_at);
+`;
+
 function ensureIssueColumn(database: Database.Database, columnName: string, definition: string): void {
   const columns = database.prepare('PRAGMA table_info(issues)').all() as Array<{ name: string }>;
   const hasColumn = columns.some((column) => column.name === columnName);
@@ -73,6 +79,8 @@ export function ensureTinyTrackerSchema(database: Database.Database): void {
   database.exec(createIssuesTable);
   ensureIssueColumn(database, 'labels', "labels TEXT NOT NULL DEFAULT '[]'");
   ensureIssueColumn(database, 'due_date', 'due_date TEXT DEFAULT NULL');
+  ensureIssueColumn(database, 'archived_at', 'archived_at TEXT DEFAULT NULL');
+  database.exec(createIssuesArchivedIndex);
   database.exec(createActivityEventsTable);
   database.exec(createActivityEventsIssueIndex);
   database.exec(createCommentsTable);

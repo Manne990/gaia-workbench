@@ -223,4 +223,27 @@ describe('tracker export API', () => {
       .get(`/api/issues/${createdEmpty.body.id}/activity`)
       .expect(200, emptyIssueActivityBefore.body);
   });
+
+  it('exports archived issues with archive state and activity', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const created = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Archived export issue', priority: 'high' })
+      .expect(201);
+    const archived = await request(app).post(`/api/issues/${created.body.id}/archive`).expect(200);
+    const exported = await request(app).get('/api/export').expect(200);
+    const exportedIssue = exported.body.issues.find((issue: { id: string }) => issue.id === created.body.id);
+
+    expect(archived.body.archivedAt).toEqual(expect.any(String));
+    expect(exportedIssue).toMatchObject({
+      id: created.body.id,
+      title: 'Archived export issue',
+      archivedAt: archived.body.archivedAt
+    });
+    expect(exportedIssue.activityEvents.map((event: { type: string }) => event.type)).toEqual([
+      'issue_created',
+      'issue_archived'
+    ]);
+  });
 });

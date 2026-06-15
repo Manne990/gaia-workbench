@@ -27,6 +27,7 @@ type IssueRow = {
   priority: IssuePriority;
   labels: string;
   due_date: string | null;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -218,6 +219,7 @@ function mapIssueRow(row: IssueRow): Issue {
     labels: parseLabels(row.labels),
     dueDate,
     isOverdue: isIssueOverdue(dueDate, row.status),
+    archivedAt: row.archived_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -233,6 +235,10 @@ function buildIssueListWhereClause(filters: IssueListFilters): {
 } {
   const clauses: string[] = [];
   const values: Record<string, string> = {};
+
+  if (!filters.includeArchived) {
+    clauses.push('archived_at IS NULL');
+  }
 
   if (filters.status !== undefined) {
     assertValidStatus(filters.status);
@@ -274,6 +280,7 @@ export class IssueRepository {
       labels: normalizeLabels(input.labels),
       dueDate: normalizeDueDate(input.dueDate),
       isOverdue: false,
+      archivedAt: null,
       createdAt: now,
       updatedAt: now
     };
@@ -285,8 +292,8 @@ export class IssueRepository {
     const transaction = this.database.transaction(() => {
       this.database
         .prepare(`
-          INSERT INTO issues (id, title, description, status, priority, labels, due_date, created_at, updated_at)
-          VALUES (@id, @title, @description, @status, @priority, @labels, @dueDate, @createdAt, @updatedAt)
+          INSERT INTO issues (id, title, description, status, priority, labels, due_date, archived_at, created_at, updated_at)
+          VALUES (@id, @title, @description, @status, @priority, @labels, @dueDate, @archivedAt, @createdAt, @updatedAt)
         `)
         .run({
           id: issue.id,
@@ -296,6 +303,7 @@ export class IssueRepository {
           priority: issue.priority,
           labels: JSON.stringify(issue.labels),
           dueDate: issue.dueDate,
+          archivedAt: issue.archivedAt,
           createdAt: issue.createdAt,
           updatedAt: issue.updatedAt
         });
@@ -315,7 +323,7 @@ export class IssueRepository {
   getById(id: string): Issue | null {
     const row = this.database
       .prepare(`
-        SELECT id, title, description, status, priority, labels, due_date, created_at, updated_at
+        SELECT id, title, description, status, priority, labels, due_date, archived_at, created_at, updated_at
         FROM issues
         WHERE id = @id
       `)
@@ -342,7 +350,7 @@ export class IssueRepository {
     const offset = (pagination.page - 1) * pagination.limit;
     const rows = this.database
       .prepare(`
-        SELECT id, title, description, status, priority, labels, due_date, created_at, updated_at
+        SELECT id, title, description, status, priority, labels, due_date, archived_at, created_at, updated_at
         FROM issues
         ${whereClause}
         ORDER BY created_at DESC, id DESC
@@ -360,7 +368,7 @@ export class IssueRepository {
         hasMore: pagination.page < totalPages,
         hasPrevious: pagination.page > 1 && total > 0
       },
-      summary: this.getListSummary(),
+      summary: this.getListSummary(Boolean(filters.includeArchived)),
       sort: {
         field: 'created_at,id',
         direction: 'desc,desc'
@@ -371,7 +379,7 @@ export class IssueRepository {
   listForExport(): Issue[] {
     const rows = this.database
       .prepare(`
-        SELECT id, title, description, status, priority, labels, due_date, created_at, updated_at
+        SELECT id, title, description, status, priority, labels, due_date, archived_at, created_at, updated_at
         FROM issues
         ORDER BY created_at ASC, id ASC
       `)
@@ -380,17 +388,19 @@ export class IssueRepository {
     return rows.map(mapIssueRow);
   }
 
-  private getListSummary(): IssueListSummary {
+  private getListSummary(includeArchived = false): IssueListSummary {
     const totalByStatus: IssueListSummary['totalByStatus'] = {
       todo: 0,
       in_progress: 0,
       review: 0,
       done: 0
     };
+    const archiveWhereClause = includeArchived ? '' : 'WHERE archived_at IS NULL';
     const statusRows = this.database
       .prepare(`
         SELECT status, COUNT(*) AS count
         FROM issues
+        ${archiveWhereClause}
         GROUP BY status
       `)
       .all() as StatusCountRow[];
@@ -405,6 +415,7 @@ export class IssueRepository {
           SELECT COUNT(*) AS count
           FROM issues
           WHERE priority = 'high'
+          ${includeArchived ? '' : 'AND archived_at IS NULL'}
         `)
         .get() as CountRow
     ).count;
@@ -495,6 +506,82 @@ export class IssueRepository {
       }
 
       return updated;
+    });
+
+    return transaction();
+  }
+
+  archive(id: string): Issue | null {
+    const current = this.getById(id);
+
+    if (!current) {
+      return null;
+    }
+
+    if (current.archivedAt) {
+      return current;
+    }
+
+    const archivedAt = nowIso();
+    const transaction = this.database.transaction(() => {
+      const result = this.database
+        .prepare(`
+          UPDATE issues
+          SET archived_at = @archivedAt, updated_at = @archivedAt
+          WHERE id = @id
+        `)
+        .run({ id, archivedAt });
+
+      if (result.changes === 0) {
+        return null;
+      }
+
+      recordActivityEvent(this.database, {
+        issueId: id,
+        type: 'issue_archived',
+        metadata: { from: current.archivedAt, to: archivedAt },
+        createdAt: archivedAt
+      });
+
+      return this.getById(id);
+    });
+
+    return transaction();
+  }
+
+  unarchive(id: string): Issue | null {
+    const current = this.getById(id);
+
+    if (!current) {
+      return null;
+    }
+
+    if (!current.archivedAt) {
+      return current;
+    }
+
+    const updatedAt = nowIso();
+    const transaction = this.database.transaction(() => {
+      const result = this.database
+        .prepare(`
+          UPDATE issues
+          SET archived_at = NULL, updated_at = @updatedAt
+          WHERE id = @id
+        `)
+        .run({ id, updatedAt });
+
+      if (result.changes === 0) {
+        return null;
+      }
+
+      recordActivityEvent(this.database, {
+        issueId: id,
+        type: 'issue_unarchived',
+        metadata: { from: current.archivedAt, to: null },
+        createdAt: updatedAt
+      });
+
+      return this.getById(id);
     });
 
     return transaction();

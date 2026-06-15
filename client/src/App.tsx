@@ -1,7 +1,15 @@
 import './styles.css';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { applyImport, fetchCommentHistory, fetchIssue, fetchIssueActivity, previewImport } from './api';
+import {
+  applyImport,
+  archiveIssue,
+  fetchCommentHistory,
+  fetchIssue,
+  fetchIssueActivity,
+  previewImport,
+  unarchiveIssue
+} from './api';
 import { DashboardHeader } from './components/DashboardHeader';
 import { ImportPanel } from './components/ImportPanel';
 import { IssueDetailPanel } from './components/IssueDetailPanel';
@@ -49,6 +57,8 @@ export function App() {
     setStatusFilter,
     priorityFilter,
     setPriorityFilter,
+    includeArchived,
+    setIncludeArchived,
     filteredIssues,
     pagination,
     totalIssueCount,
@@ -107,7 +117,8 @@ export function App() {
   const dashboardFilters: DashboardFilters = {
     search: searchFilter,
     status: statusFilter,
-    priority: priorityFilter
+    priority: priorityFilter,
+    includeArchived
   };
 
   const isIssueDetailLoading = Boolean(
@@ -191,6 +202,13 @@ export function App() {
     const nextFilters = { ...dashboardFilters, priority: value };
 
     setPriorityFilter(value);
+    writeDashboardRoute(nextFilters, 'push');
+  }
+
+  function handleIncludeArchivedChange(value: boolean) {
+    const nextFilters = { ...dashboardFilters, includeArchived: value };
+
+    setIncludeArchived(value);
     writeDashboardRoute(nextFilters, 'push');
   }
 
@@ -472,6 +490,46 @@ export function App() {
     }
   }
 
+  async function handleArchiveIssue(issue: Issue, trigger: HTMLElement) {
+    const confirmed = window.confirm(`Archive "${issue.title}"? It will be hidden from the active dashboard.`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const archivedIssue = await archiveIssue(issue.id);
+
+      if (selectedIssueId === archivedIssue.id) {
+        setSelectedIssue(archivedIssue);
+        setSelectedIssueLoadState('loaded');
+        await refreshActivity(archivedIssue.id);
+      }
+
+      returnToFirstPage();
+      restoreFocus(trigger, () => issueListHeadingRef.current);
+    } catch {
+      restoreFocus(trigger, () => issueListHeadingRef.current);
+    }
+  }
+
+  async function handleUnarchiveIssue(issue: Issue, trigger: HTMLElement) {
+    try {
+      const restoredIssue = await unarchiveIssue(issue.id);
+
+      if (selectedIssueId === restoredIssue.id) {
+        setSelectedIssue(restoredIssue);
+        setSelectedIssueLoadState('loaded');
+        await refreshActivity(restoredIssue.id);
+      }
+
+      refreshIssues();
+      restoreFocus(trigger, () => issueListHeadingRef.current);
+    } catch {
+      restoreFocus(trigger, () => issueListHeadingRef.current);
+    }
+  }
+
   async function submitIssue(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -717,12 +775,16 @@ export function App() {
           onStatusFilterChange={handleStatusFilterChange}
           priorityFilter={priorityFilter}
           onPriorityFilterChange={handlePriorityFilterChange}
+          includeArchived={includeArchived}
+          onIncludeArchivedChange={handleIncludeArchivedChange}
           issueListHeadingRef={issueListHeadingRef}
           onClearFilters={handleClearFilters}
           onPreviousPage={goToPreviousPage}
           onNextPage={goToNextPage}
           onOpenIssue={openIssue}
           onEditIssue={startEdit}
+          onArchiveIssue={handleArchiveIssue}
+          onUnarchiveIssue={handleUnarchiveIssue}
         />
 
         <IssueDetailPanel
@@ -749,6 +811,8 @@ export function App() {
           commentsHeadingRef={commentsHeadingRef}
           editCommentTextareaRef={editCommentTextareaRef}
           onCloseIssueDetail={closeIssueDetail}
+          onArchiveIssue={handleArchiveIssue}
+          onUnarchiveIssue={handleUnarchiveIssue}
           onSubmitComment={submitComment}
           onStartEditComment={startEditComment}
           onCancelEditComment={(commentId) => cancelEditComment({ commentId })}

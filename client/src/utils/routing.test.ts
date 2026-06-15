@@ -31,28 +31,39 @@ describe('client routing helpers', () => {
     expect(parseDashboardFiltersFromSearch('?search=ready%20for%20review&status=review&priority=high')).toEqual({
       search: 'ready for review',
       status: 'review',
-      priority: 'high'
+      priority: 'high',
+      includeArchived: false
     });
   });
 
   it('normalizes unknown and empty dashboard filter values', () => {
-    expect(parseDashboardFiltersFromSearch('?search=%20%20&status=blocked&priority=urgent')).toEqual({
+    expect(parseDashboardFiltersFromSearch('?search=%20%20&status=blocked&priority=urgent&includeArchived=yes')).toEqual({
       search: '',
       status: 'all',
-      priority: 'all'
+      priority: 'all',
+      includeArchived: false
+    });
+  });
+
+  it('parses includeArchived when explicitly true', () => {
+    expect(parseDashboardFiltersFromSearch('?includeArchived=true')).toEqual({
+      search: '',
+      status: 'all',
+      priority: 'all',
+      includeArchived: true
     });
   });
 
   it('builds canonical dashboard paths with stable query order', () => {
-    expect(buildDashboardPath({ search: 'ready for review', status: 'review', priority: 'high' })).toBe(
-      '/?search=ready+for+review&status=review&priority=high'
+    expect(buildDashboardPath({ search: 'ready for review', status: 'review', priority: 'high', includeArchived: true })).toBe(
+      '/?search=ready+for+review&status=review&priority=high&includeArchived=true'
     );
-    expect(buildDashboardPath({ search: '  ', status: 'all', priority: 'all' })).toBe('/');
+    expect(buildDashboardPath({ search: '  ', status: 'all', priority: 'all', includeArchived: false })).toBe('/');
   });
 
   it('builds detail paths with composed dashboard filters', () => {
     expect(
-      buildIssuePath('issue id', { search: 'api export', status: 'done', priority: 'low' })
-    ).toBe('/issues/issue%20id?search=api+export&status=done&priority=low');
+      buildIssuePath('issue id', { search: 'api export', status: 'done', priority: 'low', includeArchived: true })
+    ).toBe('/issues/issue%20id?search=api+export&status=done&priority=low&includeArchived=true');
   });
 });

@@ -33,6 +33,10 @@ export function activityTitle(event: ActivityEvent): string {
       return 'Due date changed';
     case 'issue_labels_changed':
       return 'Labels changed';
+    case 'issue_archived':
+      return 'Issue archived';
+    case 'issue_unarchived':
+      return 'Issue restored';
     case 'comment_added':
       return 'Comment added';
     case 'comment_edited':
@@ -61,6 +65,10 @@ export function activityDetail(event: ActivityEvent): string {
       return `${formatDueDateValue(from)} -> ${formatDueDateValue(to)}`;
     case 'issue_labels_changed':
       return `${formatLabelList(metadataList(event, 'from'))} -> ${formatLabelList(metadataList(event, 'to'))}`;
+    case 'issue_archived':
+      return 'Removed from the active dashboard.';
+    case 'issue_unarchived':
+      return 'Restored to the active dashboard.';
     case 'comment_added':
       return `Added "${formatOptionalText(metadataText(event, 'preview'))}".`;
     case 'comment_edited':

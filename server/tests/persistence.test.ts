@@ -277,6 +277,57 @@ describe('persistence layer', () => {
     }
   });
 
+  it('archives issues as a reversible visibility state with activity history', () => {
+    const database = createDatabase(':memory:');
+    const issueRepository = new IssueRepository(database);
+    const activityRepository = new ActivityRepository(database);
+
+    try {
+      const issue = issueRepository.create({
+        title: 'Archive repository issue',
+        priority: 'high'
+      });
+
+      expect(issue.archivedAt).toBeNull();
+
+      const archived = issueRepository.archive(issue.id);
+
+      expect(archived).toMatchObject({
+        id: issue.id,
+        archivedAt: expect.any(String)
+      });
+      expect(issueRepository.list().items).toEqual([]);
+      expect(issueRepository.list({ includeArchived: true }).items).toEqual([archived]);
+      expect(issueRepository.list().summary.totalHighPriority).toBe(0);
+      expect(issueRepository.list({ includeArchived: true }).summary.totalHighPriority).toBe(1);
+      expect(activityRepository.listByIssueId(issue.id).map((event) => event.type)).toEqual([
+        'issue_created',
+        'issue_archived'
+      ]);
+
+      expect(issueRepository.archive(issue.id)).toEqual(archived);
+      expect(activityRepository.listByIssueId(issue.id).map((event) => event.type)).toEqual([
+        'issue_created',
+        'issue_archived'
+      ]);
+
+      const unarchived = issueRepository.unarchive(issue.id);
+
+      expect(unarchived).toMatchObject({
+        id: issue.id,
+        archivedAt: null
+      });
+      expect(issueRepository.list().items).toEqual([unarchived]);
+      expect(activityRepository.listByIssueId(issue.id).map((event) => event.type)).toEqual([
+        'issue_created',
+        'issue_archived',
+        'issue_unarchived'
+      ]);
+    } finally {
+      database.close();
+    }
+  });
+
   it('derives overdue state from due date and status', () => {
     const database = createDatabase(':memory:');
     const issueRepository = new IssueRepository(database);

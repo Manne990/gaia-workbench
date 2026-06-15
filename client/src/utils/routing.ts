@@ -4,7 +4,8 @@ import type { DashboardFilters, IssuePriority, IssueStatus, PriorityFilter, Stat
 export const defaultDashboardFilters: DashboardFilters = {
   search: '',
   status: 'all',
-  priority: 'all'
+  priority: 'all',
+  includeArchived: false
 };
 
 export function getIssueIdFromPath(pathname: string): string | null {
@@ -30,11 +31,13 @@ export function parseDashboardFiltersFromSearch(search: string | URLSearchParams
   const searchFilter = (params.get('search') ?? '').trim();
   const statusFilter = parseStatusFilter(params.get('status'));
   const priorityFilter = parsePriorityFilter(params.get('priority'));
+  const includeArchived = params.get('includeArchived') === 'true';
 
   return {
     search: searchFilter,
     status: statusFilter,
-    priority: priorityFilter
+    priority: priorityFilter,
+    includeArchived
   };
 }
 
@@ -101,6 +104,10 @@ function buildDashboardQuery(filters: DashboardFilters): string {
 
   if (filters.priority !== 'all') {
     params.set('priority', filters.priority);
+  }
+
+  if (filters.includeArchived) {
+    params.set('includeArchived', 'true');
   }
 
   return params.toString();

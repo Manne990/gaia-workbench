@@ -85,6 +85,8 @@ const VALID_ACTIVITY_TYPES: ActivityEventType[] = [
   'issue_priority_changed',
   'issue_due_date_changed',
   'issue_labels_changed',
+  'issue_archived',
+  'issue_unarchived',
   'comment_added',
   'comment_edited'
 ];
@@ -120,14 +122,15 @@ function validateObject(
   value: unknown,
   path: string,
   allowedKeys: string[],
-  errors: ImportErrorDetail[]
+  errors: ImportErrorDetail[],
+  optionalKeys: string[] = []
 ): Record<string, unknown> | null {
   if (!isRecord(value)) {
     pushError(errors, 'invalid_type', path, 'Expected an object.', value);
     return null;
   }
 
-  const allowed = new Set(allowedKeys);
+  const allowed = new Set([...allowedKeys, ...optionalKeys]);
   const missing = allowedKeys.filter((key) => !(key in value));
   const unknown = Object.keys(value).filter((key) => !allowed.has(key));
 
@@ -421,7 +424,8 @@ function validateTrackerExport(input: unknown): ValidationResult {
         'comments',
         'activityEvents'
       ],
-      errors
+      errors,
+      ['archivedAt']
     );
 
     if (!issueObject) {
@@ -443,6 +447,10 @@ function validateTrackerExport(input: unknown): ValidationResult {
     const labels = validateLabels(issueObject.labels, `${issuePath}.labels`, errors);
     const dueDate = readStringOrNull(issueObject, 'dueDate', issuePath, errors);
     const isOverdue = readBoolean(issueObject, 'isOverdue', issuePath, errors);
+    const archivedAt =
+      issueObject.archivedAt === undefined
+        ? null
+        : readStringOrNull(issueObject, 'archivedAt', issuePath, errors);
     const createdAt = readString(issueObject, 'createdAt', issuePath, errors, { nonEmpty: true });
     const updatedAt = readString(issueObject, 'updatedAt', issuePath, errors, { nonEmpty: true });
 
@@ -468,6 +476,16 @@ function validateTrackerExport(input: unknown): ValidationResult {
 
     if (!isValidTimestamp(updatedAt)) {
       pushError(errors, 'invalid_timestamp', `${issuePath}.updatedAt`, 'Invalid updatedAt timestamp.', updatedAt);
+    }
+
+    if (archivedAt !== null && !isValidTimestamp(archivedAt)) {
+      pushError(
+        errors,
+        'invalid_timestamp',
+        `${issuePath}.archivedAt`,
+        'Invalid archivedAt timestamp.',
+        archivedAt
+      );
     }
 
     const commentsInput = readArray(issueObject, 'comments', issuePath, errors);
@@ -700,6 +718,7 @@ function validateTrackerExport(input: unknown): ValidationResult {
       labels,
       dueDate,
       isOverdue,
+      archivedAt,
       createdAt,
       updatedAt,
       comments,
@@ -915,8 +934,8 @@ export function applyTrackerImport(database: Database.Database, input: unknown):
 
   const transaction = database.transaction(() => {
     const insertIssue = database.prepare(`
-      INSERT INTO issues (id, title, description, status, priority, labels, due_date, created_at, updated_at)
-      VALUES (@id, @title, @description, @status, @priority, @labels, @dueDate, @createdAt, @updatedAt)
+      INSERT INTO issues (id, title, description, status, priority, labels, due_date, archived_at, created_at, updated_at)
+      VALUES (@id, @title, @description, @status, @priority, @labels, @dueDate, @archivedAt, @createdAt, @updatedAt)
     `);
     const insertComment = database.prepare(`
       INSERT INTO comments (id, issue_id, body, created_at, updated_at)
@@ -940,6 +959,7 @@ export function applyTrackerImport(database: Database.Database, input: unknown):
         priority: issue.priority,
         labels: JSON.stringify(issue.labels),
         dueDate: issue.dueDate,
+        archivedAt: issue.archivedAt,
         createdAt: issue.createdAt,
         updatedAt: issue.updatedAt
       });

@@ -35,6 +35,7 @@ If Gaia can successfully build, maintain, and evolve TinyTracker, it demonstrate
 * Close issue
 * Reopen issue
 * Assign priority
+* Archive and unarchive issues without deleting history
 
 ### Status Workflow
 
@@ -54,6 +55,8 @@ If Gaia can successfully build, maintain, and evolve TinyTracker, it demonstrate
 * Search by title
 * Search by description
 * Filter by status
+* Filter by priority
+* Include archived issues on demand
 
 ### API
 
@@ -62,6 +65,7 @@ REST API supporting:
 * Create issue
 * List issues
 * Update issue
+* Archive and unarchive issue
 * Add comments
 * Export tracker JSON
 * Preview and apply tracker JSON imports
@@ -74,6 +78,7 @@ Simple web interface:
 * Issue list
 * Issue details
 * Search
+* Archived issue recovery
 * JSON export and import
 
 No advanced enterprise features.
@@ -293,8 +298,29 @@ Supported query parameters:
 * `search`: title or description search
 * `status`: `todo`, `in_progress`, `review`, or `done`
 * `priority`: `low`, `medium`, or `high`
+* `includeArchived`: `true` to include archived issues; default is active issues only
 * `page`: 1-based page number, default `1`
 * `limit`: items per page, default `25`, maximum `100`
+
+By default, the issue list and dashboard summary exclude archived issues. When
+`includeArchived=true`, archived issues are included in list results and summary
+counts.
+
+### Archive API
+
+TinyTracker uses archive-only removal in this version. Archiving an issue hides
+it from the active dashboard by default but keeps the issue, comments, comment
+history, and activity timeline available for direct links, export, and recovery.
+
+```http
+POST /api/issues/:id/archive
+POST /api/issues/:id/unarchive
+```
+
+Both endpoints return the current issue. Repeating the same archive or
+unarchive request is idempotent and does not create duplicate activity events.
+Archive state is separate from workflow status; `archived` is not a valid issue
+status.
 
 ### Export API
 
@@ -308,8 +334,9 @@ Supported query parameters:
 ```
 
 Each issue contains its current issue fields, nested comments, comment edit
-history, and activity events. Export is read-only and does not mutate tracker
-state.
+history, activity events, and `archivedAt`. Active issues use
+`"archivedAt": null`; archived issues contain the archive timestamp. Export is
+read-only and does not mutate tracker state.
 
 ### Import API
 
@@ -329,6 +356,10 @@ timestamps. Existing incoming IDs are skipped rather than overwritten, so
 re-importing the same file is a deterministic no-op. If an incoming issue ID is
 already present, that issue and its nested records are skipped together.
 
+Import preserves `archivedAt` when present. Older `exportVersion: 1` payloads
+without `archivedAt` remain valid and are imported as active issues with
+`archivedAt: null`.
+
 Malformed JSON, unsupported export versions, duplicate IDs within the payload,
 unknown fields, invalid status or priority values, invalid dates, and dangling
 nested references return structured validation errors. Failed validation does not
@@ -342,6 +373,7 @@ The Playwright smoke test starts TinyTracker with an in-memory SQLite database a
 * Issue can be created
 * Created issue appears in the issue list
 * Issue can be updated
+* Issue can be archived and restored
 * Issue detail view opens
 * Comment can be added
 * Comment can be edited
@@ -369,6 +401,7 @@ TinyTracker V1 intentionally does not include:
 * Plugin support
 * File attachments
 * Assignment workflows
+* Hard delete or retention purge workflows
 * External integrations
 * Arbitrary third-party import formats
 

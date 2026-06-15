@@ -245,7 +245,9 @@ h3 {
 
 .filter-panel {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(150px, 180px) minmax(150px, 180px) minmax(144px, auto) auto;
+  grid-template-columns:
+    minmax(220px, 1fr) minmax(132px, 160px) minmax(132px, 160px) minmax(144px, auto)
+    minmax(104px, 120px) auto;
   gap: 14px;
   align-items: end;
   padding: 16px 20px;
@@ -308,6 +310,34 @@ h3 {
   display: flex;
   align-items: center;
   justify-content: end;
+}
+
+.saved-view-panel {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(220px, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e4e8ec;
+  background: #ffffff;
+}
+
+.saved-view-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 8px;
+}
+
+.saved-view-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #e8c8c3;
+  border-radius: 8px;
+  background: #fff3f1;
+  color: #9a2f2f;
+  font-weight: 800;
 }
 
 .active-filter-summary {
@@ -1083,6 +1113,18 @@ td > span:not(.pill) {
 
   .filter-panel {
     grid-template-columns: 1fr;
+  }
+
+  .saved-view-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .saved-view-actions {
+    justify-content: stretch;
+  }
+
+  .saved-view-actions button {
+    flex: 1 1 132px;
   }
 
   .filter-actions {

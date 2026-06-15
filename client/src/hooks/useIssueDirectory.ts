@@ -12,11 +12,9 @@ import type {
 } from '../types';
 import { defaultDashboardFilters } from '../utils/routing';
 
-const ISSUE_PAGE_LIMIT = 25;
-
 const defaultPagination: IssueListPagination = {
   page: 1,
-  limit: ISSUE_PAGE_LIMIT,
+  limit: defaultDashboardFilters.pageSize,
   total: 0,
   totalPages: 0,
   hasMore: false,
@@ -40,6 +38,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialFilters.status);
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>(initialFilters.priority);
   const [includeArchived, setIncludeArchived] = useState(initialFilters.includeArchived);
+  const [pageSize, setPageSize] = useState(initialFilters.pageSize);
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState<IssueListPagination>(defaultPagination);
   const [summary, setSummary] = useState<IssueListSummary>(defaultSummary);
@@ -51,7 +50,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     async function loadIssues() {
       const params = new URLSearchParams({
         page: String(currentPage),
-        limit: String(ISSUE_PAGE_LIMIT)
+        limit: String(pageSize)
       });
       const search = searchFilter.trim();
 
@@ -101,7 +100,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     void loadIssues();
 
     return () => controller.abort();
-  }, [currentPage, includeArchived, priorityFilter, reloadToken, searchFilter, statusFilter]);
+  }, [currentPage, includeArchived, pageSize, priorityFilter, reloadToken, searchFilter, statusFilter]);
 
   const activeFilterSummaries = useMemo(() => {
     const filters: ActiveFilterSummary[] = [];
@@ -123,8 +122,12 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
       filters.push({ key: 'includeArchived', label: 'Archived', value: 'Included' });
     }
 
+    if (pageSize !== defaultDashboardFilters.pageSize) {
+      filters.push({ key: 'pageSize', label: 'Page size', value: String(pageSize) });
+    }
+
     return filters;
-  }, [includeArchived, priorityFilter, searchFilter, statusFilter]);
+  }, [includeArchived, pageSize, priorityFilter, searchFilter, statusFilter]);
 
   const hasActiveFilters = activeFilterSummaries.length > 0;
 
@@ -150,6 +153,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     setStatusFilter('all');
     setPriorityFilter('all');
     setIncludeArchived(false);
+    setPageSize(defaultDashboardFilters.pageSize);
     setCurrentPage(1);
   }
 
@@ -158,6 +162,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     setStatusFilter(filters.status);
     setPriorityFilter(filters.priority);
     setIncludeArchived(filters.includeArchived);
+    setPageSize(filters.pageSize);
     setCurrentPage(1);
   }
 
@@ -178,6 +183,11 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
 
   function setIncludeArchivedAndResetPage(value: boolean) {
     setIncludeArchived(value);
+    setCurrentPage(1);
+  }
+
+  function setPageSizeAndResetPage(value: number) {
+    setPageSize(value);
     setCurrentPage(1);
   }
 
@@ -209,6 +219,8 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     setPriorityFilter: setPriorityFilterAndResetPage,
     includeArchived,
     setIncludeArchived: setIncludeArchivedAndResetPage,
+    pageSize,
+    setPageSize: setPageSizeAndResetPage,
     currentPage,
     pagination,
     summary,

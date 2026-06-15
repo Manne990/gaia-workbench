@@ -6,6 +6,7 @@ import type {
   IssueListPagination,
   LoadState,
   PriorityFilter,
+  SavedFilterView,
   StatusFilter
 } from '../types';
 import { formatDate, formatDueDate } from '../utils/formatters';
@@ -28,6 +29,19 @@ type IssueListPanelProps = {
   onPriorityFilterChange: (value: PriorityFilter) => void;
   includeArchived: boolean;
   onIncludeArchivedChange: (value: boolean) => void;
+  pageSize: number;
+  onPageSizeChange: (value: number) => void;
+  savedViews: SavedFilterView[];
+  selectedSavedViewId: string;
+  savedViewName: string;
+  savedViewError: string | null;
+  isSavedViewBusy: boolean;
+  onSavedViewSelect: (viewId: string) => void;
+  onSavedViewNameChange: (name: string) => void;
+  onSaveCurrentView: () => void;
+  onApplySavedView: () => void;
+  onRenameSavedView: () => void;
+  onDeleteSavedView: () => void;
   issueListHeadingRef: RefObject<HTMLHeadingElement | null>;
   onClearFilters: () => void;
   onPreviousPage: () => void;
@@ -55,6 +69,19 @@ export function IssueListPanel({
   onPriorityFilterChange,
   includeArchived,
   onIncludeArchivedChange,
+  pageSize,
+  onPageSizeChange,
+  savedViews,
+  selectedSavedViewId,
+  savedViewName,
+  savedViewError,
+  isSavedViewBusy,
+  onSavedViewSelect,
+  onSavedViewNameChange,
+  onSaveCurrentView,
+  onApplySavedView,
+  onRenameSavedView,
+  onDeleteSavedView,
   issueListHeadingRef,
   onClearFilters,
   onPreviousPage,
@@ -130,11 +157,88 @@ export function IssueListPanel({
           <span>Include archived</span>
         </label>
 
+        <label className="filter-field" htmlFor="issue-page-size-filter">
+          <span>Page size</span>
+          <select
+            id="issue-page-size-filter"
+            value={pageSize}
+            onChange={(event) => onPageSizeChange(Number(event.target.value))}
+          >
+            <option value={10}>10</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+        </label>
+
         <div className="filter-actions">
           <button type="button" className="secondary-button" onClick={onClearFilters} disabled={!hasActiveFilters}>
             Clear Filters
           </button>
         </div>
+      </div>
+
+      <div className="saved-view-panel" aria-label="Saved filter views">
+        <label className="filter-field" htmlFor="saved-view-select">
+          <span>Saved views</span>
+          <select
+            id="saved-view-select"
+            value={selectedSavedViewId}
+            onChange={(event) => onSavedViewSelect(event.target.value)}
+          >
+            <option value="">Choose a view</option>
+            {savedViews.map((view) => (
+              <option key={view.id} value={view.id}>
+                {view.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="filter-field saved-view-name-field" htmlFor="saved-view-name">
+          <span>View name</span>
+          <input
+            id="saved-view-name"
+            value={savedViewName}
+            onChange={(event) => onSavedViewNameChange(event.target.value)}
+          />
+        </label>
+
+        <div className="saved-view-actions">
+          <button type="button" className="secondary-button" onClick={onSaveCurrentView} disabled={isSavedViewBusy}>
+            Save View
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={onApplySavedView}
+            disabled={isSavedViewBusy || !selectedSavedViewId}
+          >
+            Apply View
+          </button>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={onRenameSavedView}
+            disabled={isSavedViewBusy || !selectedSavedViewId}
+          >
+            Rename
+          </button>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={onDeleteSavedView}
+            disabled={isSavedViewBusy || !selectedSavedViewId}
+          >
+            Delete
+          </button>
+        </div>
+
+        {savedViewError ? (
+          <p className="saved-view-error" role="alert">
+            {savedViewError}
+          </p>
+        ) : null}
       </div>
 
       {hasActiveFilters ? (

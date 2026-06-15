@@ -675,6 +675,82 @@ test('dashboard filters hydrate from URL and compose with issue detail routes', 
   await expect(page).toHaveURL('/');
 });
 
+test('saved filter views persist restore and compose with detail routes', async ({ page }) => {
+  const targetIssue = await createIssueThroughApi(page, {
+    title: 'Saved view target',
+    description: 'Archived issue restored by saved view.',
+    status: 'review',
+    priority: 'high'
+  });
+  await createIssueThroughApi(page, {
+    title: 'Saved view active other',
+    description: 'Should not match the saved filter.',
+    status: 'todo',
+    priority: 'low'
+  });
+  const archiveResponse = await page.request.post(`/api/issues/${targetIssue.id}/archive`);
+
+  expect(archiveResponse.ok()).toBe(true);
+
+  await page.goto('/');
+
+  const filters = page.getByLabel('Issue filters');
+  const savedViews = page.getByLabel('Saved filter views');
+
+  await filters.getByLabel('Search').fill('Saved view target');
+  await filters.getByLabel('Status').selectOption('review');
+  await filters.getByLabel('Priority').selectOption('high');
+  await filters.getByLabel('Include archived').check();
+  await filters.getByLabel('Page size').selectOption('50');
+  await savedViews.getByLabel('View name').fill('Review archive view');
+  await savedViews.getByRole('button', { name: 'Save View' }).click();
+
+  await expect(savedViews.getByLabel('Saved views')).toContainText('Review archive view');
+  await expect(page.getByLabel('Active filters')).toContainText('Page size: 50');
+  await expect(page.getByRole('row', { name: /Saved view target.*Review.*High/ })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('50');
+
+  await filters.getByRole('button', { name: 'Clear Filters' }).click();
+  await expect(filters.getByLabel('Search')).toHaveValue('');
+  await expect(filters.getByLabel('Page size')).toHaveValue('25');
+  await expect(page).toHaveURL('/');
+
+  await savedViews.getByRole('button', { name: 'Apply View' }).click();
+  await expect(filters.getByLabel('Search')).toHaveValue('Saved view target');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(filters.getByLabel('Priority')).toHaveValue('high');
+  await expect(filters.getByLabel('Include archived')).toBeChecked();
+  await expect(filters.getByLabel('Page size')).toHaveValue('50');
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Saved view target');
+  await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('50');
+
+  await page.reload();
+  await expect(savedViews.getByLabel('Saved views')).toContainText('Review archive view');
+  await expect(filters.getByLabel('Search')).toHaveValue('Saved view target');
+
+  await savedViews.getByLabel('Saved views').selectOption({ label: 'Review archive view' });
+  await savedViews.getByLabel('View name').fill('Renamed archive view');
+  await savedViews.getByRole('button', { name: 'Rename' }).click();
+  await expect(savedViews.getByLabel('Saved views')).toContainText('Renamed archive view');
+
+  await page.getByRole('button', { name: `Open ${targetIssue.title}` }).click();
+  await expect(page.getByRole('region', { name: targetIssue.title })).toBeVisible();
+  await filters.getByLabel('Search').fill('no matching saved view row');
+  await savedViews.getByRole('button', { name: 'Apply View' }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${targetIssue.id}`);
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Saved view target');
+  await expect(page.getByRole('region', { name: targetIssue.title })).toBeVisible();
+
+  await savedViews.getByRole('button', { name: 'Delete' }).click();
+  await expect(savedViews.getByRole('option', { name: 'Renamed archive view' })).toHaveCount(0);
+
+  const savedViewList = await page.request.get('/api/filter-views');
+  const savedViewListBody = (await savedViewList.json()) as unknown[];
+
+  expect(savedViewList.ok()).toBe(true);
+  expect(savedViewListBody).toEqual([]);
+});
+
 test('large issue lists remain filterable and can open detail', async ({ page }) => {
   test.setTimeout(60_000);
 

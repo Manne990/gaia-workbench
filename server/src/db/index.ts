@@ -2,6 +2,7 @@ export { createDatabase } from './database.js';
 export { ActivityRepository } from './activityRepository.js';
 export { CommentRepository } from './commentRepository.js';
 export { IssueRepository } from './issueRepository.js';
+export { DuplicateSavedFilterViewNameError, SavedFilterViewRepository } from './savedFilterViewRepository.js';
 export { ensureTinyTrackerSchema, getTinyTrackerSchemaVersion, SCHEMA_VERSION, TABLE_NAMES } from './schema.js';
 export type {
   ActivityEvent,
@@ -23,5 +24,10 @@ export type {
   IssueUpdate,
   NewActivityEvent,
   NewComment,
-  NewIssue
+  NewIssue,
+  NewSavedFilterView,
+  SavedFilterPriority,
+  SavedFilterStatus,
+  SavedFilterView,
+  SavedFilterViewUpdate
 } from './types.js';

@@ -56,8 +56,22 @@ function expectCurrentSchema(database: Database.Database): void {
     TABLE_NAMES.activityEvents,
     TABLE_NAMES.commentEditHistory,
     TABLE_NAMES.comments,
-    TABLE_NAMES.issues
+    TABLE_NAMES.issues,
+    TABLE_NAMES.savedFilterViews
   ]);
+  expect(getColumnNames(database, TABLE_NAMES.savedFilterViews)).toEqual(
+    expect.arrayContaining([
+      'id',
+      'name',
+      'search',
+      'status',
+      'priority',
+      'include_archived',
+      'page_size',
+      'created_at',
+      'updated_at'
+    ])
+  );
   expect(getColumnNames(database, TABLE_NAMES.issues)).toEqual(
     expect.arrayContaining(['labels', 'due_date', 'archived_at'])
   );
@@ -66,9 +80,69 @@ function expectCurrentSchema(database: Database.Database): void {
       'idx_activity_events_issue_id_created_at',
       'idx_comment_edit_history_comment_id_edited_at',
       'idx_comments_issue_id_created_at',
-      'idx_issues_archived_at_created_at'
+      'idx_issues_archived_at_created_at',
+      'idx_saved_filter_views_name',
+      'idx_saved_filter_views_updated_at'
     ])
   );
+}
+
+function createVersionOneDatabase(databasePath: string): void {
+  const database = createRawDatabase(databasePath);
+
+  try {
+    database.exec(`
+      CREATE TABLE issues (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL CHECK (status IN ('todo', 'in_progress', 'review', 'done')),
+        priority TEXT NOT NULL CHECK (priority IN ('low', 'medium', 'high')),
+        labels TEXT NOT NULL DEFAULT '[]',
+        due_date TEXT DEFAULT NULL,
+        archived_at TEXT DEFAULT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE comments (
+        id TEXT PRIMARY KEY,
+        issue_id TEXT NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+        body TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE comment_edit_history (
+        id TEXT PRIMARY KEY,
+        comment_id TEXT NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+        previous_body TEXT NOT NULL,
+        new_body TEXT NOT NULL,
+        edited_at TEXT NOT NULL
+      );
+
+      CREATE TABLE activity_events (
+        id TEXT PRIMARY KEY,
+        issue_id TEXT NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+        event_type TEXT NOT NULL,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_activity_events_issue_id_created_at
+      ON activity_events (issue_id, created_at);
+      CREATE INDEX idx_comment_edit_history_comment_id_edited_at
+      ON comment_edit_history (comment_id, edited_at);
+      CREATE INDEX idx_comments_issue_id_created_at
+      ON comments (issue_id, created_at);
+      CREATE INDEX idx_issues_archived_at_created_at
+      ON issues (archived_at, created_at);
+
+      PRAGMA user_version = 1;
+    `);
+  } finally {
+    database.close();
+  }
 }
 
 function createLegacyIssuesOnlyDatabase(databasePath: string): void {
@@ -250,6 +324,21 @@ describe('schema migrations', () => {
         });
       } finally {
         secondDatabase.close();
+      }
+    });
+  });
+
+  it('upgrades a version 1 database with saved filter views', async () => {
+    await withTempDatabasePath((databasePath) => {
+      createVersionOneDatabase(databasePath);
+
+      const database = createDatabase(databasePath);
+
+      try {
+        expectCurrentSchema(database);
+        expect(getTinyTrackerSchemaVersion(database)).toBe(2);
+      } finally {
+        database.close();
       }
     });
   });

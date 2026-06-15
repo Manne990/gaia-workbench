@@ -58,6 +58,7 @@ If Gaia can successfully build, maintain, and evolve TinyTracker, it demonstrate
 * Filter by status
 * Filter by priority
 * Include archived issues on demand
+* Save named dashboard filter views
 
 ### API
 
@@ -68,6 +69,7 @@ REST API supporting:
 * Update issue
 * Archive and unarchive issue
 * Add comments
+* Create, list, update, and delete saved filter views
 * Export tracker JSON
 * Preview and apply tracker JSON imports
 
@@ -79,6 +81,7 @@ Simple web interface:
 * Issue list
 * Issue details
 * Search
+* Saved filter views
 * Archived issue recovery
 * Safe markdown-lite rendering for descriptions and comments
 * JSON export and import
@@ -248,9 +251,10 @@ data/tinytracker.sqlite
 ### Schema Versioning
 
 TinyTracker stores its SQLite schema version in `PRAGMA user_version`. The
-current application schema is version `1`, which includes issues, comments,
-comment edit history, activity events, labels, due dates, archive state, and the
-current query indexes. This is separate from tracker JSON `exportVersion`.
+current application schema is version `2`, which includes issues, comments,
+comment edit history, activity events, labels, due dates, archive state, saved
+filter views, and the current query indexes. This is separate from tracker JSON
+`exportVersion`.
 
 Startup runs the schema migration path through `createDatabase()`. Fresh
 databases and unversioned legacy databases (`user_version = 0`) are upgraded to
@@ -355,6 +359,43 @@ By default, the issue list and dashboard summary exclude archived issues. When
 `includeArchived=true`, archived issues are included in list results and summary
 counts.
 
+### Saved Filter Views API
+
+Saved filter views are instance-wide dashboard shortcuts. They do not store the
+currently selected issue detail route, and they are not part of tracker JSON
+import/export.
+
+```http
+GET /api/filter-views
+POST /api/filter-views
+GET /api/filter-views/:id
+PATCH /api/filter-views/:id
+DELETE /api/filter-views/:id
+```
+
+Create and update payloads use this filter shape:
+
+```json
+{
+  "name": "Review backlog",
+  "search": "api",
+  "status": "review",
+  "priority": "high",
+  "includeArchived": true,
+  "pageSize": 50
+}
+```
+
+`name` is trimmed, required, limited to 120 characters, and unique
+case-insensitively. `status` may be `all`, `todo`, `in_progress`, `review`, or
+`done`; `priority` may be `all`, `low`, `medium`, or `high`; `pageSize` must be
+between `1` and `100`.
+
+Applying a saved view updates the dashboard URL query using `search`, `status`,
+`priority`, `includeArchived`, and non-default `limit`. Saved views persist page
+size but reset pagination to page `1` when applied so stale saved views do not
+open empty pages after data changes.
+
 ### Archive API
 
 TinyTracker uses archive-only removal in this version. Archiving an issue hides
@@ -442,6 +483,7 @@ The Playwright smoke test starts TinyTracker with an in-memory SQLite database a
 * Created issue appears in the issue list
 * Issue can be updated
 * Issue can be archived and restored
+* Saved filter views can be created, applied, renamed, deleted, and composed with URLs
 * Markdown-lite descriptions and comments render safely
 * Issue detail view opens
 * Comment can be added

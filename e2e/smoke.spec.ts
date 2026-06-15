@@ -274,12 +274,15 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
   const importPanel = page.getByRole('region', { name: 'Import preview' });
 
   await expect(importPanel.getByRole('heading', { name: 'Import Preview' })).toBeVisible();
-  await expect(importPanel.getByText('Ready to create 1 issues and skip 0.')).toBeVisible();
-  await expect(importPanel.getByRole('row', { name: /Issues\s+1\s+1\s+0/ })).toBeVisible();
+  await expect(importPanel.getByRole('radio', { name: 'Skip existing conflicts (default)' })).toBeChecked();
+  await expect(importPanel.getByText('Ready to create 1 issues, replace 0 changed issues, and skip 0.')).toBeVisible();
+  await expect(importPanel.getByRole('row', { name: /Issues\s+1\s+0\s+0\s+1\s+0\s+0/ })).toBeVisible();
 
   await importPanel.getByRole('button', { name: 'Apply Import' }).click();
 
-  await expect(importPanel.getByText('Import applied: 1 issues created, 0 skipped.')).toBeVisible();
+  await expect(
+    importPanel.getByText('Import applied: 1 issues created, 0 changed issues replaced, 0 skipped.')
+  ).toBeVisible();
 
   const importedRow = page.getByRole('row', { name: /Imported issue from JSON.*Review.*High/ });
   await expect(importedRow).toBeVisible();
@@ -291,6 +294,85 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
   await expect(detail.getByText('Created through the JSON import flow.')).toBeVisible();
   await expect(detail.getByText('Imported comment body')).toBeVisible();
   await expect(detail.getByLabel('Issue activity').getByText('Issue created')).toBeVisible();
+});
+
+test('imports changed issue conflicts with an explicit replace policy', async ({ page }, testInfo) => {
+  const existingResponse = await page.request.post('/api/issues', {
+    data: {
+      title: 'Conflict import issue',
+      description: 'Local issue before import.',
+      status: 'todo',
+      priority: 'medium'
+    }
+  });
+
+  expect(existingResponse.ok()).toBe(true);
+  const existing = (await existingResponse.json()) as CreatedIssue & {
+    status: string;
+    priority: string;
+    labels: string[];
+    dueDate: string | null;
+    isOverdue: boolean;
+    archivedAt: string | null;
+    isBlocked: boolean;
+    dependsOnIssueIds: string[];
+    createdAt: string;
+    updatedAt: string;
+  };
+  const importPayload = {
+    exportVersion: 1,
+    issues: [
+      {
+        id: existing.id,
+        title: 'Conflict issue replaced from JSON',
+        description: 'Changed through explicit replace policy.',
+        status: 'review',
+        priority: 'high',
+        labels: ['conflict'],
+        dueDate: null,
+        isOverdue: false,
+        isBlocked: false,
+        dependsOnIssueIds: [],
+        archivedAt: null,
+        createdAt: existing.createdAt,
+        updatedAt: '2999-02-01T00:00:00.000Z',
+        comments: [],
+        activityEvents: []
+      }
+    ]
+  };
+  const importFilePath = testInfo.outputPath('tinytracker-conflict-import.json');
+
+  writeFileSync(importFilePath, JSON.stringify(importPayload), 'utf8');
+
+  await page.goto('/');
+  await page.locator('input[type="file"][accept="application/json,.json"]').setInputFiles(importFilePath);
+
+  const importPanel = page.getByRole('region', { name: 'Import preview' });
+
+  await expect(importPanel.getByText('Ready to create 0 issues, replace 0 changed issues, and skip 1.')).toBeVisible();
+  await expect(importPanel.getByRole('row', { name: /Issues\s+1\s+0\s+1\s+0\s+0\s+1/ })).toBeVisible();
+
+  await importPanel.getByRole('radio', { name: 'Replace changed issues' }).check();
+
+  await expect(importPanel.getByText('Ready to create 0 issues, replace 1 changed issues, and skip 0.')).toBeVisible();
+  await expect(importPanel.getByRole('row', { name: /Issues\s+1\s+0\s+1\s+0\s+1\s+0/ })).toBeVisible();
+
+  await importPanel.getByRole('button', { name: 'Apply Import' }).click();
+
+  await expect(
+    importPanel.getByText('Import applied: 0 issues created, 1 changed issues replaced, 0 skipped.')
+  ).toBeVisible();
+
+  const replacedRow = page.getByRole('row', { name: /Conflict issue replaced from JSON.*Review.*High/ });
+
+  await expect(replacedRow).toBeVisible();
+  await page.getByRole('button', { name: 'Open Conflict issue replaced from JSON' }).click();
+
+  const detail = page.getByRole('region', { name: 'Conflict issue replaced from JSON' });
+
+  await expect(detail.getByText('Changed through explicit replace policy.')).toBeVisible();
+  await expect(detail.getByLabel('Issue labels').getByText('conflict', { exact: true })).toBeVisible();
 });
 
 test('archives hides restores and preserves issue activity', async ({ page }) => {
@@ -549,7 +631,7 @@ test('keyboard users can create open comment edit and close an issue', async ({ 
   await expect(editIssueButton).toBeFocused();
 
   const openIssueButton = page.getByRole('button', { name: 'Open Keyboard issue' });
-  await pressTabUntilFocused(page, openIssueButton);
+  await pressTabUntilFocused(page, openIssueButton, 80);
   await page.keyboard.press('Enter');
 
   const detail = page.getByRole('region', { name: 'Keyboard issue' });

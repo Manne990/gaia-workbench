@@ -476,15 +476,24 @@ flow:
 * `POST /api/import/preview`
 * `POST /api/import/apply`
 
-Both endpoints accept the same JSON shape returned by `GET /api/export`.
-Preview validates the payload and reports what would be created, skipped, or
-rejected. Apply validates the full payload again, then writes valid records in a
-single SQLite transaction.
+Both endpoints accept the same JSON shape returned by `GET /api/export`. They
+also accept an optional top-level `conflictPolicy` value:
+
+* `skip-conflicts` (default): existing IDs are skipped.
+* `replace-conflicts`: changed existing issues are replaced, while existing
+  comment, edit-history, and activity IDs remain immutable.
+
+Preview validates the payload, classifies existing records as exact or changed,
+and reports what would be created, replaced, skipped, or rejected. Apply
+validates the full payload again, recomputes the plan with the selected policy,
+then writes valid records in a single SQLite transaction.
 
 Import preserves exported issue, comment, edit-history, and activity IDs and
-timestamps. Existing incoming IDs are skipped rather than overwritten, so
-re-importing the same file is a deterministic no-op. If an incoming issue ID is
-already present, that issue and its nested records are skipped together.
+timestamps. Existing incoming IDs are skipped unless `replace-conflicts`
+explicitly replaces a changed issue. In that policy, issue fields and
+`dependsOnIssueIds` are replaced, new non-conflicting descendant records may be
+imported, and existing descendant IDs remain skipped. Re-importing the same file
+with the same policy is deterministic.
 
 Import preserves `archivedAt` when present. Older `exportVersion: 1` payloads
 without `archivedAt` remain valid and are imported as active issues with

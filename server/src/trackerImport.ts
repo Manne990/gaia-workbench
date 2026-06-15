@@ -25,7 +25,10 @@ type TrackerExport = {
 };
 
 type ImportEntity = 'issue' | 'comment' | 'commentEditHistory' | 'activityEvent';
-type ImportDecisionType = 'import' | 'skip-existing' | 'reject';
+export type ImportConflictPolicy = 'skip-conflicts' | 'replace-conflicts';
+type ImportDecisionType = 'import' | 'skip-existing' | 'replace-existing' | 'reject';
+type ImportMatchType = 'new' | 'exact' | 'changed';
+type ImportPolicyDecision = 'import' | 'skip' | 'replace' | 'reject';
 
 type ImportCounts = {
   issues: number;
@@ -41,6 +44,8 @@ export type ImportDecision = {
   issueId?: string;
   commentId?: string;
   decision: ImportDecisionType;
+  matchType?: ImportMatchType;
+  policyDecision?: ImportPolicyDecision;
   reasons: string[];
 };
 
@@ -54,13 +59,17 @@ export type ImportErrorDetail = {
 export type ImportSummary = {
   input: ImportCounts;
   toCreate: ImportCounts;
+  toReplace: ImportCounts;
   skip: ImportCounts;
+  exactMatches: ImportCounts;
+  changed: ImportCounts;
   reject: number;
 };
 
 export type ImportPlan = {
   valid: boolean;
   exportVersion: number | null;
+  policy: ImportConflictPolicy;
   summary: ImportSummary;
   decisions: ImportDecision[];
   errors: ImportErrorDetail[];
@@ -69,12 +78,15 @@ export type ImportPlan = {
 
 type ValidationResult = {
   exportVersion: number | null;
+  conflictPolicy: ImportConflictPolicy;
   exportData: TrackerExport | null;
   input: ImportCounts;
   decisions: ImportDecision[];
   errors: ImportErrorDetail[];
 };
 
+const DEFAULT_IMPORT_CONFLICT_POLICY: ImportConflictPolicy = 'skip-conflicts';
+const VALID_IMPORT_CONFLICT_POLICIES: ImportConflictPolicy[] = ['skip-conflicts', 'replace-conflicts'];
 const VALID_STATUSES: IssueStatus[] = ['todo', 'in_progress', 'review', 'done'];
 const VALID_PRIORITIES: IssuePriority[] = ['low', 'medium', 'high'];
 const VALID_ACTIVITY_TYPES: ActivityEventType[] = [
@@ -99,6 +111,48 @@ const emptyCounts = (): ImportCounts => ({
   editHistory: 0,
   activityEvents: 0
 });
+
+type ExistingIssueRow = {
+  id: string;
+  title: string;
+  description: string;
+  status: IssueStatus;
+  priority: IssuePriority;
+  labels: string;
+  due_date: string | null;
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type ExistingCommentRow = {
+  id: string;
+  issue_id: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type ExistingHistoryRow = {
+  id: string;
+  comment_id: string;
+  previous_body: string;
+  new_body: string;
+  edited_at: string;
+};
+
+type ExistingActivityRow = {
+  id: string;
+  issue_id: string;
+  event_type: ActivityEventType;
+  metadata: string;
+  created_at: string;
+};
+
+type ExistingDependencyRow = {
+  issue_id: string;
+  depends_on_issue_id: string;
+};
 
 function pushError(errors: ImportErrorDetail[], code: string, path: string, message: string, value?: unknown) {
   const error: ImportErrorDetail = { code, path, message };
@@ -212,6 +266,27 @@ function readArray(value: Record<string, unknown>, key: string, path: string, er
   }
 
   return field;
+}
+
+function readImportConflictPolicy(value: Record<string, unknown>, errors: ImportErrorDetail[]): ImportConflictPolicy {
+  const field = value.conflictPolicy;
+
+  if (field === undefined) {
+    return DEFAULT_IMPORT_CONFLICT_POLICY;
+  }
+
+  if (typeof field !== 'string' || !VALID_IMPORT_CONFLICT_POLICIES.includes(field as ImportConflictPolicy)) {
+    pushError(
+      errors,
+      'invalid_import_policy',
+      '$.conflictPolicy',
+      'Import conflict policy must be skip-conflicts or replace-conflicts.',
+      field
+    );
+    return DEFAULT_IMPORT_CONFLICT_POLICY;
+  }
+
+  return field as ImportConflictPolicy;
 }
 
 function isValidDateOnly(value: string): boolean {
@@ -413,20 +488,219 @@ function placeholdersFor(values: string[]): string {
   return values.map(() => '?').join(', ');
 }
 
-function existingIds(
-  database: Database.Database,
-  tableName: 'issues' | 'comments' | 'comment_edit_history' | 'activity_events',
-  ids: string[]
-): Set<string> {
+function rowsById<Row extends { id: string }>(rows: Row[]): Map<string, Row> {
+  return new Map(rows.map((row) => [row.id, row]));
+}
+
+function parseStoredLabels(value: string): string[] {
+  try {
+    const labels = JSON.parse(value) as unknown;
+
+    return Array.isArray(labels) && labels.every((label) => typeof label === 'string') ? labels : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseStoredMetadata(value: string): ActivityMetadata {
+  try {
+    const metadata = JSON.parse(value) as unknown;
+
+    return isRecord(metadata) ? (metadata as ActivityMetadata) : {};
+  } catch {
+    return {};
+  }
+}
+
+function existingIssueRowsById(database: Database.Database, ids: string[]): Map<string, ExistingIssueRow> {
   if (ids.length === 0) {
-    return new Set();
+    return new Map();
   }
 
   const rows = database
-    .prepare(`SELECT id FROM ${tableName} WHERE id IN (${placeholdersFor(ids)})`)
-    .all(...ids) as Array<{ id: string }>;
+    .prepare(
+      `
+      SELECT id, title, description, status, priority, labels, due_date, archived_at, created_at, updated_at
+      FROM issues
+      WHERE id IN (${placeholdersFor(ids)})
+    `
+    )
+    .all(...ids) as ExistingIssueRow[];
 
-  return new Set(rows.map((row) => row.id));
+  return rowsById(rows);
+}
+
+function existingCommentRowsById(database: Database.Database, ids: string[]): Map<string, ExistingCommentRow> {
+  if (ids.length === 0) {
+    return new Map();
+  }
+
+  const rows = database
+    .prepare(
+      `
+      SELECT id, issue_id, body, created_at, updated_at
+      FROM comments
+      WHERE id IN (${placeholdersFor(ids)})
+    `
+    )
+    .all(...ids) as ExistingCommentRow[];
+
+  return rowsById(rows);
+}
+
+function existingHistoryRowsById(database: Database.Database, ids: string[]): Map<string, ExistingHistoryRow> {
+  if (ids.length === 0) {
+    return new Map();
+  }
+
+  const rows = database
+    .prepare(
+      `
+      SELECT id, comment_id, previous_body, new_body, edited_at
+      FROM comment_edit_history
+      WHERE id IN (${placeholdersFor(ids)})
+    `
+    )
+    .all(...ids) as ExistingHistoryRow[];
+
+  return rowsById(rows);
+}
+
+function existingActivityRowsById(database: Database.Database, ids: string[]): Map<string, ExistingActivityRow> {
+  if (ids.length === 0) {
+    return new Map();
+  }
+
+  const rows = database
+    .prepare(
+      `
+      SELECT id, issue_id, event_type, metadata, created_at
+      FROM activity_events
+      WHERE id IN (${placeholdersFor(ids)})
+    `
+    )
+    .all(...ids) as ExistingActivityRow[];
+
+  return rowsById(rows);
+}
+
+function existingDependenciesByIssueId(database: Database.Database, issueIds: string[]): Map<string, string[]> {
+  if (issueIds.length === 0) {
+    return new Map();
+  }
+
+  const rows = database
+    .prepare(
+      `
+      SELECT issue_id, depends_on_issue_id
+      FROM issue_dependencies
+      WHERE issue_id IN (${placeholdersFor(issueIds)})
+      ORDER BY issue_id ASC, depends_on_issue_id ASC
+    `
+    )
+    .all(...issueIds) as ExistingDependencyRow[];
+  const dependenciesByIssueId = new Map<string, string[]>();
+
+  for (const row of rows) {
+    const dependencies = dependenciesByIssueId.get(row.issue_id) ?? [];
+    dependencies.push(row.depends_on_issue_id);
+    dependenciesByIssueId.set(row.issue_id, dependencies);
+  }
+
+  return dependenciesByIssueId;
+}
+
+function arraysEqual(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function sortedStrings(values: string[]): string[] {
+  return [...values].sort((left, right) => left.localeCompare(right));
+}
+
+function canonicalMetadata(value: ActivityMetadata): string {
+  return JSON.stringify(
+    Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, metadataValue]) => [key, Array.isArray(metadataValue) ? [...metadataValue] : metadataValue])
+    )
+  );
+}
+
+function issueMatchType(
+  issue: ExportedIssue,
+  existingIssues: Map<string, ExistingIssueRow>,
+  dependenciesByIssueId: Map<string, string[]>
+): ImportMatchType {
+  const existing = existingIssues.get(issue.id);
+
+  if (!existing) {
+    return 'new';
+  }
+
+  const existingDependencies = dependenciesByIssueId.get(issue.id) ?? [];
+  const isExact =
+    existing.title === issue.title &&
+    existing.description === issue.description &&
+    existing.status === issue.status &&
+    existing.priority === issue.priority &&
+    arraysEqual(parseStoredLabels(existing.labels), issue.labels) &&
+    existing.due_date === issue.dueDate &&
+    existing.archived_at === issue.archivedAt &&
+    existing.created_at === issue.createdAt &&
+    existing.updated_at === issue.updatedAt &&
+    arraysEqual(sortedStrings(existingDependencies), sortedStrings(issue.dependsOnIssueIds));
+
+  return isExact ? 'exact' : 'changed';
+}
+
+function commentMatchType(comment: Comment, existingComments: Map<string, ExistingCommentRow>): ImportMatchType {
+  const existing = existingComments.get(comment.id);
+
+  if (!existing) {
+    return 'new';
+  }
+
+  return existing.issue_id === comment.issueId &&
+    existing.body === comment.body &&
+    existing.created_at === comment.createdAt &&
+    existing.updated_at === comment.updatedAt
+    ? 'exact'
+    : 'changed';
+}
+
+function historyMatchType(
+  history: CommentEditHistory,
+  existingHistories: Map<string, ExistingHistoryRow>
+): ImportMatchType {
+  const existing = existingHistories.get(history.id);
+
+  if (!existing) {
+    return 'new';
+  }
+
+  return existing.comment_id === history.commentId &&
+    existing.previous_body === history.previousBody &&
+    existing.new_body === history.newBody &&
+    existing.edited_at === history.editedAt
+    ? 'exact'
+    : 'changed';
+}
+
+function activityMatchType(event: ActivityEvent, existingActivity: Map<string, ExistingActivityRow>): ImportMatchType {
+  const existing = existingActivity.get(event.id);
+
+  if (!existing) {
+    return 'new';
+  }
+
+  return existing.issue_id === event.issueId &&
+    existing.event_type === event.type &&
+    existing.created_at === event.createdAt &&
+    canonicalMetadata(parseStoredMetadata(existing.metadata)) === canonicalMetadata(event.metadata)
+    ? 'exact'
+    : 'changed';
 }
 
 function countInput(exportData: TrackerExport | null): ImportCounts {
@@ -454,11 +728,12 @@ function validateTrackerExport(input: unknown): ValidationResult {
   const errors: ImportErrorDetail[] = [];
   const decisions: ImportDecision[] = [];
   const seen = new Map<ImportEntity, Set<string>>();
-  const root = validateObject(input, '$', ['exportVersion', 'issues'], errors);
+  const root = validateObject(input, '$', ['exportVersion', 'issues'], errors, ['conflictPolicy']);
 
   if (!root) {
     return {
       exportVersion: null,
+      conflictPolicy: DEFAULT_IMPORT_CONFLICT_POLICY,
       exportData: null,
       input: emptyCounts(),
       decisions,
@@ -466,6 +741,7 @@ function validateTrackerExport(input: unknown): ValidationResult {
     };
   }
 
+  const conflictPolicy = readImportConflictPolicy(root, errors);
   const exportVersion = root.exportVersion;
   if (exportVersion !== 1) {
     pushError(errors, 'unsupported_version', '$.exportVersion', 'Unsupported export version.', exportVersion);
@@ -801,6 +1077,7 @@ function validateTrackerExport(input: unknown): ValidationResult {
 
   return {
     exportVersion: typeof exportVersion === 'number' ? exportVersion : null,
+    conflictPolicy,
     exportData,
     input: countInput(exportData),
     decisions,
@@ -822,25 +1099,43 @@ function incrementCount(counts: ImportCounts, entity: ImportEntity) {
 
 function makeSummary(input: ImportCounts, decisions: ImportDecision[], errors: ImportErrorDetail[]): ImportSummary {
   const toCreate = emptyCounts();
+  const toReplace = emptyCounts();
   const skip = emptyCounts();
+  const exactMatches = emptyCounts();
+  const changed = emptyCounts();
 
   for (const decision of decisions) {
     if (decision.decision === 'import') {
       incrementCount(toCreate, decision.entity);
+    } else if (decision.decision === 'replace-existing') {
+      incrementCount(toReplace, decision.entity);
     } else if (decision.decision === 'skip-existing') {
       incrementCount(skip, decision.entity);
+    }
+
+    if (decision.matchType === 'exact') {
+      incrementCount(exactMatches, decision.entity);
+    } else if (decision.matchType === 'changed') {
+      incrementCount(changed, decision.entity);
     }
   }
 
   return {
     input,
     toCreate,
+    toReplace,
     skip,
+    exactMatches,
+    changed,
     reject: errors.length
   };
 }
 
-function collectImportDecisions(database: Database.Database, exportData: TrackerExport): ImportDecision[] {
+function collectImportDecisions(
+  database: Database.Database,
+  exportData: TrackerExport,
+  conflictPolicy: ImportConflictPolicy
+): ImportDecision[] {
   const issueIds = exportData.issues.map((issue) => issue.id);
   const comments = exportData.issues.flatMap((issue) => issue.comments);
   const commentIds = comments.map((comment) => comment.id);
@@ -848,27 +1143,42 @@ function collectImportDecisions(database: Database.Database, exportData: Tracker
   const historyIds = histories.map((history) => history.id);
   const activityEvents = exportData.issues.flatMap((issue) => issue.activityEvents);
   const activityIds = activityEvents.map((event) => event.id);
-  const existingIssueIds = existingIds(database, 'issues', issueIds);
-  const existingCommentIds = existingIds(database, 'comments', commentIds);
-  const existingHistoryIds = existingIds(database, 'comment_edit_history', historyIds);
-  const existingActivityIds = existingIds(database, 'activity_events', activityIds);
+  const existingIssues = existingIssueRowsById(database, issueIds);
+  const existingComments = existingCommentRowsById(database, commentIds);
+  const existingHistories = existingHistoryRowsById(database, historyIds);
+  const existingActivity = existingActivityRowsById(database, activityIds);
+  const dependenciesByIssueId = existingDependenciesByIssueId(database, issueIds);
   const decisions: ImportDecision[] = [];
 
   exportData.issues.forEach((issue, issueIndex) => {
-    const issueExists = existingIssueIds.has(issue.id);
+    const matchType = issueMatchType(issue, existingIssues, dependenciesByIssueId);
+    const replaceIssue = conflictPolicy === 'replace-conflicts' && matchType === 'changed';
+    const skipIssue = matchType !== 'new' && !replaceIssue;
 
     decisions.push({
       entity: 'issue',
       sourceId: issue.id,
       sourceIndex: issueIndex,
       issueId: issue.id,
-      decision: issueExists ? 'skip-existing' : 'import',
-      reasons: issueExists ? ['issue id already exists'] : []
+      decision: matchType === 'new' ? 'import' : replaceIssue ? 'replace-existing' : 'skip-existing',
+      matchType,
+      policyDecision: matchType === 'new' ? 'import' : replaceIssue ? 'replace' : 'skip',
+      reasons:
+        matchType === 'new'
+          ? []
+          : replaceIssue
+            ? ['changed issue id already exists and replace-conflicts is selected']
+            : [
+                matchType === 'exact'
+                  ? 'issue id already exists with identical semantic data'
+                  : 'changed issue id already exists'
+              ]
     });
 
     issue.comments.forEach((comment, commentIndex) => {
-      const commentExists = existingCommentIds.has(comment.id);
-      const skipForParent = issueExists;
+      const childMatchType = commentMatchType(comment, existingComments);
+      const skipForParent = skipIssue && conflictPolicy === 'skip-conflicts';
+      const importComment = !skipForParent && childMatchType === 'new';
 
       decisions.push({
         entity: 'comment',
@@ -876,16 +1186,20 @@ function collectImportDecisions(database: Database.Database, exportData: Tracker
         sourceIndex: commentIndex,
         issueId: issue.id,
         commentId: comment.id,
-        decision: skipForParent || commentExists ? 'skip-existing' : 'import',
+        decision: importComment ? 'import' : 'skip-existing',
+        matchType: childMatchType,
+        policyDecision: importComment ? 'import' : 'skip',
         reasons: [
           ...(skipForParent ? ['parent issue skipped'] : []),
-          ...(commentExists ? ['comment id already exists'] : [])
+          ...(childMatchType === 'exact' ? ['comment id already exists with identical data'] : []),
+          ...(childMatchType === 'changed' ? ['existing comment ids are immutable in this import policy'] : [])
         ]
       });
 
       comment.editHistory.forEach((history, historyIndex) => {
-        const historyExists = existingHistoryIds.has(history.id);
-        const skipForComment = skipForParent || commentExists;
+        const historyMatch = historyMatchType(history, existingHistories);
+        const skipForComment = !importComment;
+        const importHistory = !skipForComment && historyMatch === 'new';
 
         decisions.push({
           entity: 'commentEditHistory',
@@ -893,28 +1207,37 @@ function collectImportDecisions(database: Database.Database, exportData: Tracker
           sourceIndex: historyIndex,
           issueId: issue.id,
           commentId: comment.id,
-          decision: skipForComment || historyExists ? 'skip-existing' : 'import',
+          decision: importHistory ? 'import' : 'skip-existing',
+          matchType: historyMatch,
+          policyDecision: importHistory ? 'import' : 'skip',
           reasons: [
             ...(skipForComment ? ['parent comment skipped'] : []),
-            ...(historyExists ? ['comment edit history id already exists'] : [])
+            ...(historyMatch === 'exact' ? ['comment edit history id already exists with identical data'] : []),
+            ...(historyMatch === 'changed'
+              ? ['existing comment edit history ids are immutable in this import policy']
+              : [])
           ]
         });
       });
     });
 
     issue.activityEvents.forEach((event, eventIndex) => {
-      const eventExists = existingActivityIds.has(event.id);
-      const skipForParent = issueExists;
+      const eventMatch = activityMatchType(event, existingActivity);
+      const skipForParent = skipIssue && conflictPolicy === 'skip-conflicts';
+      const importEvent = !skipForParent && eventMatch === 'new';
 
       decisions.push({
         entity: 'activityEvent',
         sourceId: event.id,
         sourceIndex: eventIndex,
         issueId: issue.id,
-        decision: skipForParent || eventExists ? 'skip-existing' : 'import',
+        decision: importEvent ? 'import' : 'skip-existing',
+        matchType: eventMatch,
+        policyDecision: importEvent ? 'import' : 'skip',
         reasons: [
           ...(skipForParent ? ['parent issue skipped'] : []),
-          ...(eventExists ? ['activity event id already exists'] : [])
+          ...(eventMatch === 'exact' ? ['activity event id already exists with identical data'] : []),
+          ...(eventMatch === 'changed' ? ['existing activity event ids are immutable in this import policy'] : [])
         ]
       });
     });
@@ -930,6 +1253,7 @@ function buildImportPlan(database: Database.Database, input: unknown): ImportPla
     return {
       valid: false,
       exportVersion: validation.exportVersion,
+      policy: validation.conflictPolicy,
       summary: makeSummary(validation.input, validation.decisions, validation.errors),
       decisions: validation.decisions,
       errors: validation.errors,
@@ -937,11 +1261,12 @@ function buildImportPlan(database: Database.Database, input: unknown): ImportPla
     };
   }
 
-  const decisions = collectImportDecisions(database, validation.exportData);
+  const decisions = collectImportDecisions(database, validation.exportData, validation.conflictPolicy);
 
   return {
     valid: true,
     exportVersion: validation.exportVersion,
+    policy: validation.conflictPolicy,
     summary: makeSummary(validation.input, decisions, validation.errors),
     decisions,
     errors: [],
@@ -959,10 +1284,10 @@ export function previewTrackerImport(database: Database.Database, input: unknown
   return buildImportPlan(database, input);
 }
 
-function decisionSet(plan: ImportPlan, entity: ImportEntity): Set<string> {
+function decisionSet(plan: ImportPlan, entity: ImportEntity, decisionType: ImportDecisionType = 'import'): Set<string> {
   return new Set(
     plan.decisions
-      .filter((decision) => decision.entity === entity && decision.decision === 'import')
+      .filter((decision) => decision.entity === entity && decision.decision === decisionType)
       .map((decision) => decision.sourceId)
       .filter((id): id is string => id !== null)
   );
@@ -981,11 +1306,16 @@ export function applyTrackerImport(database: Database.Database, input: unknown):
   }
 
   const issueIdsToImport = decisionSet(plan, 'issue');
+  const issueIdsToReplace = decisionSet(plan, 'issue', 'replace-existing');
   const commentIdsToImport = decisionSet(plan, 'comment');
   const historyIdsToImport = decisionSet(plan, 'commentEditHistory');
   const activityIdsToImport = decisionSet(plan, 'activityEvent');
   const issues = validation.exportData.issues.filter((issue) => issueIdsToImport.has(issue.id)).sort(byCreatedAtThenId);
-  const dependencies = issues.flatMap((issue) =>
+  const issuesToReplace = validation.exportData.issues
+    .filter((issue) => issueIdsToReplace.has(issue.id))
+    .sort(byCreatedAtThenId);
+  const dependencyIssues = [...issues, ...issuesToReplace];
+  const dependencies = dependencyIssues.flatMap((issue) =>
     issue.dependsOnIssueIds.map((dependsOnIssueId) => ({
       issueId: issue.id,
       dependsOnIssueId,
@@ -1008,9 +1338,26 @@ export function applyTrackerImport(database: Database.Database, input: unknown):
       INSERT INTO issues (id, title, description, status, priority, labels, due_date, archived_at, created_at, updated_at)
       VALUES (@id, @title, @description, @status, @priority, @labels, @dueDate, @archivedAt, @createdAt, @updatedAt)
     `);
+    const updateIssue = database.prepare(`
+      UPDATE issues
+      SET title = @title,
+          description = @description,
+          status = @status,
+          priority = @priority,
+          labels = @labels,
+          due_date = @dueDate,
+          archived_at = @archivedAt,
+          created_at = @createdAt,
+          updated_at = @updatedAt
+      WHERE id = @id
+    `);
     const insertComment = database.prepare(`
       INSERT INTO comments (id, issue_id, body, created_at, updated_at)
       VALUES (@id, @issueId, @body, @createdAt, @updatedAt)
+    `);
+    const deleteDependencies = database.prepare(`
+      DELETE FROM issue_dependencies
+      WHERE issue_id = @issueId
     `);
     const insertDependency = database.prepare(`
       INSERT INTO issue_dependencies (issue_id, depends_on_issue_id, created_at, updated_at)
@@ -1038,6 +1385,22 @@ export function applyTrackerImport(database: Database.Database, input: unknown):
         createdAt: issue.createdAt,
         updatedAt: issue.updatedAt
       });
+    }
+
+    for (const issue of issuesToReplace) {
+      updateIssue.run({
+        id: issue.id,
+        title: issue.title,
+        description: issue.description,
+        status: issue.status,
+        priority: issue.priority,
+        labels: JSON.stringify(issue.labels),
+        dueDate: issue.dueDate,
+        archivedAt: issue.archivedAt,
+        createdAt: issue.createdAt,
+        updatedAt: issue.updatedAt
+      });
+      deleteDependencies.run({ issueId: issue.id });
     }
 
     for (const dependency of dependencies) {

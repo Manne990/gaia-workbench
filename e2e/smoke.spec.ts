@@ -402,6 +402,16 @@ test('command palette opens with keyboard shortcut, restores focus, and runs com
   const commandPalette = page.getByRole('dialog', { name: 'Command palette' });
   const commandSearch = page.getByLabel('Search commands');
   const commandList = page.getByRole('list', { name: 'Available commands' });
+  const commandButtonHasFocus = () =>
+    commandPalette.evaluate((dialog) => {
+      const activeElement = document.activeElement;
+
+      return (
+        activeElement instanceof HTMLButtonElement &&
+        dialog.contains(activeElement) &&
+        activeElement.getAttribute('aria-label') !== 'Run first matching command'
+      );
+    });
 
   await quickActionsButton.focus();
   await expect(quickActionsButton).toBeFocused();
@@ -414,11 +424,19 @@ test('command palette opens with keyboard shortcut, restores focus, and runs com
   await expect(commandList).toBeVisible();
 
   await page.keyboard.press('Shift+Tab');
-  await expect.poll(() => commandPalette.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true);
-  await expect(commandSearch).not.toBeFocused();
+  await expect.poll(commandButtonHasFocus).toBe(true);
   await page.keyboard.press('Tab');
   await expect(commandSearch).toBeFocused();
 
+  await page.keyboard.press('Shift+Tab');
+  await expect.poll(commandButtonHasFocus).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(commandPalette).toHaveCount(0);
+  await expect(quickActionsButton).toBeFocused();
+
+  await quickActionsButton.click();
+  await expect(commandPalette).toBeVisible();
+  await expect(commandSearch).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(commandPalette).toHaveCount(0);
   await expect(quickActionsButton).toBeFocused();

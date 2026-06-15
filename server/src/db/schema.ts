@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 
 // Add future migrations to MIGRATIONS in version order and bump this value.
 // Existing file-backed databases may start at user_version 0.
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 const createIssuesTable = `
   CREATE TABLE IF NOT EXISTS issues (
@@ -93,6 +93,26 @@ const createSavedFilterViewsUpdatedAtIndex = `
   ON saved_filter_views (updated_at);
 `;
 
+const createIssueDependenciesTable = `
+  CREATE TABLE IF NOT EXISTS issue_dependencies (
+    issue_id TEXT NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+    depends_on_issue_id TEXT NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (issue_id, depends_on_issue_id)
+  );
+`;
+
+const createIssueDependenciesIssueIndex = `
+  CREATE INDEX IF NOT EXISTS idx_issue_dependencies_issue_id
+  ON issue_dependencies (issue_id);
+`;
+
+const createIssueDependenciesDependsOnIndex = `
+  CREATE INDEX IF NOT EXISTS idx_issue_dependencies_depends_on_issue_id
+  ON issue_dependencies (depends_on_issue_id);
+`;
+
 type Migration = {
   version: number;
   name: string;
@@ -140,11 +160,18 @@ function runSavedFilterViewsMigration(database: Database.Database): void {
   database.exec(createSavedFilterViewsUpdatedAtIndex);
 }
 
+function runIssueDependenciesMigration(database: Database.Database): void {
+  database.exec(createIssueDependenciesTable);
+  database.exec(createIssueDependenciesIssueIndex);
+  database.exec(createIssueDependenciesDependsOnIndex);
+}
+
 export const TABLE_NAMES = {
   activityEvents: 'activity_events',
   issues: 'issues',
   comments: 'comments',
   commentEditHistory: 'comment_edit_history',
+  issueDependencies: 'issue_dependencies',
   savedFilterViews: 'saved_filter_views'
 } as const;
 
@@ -152,6 +179,7 @@ const REQUIRED_TABLES = [
   TABLE_NAMES.activityEvents,
   TABLE_NAMES.commentEditHistory,
   TABLE_NAMES.comments,
+  TABLE_NAMES.issueDependencies,
   TABLE_NAMES.issues,
   TABLE_NAMES.savedFilterViews
 ] as const;
@@ -160,6 +188,8 @@ const REQUIRED_INDEXES = [
   'idx_activity_events_issue_id_created_at',
   'idx_comment_edit_history_comment_id_edited_at',
   'idx_comments_issue_id_created_at',
+  'idx_issue_dependencies_depends_on_issue_id',
+  'idx_issue_dependencies_issue_id',
   'idx_issues_archived_at_created_at',
   'idx_saved_filter_views_name',
   'idx_saved_filter_views_updated_at'
@@ -169,6 +199,7 @@ const REQUIRED_COLUMNS_BY_TABLE: Record<(typeof REQUIRED_TABLES)[number], readon
   [TABLE_NAMES.activityEvents]: ['id', 'issue_id', 'event_type', 'metadata', 'created_at'],
   [TABLE_NAMES.commentEditHistory]: ['id', 'comment_id', 'previous_body', 'new_body', 'edited_at'],
   [TABLE_NAMES.comments]: ['id', 'issue_id', 'body', 'created_at', 'updated_at'],
+  [TABLE_NAMES.issueDependencies]: ['issue_id', 'depends_on_issue_id', 'created_at', 'updated_at'],
   [TABLE_NAMES.issues]: [
     'id',
     'title',
@@ -204,6 +235,11 @@ const MIGRATIONS: Migration[] = [
     version: 2,
     name: '002_create_saved_filter_views',
     up: runSavedFilterViewsMigration
+  },
+  {
+    version: 3,
+    name: '003_create_issue_dependencies',
+    up: runIssueDependenciesMigration
   }
 ];
 

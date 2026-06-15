@@ -56,9 +56,13 @@ function expectCurrentSchema(database: Database.Database): void {
     TABLE_NAMES.activityEvents,
     TABLE_NAMES.commentEditHistory,
     TABLE_NAMES.comments,
+    TABLE_NAMES.issueDependencies,
     TABLE_NAMES.issues,
     TABLE_NAMES.savedFilterViews
   ]);
+  expect(getColumnNames(database, TABLE_NAMES.issueDependencies)).toEqual(
+    expect.arrayContaining(['issue_id', 'depends_on_issue_id', 'created_at', 'updated_at'])
+  );
   expect(getColumnNames(database, TABLE_NAMES.savedFilterViews)).toEqual(
     expect.arrayContaining([
       'id',
@@ -80,6 +84,8 @@ function expectCurrentSchema(database: Database.Database): void {
       'idx_activity_events_issue_id_created_at',
       'idx_comment_edit_history_comment_id_edited_at',
       'idx_comments_issue_id_created_at',
+      'idx_issue_dependencies_depends_on_issue_id',
+      'idx_issue_dependencies_issue_id',
       'idx_issues_archived_at_created_at',
       'idx_saved_filter_views_name',
       'idx_saved_filter_views_updated_at'
@@ -328,7 +334,7 @@ describe('schema migrations', () => {
     });
   });
 
-  it('upgrades a version 1 database with saved filter views', async () => {
+  it('upgrades a version 1 database with saved filter views and dependencies', async () => {
     await withTempDatabasePath((databasePath) => {
       createVersionOneDatabase(databasePath);
 
@@ -336,7 +342,7 @@ describe('schema migrations', () => {
 
       try {
         expectCurrentSchema(database);
-        expect(getTinyTrackerSchemaVersion(database)).toBe(2);
+        expect(getTinyTrackerSchemaVersion(database)).toBe(SCHEMA_VERSION);
       } finally {
         database.close();
       }

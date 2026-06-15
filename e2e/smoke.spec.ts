@@ -3,6 +3,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 type ExportedIssue = {
   title: string;
+  isBlocked?: boolean;
+  dependsOnIssueIds?: string[];
   comments: Array<{ body: string; editHistory: Array<{ previousBody: string; newBody: string }> }>;
   activityEvents: Array<{ type: string }>;
 };
@@ -345,6 +347,46 @@ test('archives hides restores and preserves issue activity', async ({ page }) =>
   await includeArchived.uncheck();
   await expect(issueRow).toBeVisible();
   await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBeNull();
+});
+
+test('dependency links show and clear blocked issue visibility', async ({ page }) => {
+  const blocker = await createIssueThroughApi(page, {
+    title: 'Dependency blocker issue',
+    description: 'Must finish before the blocked issue.',
+    status: 'todo',
+    priority: 'high'
+  });
+  const blocked = await createIssueThroughApi(page, {
+    title: 'Dependency blocked issue',
+    description: 'Shows derived blocked state.',
+    status: 'in_progress',
+    priority: 'medium'
+  });
+
+  await page.goto(`/issues/${blocked.id}`);
+
+  const detail = page.getByRole('region', { name: blocked.title });
+  const dependencyForm = detail.getByRole('form', { name: 'Dependency form' });
+
+  await expect(detail.getByText('No dependencies yet.')).toBeVisible();
+  await dependencyForm.getByLabel('Add blocker issue ID').fill(blocker.id);
+  await dependencyForm.getByRole('button', { name: 'Add Dependency' }).click();
+
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByLabel('Issue dependencies').getByText('Dependency blocker issue')).toBeVisible();
+  await expect(detail.getByLabel('Issue dependencies').locator('.blocked-pill')).toHaveText('Blocking');
+  await expect(detail.getByLabel('Issue activity').getByText('Dependency added')).toBeVisible();
+
+  const blockedRow = page.getByRole('row', { name: /Dependency blocked issue.*In Progress.*Medium/ });
+
+  await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
+
+  await detail.getByRole('button', { name: 'Remove dependency Dependency blocker issue' }).click();
+
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toHaveCount(0);
+  await expect(detail.getByText('No dependencies yet.')).toBeVisible();
+  await expect(detail.getByLabel('Issue activity').getByText('Dependency removed')).toBeVisible();
+  await expect(blockedRow.locator('.blocked-pill')).toHaveCount(0);
 });
 
 test('markdown-lite renders safe formatting and keeps unsafe input inert', async ({ page }) => {

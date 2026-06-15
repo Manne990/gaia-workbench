@@ -11,9 +11,25 @@ export interface Issue {
   labels: string[];
   dueDate: string | null;
   isOverdue: boolean;
+  isBlocked: boolean;
+  dependsOnIssueIds: string[];
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface IssueDependencyReference {
+  id: string;
+  title: string;
+  status: IssueStatus;
+  archivedAt: string | null;
+}
+
+export interface IssueDependencyState {
+  issueId: string;
+  dependencies: IssueDependencyReference[];
+  dependents: IssueDependencyReference[];
+  isBlocked: boolean;
 }
 
 export interface NewIssue {
@@ -141,6 +157,8 @@ export type ActivityEventType =
   | 'issue_labels_changed'
   | 'issue_archived'
   | 'issue_unarchived'
+  | 'issue_dependency_added'
+  | 'issue_dependency_removed'
   | 'comment_added'
   | 'comment_edited';
 

@@ -676,6 +676,14 @@ td > span:not(.pill) {
   border-bottom-color: #efd7c7;
 }
 
+.blocked-row {
+  background: #f9fbf6;
+}
+
+.blocked-row td {
+  border-bottom-color: #d9e8c4;
+}
+
 .archived-row {
   background: #f5f6f7;
 }
@@ -751,6 +759,23 @@ td > span:not(.pill) {
   border-radius: 999px;
   background: #edf1f5;
   color: #52606d;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.blocked-pill {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  min-height: 24px;
+  margin: 0 0 8px;
+  padding: 4px 8px;
+  border: 1px solid #b9d49a;
+  border-radius: 999px;
+  background: #eef7e6;
+  color: #3e6821;
   font-size: 0.78rem;
   font-weight: 800;
   line-height: 1;
@@ -836,6 +861,28 @@ td > span:not(.pill) {
   font-weight: 700;
 }
 
+.blocked-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border: 1px solid #b9d49a;
+  border-radius: 8px;
+  background: #f3f9ed;
+  color: #2f4f18;
+}
+
+.blocked-banner strong {
+  color: #2f4f18;
+}
+
+.blocked-banner span {
+  color: #4c653a;
+  font-weight: 700;
+}
+
 .issue-detail-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -904,6 +951,7 @@ td > span:not(.pill) {
   margin-top: 16px;
 }
 
+.dependency-section,
 .activity-section,
 .comments-section {
   margin-top: 22px;
@@ -911,6 +959,7 @@ td > span:not(.pill) {
   border-top: 1px solid #e4e8ec;
 }
 
+.dependency-header,
 .activity-header,
 .comments-header {
   display: flex;
@@ -919,6 +968,7 @@ td > span:not(.pill) {
   gap: 12px;
 }
 
+.dependency-header span,
 .activity-header span,
 .comments-header span {
   display: inline-grid;
@@ -930,6 +980,83 @@ td > span:not(.pill) {
   color: #52606d;
   font-size: 0.82rem;
   font-weight: 800;
+}
+
+.dependency-list {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dependency-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid #e4e8ec;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.dependency-item.blocking {
+  border-color: #c9dfad;
+  background: #f8fcf3;
+}
+
+.dependency-item div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.dependency-item strong,
+.dependency-item span {
+  margin: 0;
+}
+
+.dependency-item > div > span:not(.archived-pill, .blocked-pill) {
+  color: #59636e;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.dependency-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.dependency-form label {
+  display: block;
+}
+
+.dependency-form label span {
+  display: block;
+  margin-bottom: 7px;
+  color: #59636e;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.dependency-form input {
+  width: 100%;
+  height: 40px;
+  padding: 0 11px;
+  border: 1px solid #cfd6dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #15181c;
+}
+
+.dependency-form input:focus,
+.comment-form textarea:focus,
+.comment-edit-form textarea:focus {
+  border-color: #2f6f73;
+  outline: 3px solid #d9ecee;
 }
 
 .activity-list {

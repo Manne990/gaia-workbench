@@ -10,6 +10,9 @@ import {
   createDatabase,
   DuplicateSavedFilterViewNameError,
   type Issue,
+  IssueDependencyConflictError,
+  IssueDependencyNotFoundError,
+  IssueDependencyRepository,
   IssueListFilters,
   IssueRepository,
   SavedFilterViewRepository
@@ -228,6 +231,7 @@ export function createApp(config: AppConfig = {}) {
   const clientDir = config.clientDir ? path.resolve(config.clientDir) : null;
   const database = createDatabase(config.databasePath ?? ':memory:');
   const issueRepository = new IssueRepository(database);
+  const issueDependencyRepository = new IssueDependencyRepository(database);
   const commentRepository = new CommentRepository(database);
   const activityRepository = new ActivityRepository(database);
   const savedFilterViewRepository = new SavedFilterViewRepository(database);
@@ -426,6 +430,50 @@ export function createApp(config: AppConfig = {}) {
     }
 
     return res.status(200).json(issue);
+  });
+
+  app.get('/api/issues/:id/dependencies', (req, res) => {
+    const dependencies = issueDependencyRepository.listByIssueId(req.params.id);
+
+    if (!dependencies) {
+      return res.status(404).json({ error: 'Issue not found' });
+    }
+
+    return res.status(200).json(dependencies);
+  });
+
+  app.post('/api/issues/:id/dependencies', (req, res) => {
+    try {
+      const dependsOnIssueId = req.body?.dependsOnIssueId;
+
+      if (typeof dependsOnIssueId !== 'string' || dependsOnIssueId.trim().length === 0) {
+        return res.status(400).json({ error: 'dependsOnIssueId is required' });
+      }
+
+      return res.status(201).json(issueDependencyRepository.add(req.params.id, dependsOnIssueId.trim()));
+    } catch (error) {
+      if (error instanceof IssueDependencyNotFoundError) {
+        return res.status(404).json({ error: error.message });
+      }
+
+      if (error instanceof IssueDependencyConflictError) {
+        return res.status(409).json({ error: error.message });
+      }
+
+      throw error;
+    }
+  });
+
+  app.delete('/api/issues/:id/dependencies/:dependsOnIssueId', (req, res) => {
+    try {
+      return res.status(200).json(issueDependencyRepository.remove(req.params.id, req.params.dependsOnIssueId));
+    } catch (error) {
+      if (error instanceof IssueDependencyNotFoundError) {
+        return res.status(404).json({ error: error.message });
+      }
+
+      throw error;
+    }
   });
 
   app.get('/api/issues/:id/comments', (req, res) => {

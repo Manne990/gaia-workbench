@@ -37,6 +37,10 @@ export function activityTitle(event: ActivityEvent): string {
       return 'Issue archived';
     case 'issue_unarchived':
       return 'Issue restored';
+    case 'issue_dependency_added':
+      return 'Dependency added';
+    case 'issue_dependency_removed':
+      return 'Dependency removed';
     case 'comment_added':
       return 'Comment added';
     case 'comment_edited':
@@ -69,6 +73,10 @@ export function activityDetail(event: ActivityEvent): string {
       return 'Removed from the active dashboard.';
     case 'issue_unarchived':
       return 'Restored to the active dashboard.';
+    case 'issue_dependency_added':
+      return `Blocked by ${formatOptionalText(metadataText(event, 'title'))}.`;
+    case 'issue_dependency_removed':
+      return `No longer blocked by ${formatOptionalText(metadataText(event, 'title'))}.`;
     case 'comment_added':
       return `Added "${formatOptionalText(metadataText(event, 'preview'))}".`;
     case 'comment_edited':

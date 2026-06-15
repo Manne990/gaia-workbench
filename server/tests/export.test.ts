@@ -14,6 +14,7 @@ type ExportedComment = {
 };
 
 type ExportedIssue = IssueSnapshot & {
+  dependsOnIssueIds: string[];
   comments: ExportedComment[];
   activityEvents: Array<{ type: string }>;
 };
@@ -233,5 +234,64 @@ describe('tracker export API', () => {
       'issue_created',
       'issue_archived'
     ]);
+  });
+
+  it('exports dependencies and preserves them through import', async () => {
+    const sourceApp = createApp({ databasePath: ':memory:' });
+    const targetApp = createApp({ databasePath: ':memory:' });
+
+    const blocker = await request(sourceApp)
+      .post('/api/issues')
+      .send({ title: 'Export blocker issue', status: 'todo' })
+      .expect(201);
+    const blocked = await request(sourceApp)
+      .post('/api/issues')
+      .send({ title: 'Export blocked issue', status: 'in_progress' })
+      .expect(201);
+
+    await request(sourceApp)
+      .post(`/api/issues/${blocked.body.id}/dependencies`)
+      .send({ dependsOnIssueId: blocker.body.id })
+      .expect(201);
+
+    const exported = await request(sourceApp).get('/api/export').expect(200);
+    const exportedBlocked = (exported.body as TrackerExport).issues.find((issue) => issue.id === blocked.body.id);
+
+    expect(exportedBlocked).toMatchObject({
+      id: blocked.body.id,
+      isBlocked: true,
+      dependsOnIssueIds: [blocker.body.id]
+    });
+    expect(exportedBlocked?.activityEvents.map((event) => event.type)).toEqual([
+      'issue_created',
+      'issue_dependency_added'
+    ]);
+
+    await request(targetApp).post('/api/import/preview').send(exported.body).expect(200);
+    await request(targetApp).post('/api/import/apply').send(exported.body).expect(200);
+
+    const importedBlocked = await request(targetApp).get(`/api/issues/${blocked.body.id}`).expect(200);
+    const importedDependencies = await request(targetApp)
+      .get(`/api/issues/${blocked.body.id}/dependencies`)
+      .expect(200);
+    const exportedAfterImport = await request(targetApp).get('/api/export').expect(200);
+
+    expect(importedBlocked.body).toMatchObject({
+      isBlocked: true,
+      dependsOnIssueIds: [blocker.body.id]
+    });
+    expect(importedDependencies.body).toMatchObject({
+      issueId: blocked.body.id,
+      isBlocked: true,
+      dependencies: [
+        {
+          id: blocker.body.id,
+          title: 'Export blocker issue',
+          status: 'todo',
+          archivedAt: null
+        }
+      ]
+    });
+    expect(exportedAfterImport.body).toEqual(exported.body);
   });
 });

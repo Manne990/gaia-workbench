@@ -1,6 +1,13 @@
 import type { Dispatch, FormEvent, RefObject, SetStateAction } from 'react';
 import { priorityLabels, statusLabels } from '../constants';
-import type { ActivityEvent, Comment, CommentEditHistory, CommentLoadState, Issue } from '../types';
+import type {
+  ActivityEvent,
+  Comment,
+  CommentEditHistory,
+  CommentLoadState,
+  Issue,
+  IssueDependencyState
+} from '../types';
 import { activityDetail, activityTitle } from '../utils/activity';
 import { formatDate, formatDueDate } from '../utils/formatters';
 import { renderMarkdownLite, renderMarkdownLiteInline } from '../utils/markdown';
@@ -15,6 +22,12 @@ type IssueDetailPanelProps = {
   commentLoadState: CommentLoadState;
   activityEvents: ActivityEvent[];
   activityLoadState: CommentLoadState;
+  issueDependencies: IssueDependencyState | null;
+  dependencyLoadState: CommentLoadState;
+  dependencyIssueId: string;
+  setDependencyIssueId: Dispatch<SetStateAction<string>>;
+  dependencyError: string | null;
+  isDependencySubmitting: boolean;
   commentBody: string;
   setCommentBody: Dispatch<SetStateAction<string>>;
   commentError: string | null;
@@ -31,6 +44,8 @@ type IssueDetailPanelProps = {
   onCloseIssueDetail: () => void;
   onArchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
   onUnarchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
+  onSubmitIssueDependency: (event: FormEvent<HTMLFormElement>) => void;
+  onRemoveIssueDependency: (dependsOnIssueId: string) => void;
   onSubmitComment: (event: FormEvent<HTMLFormElement>) => void;
   onStartEditComment: (comment: Comment, trigger: HTMLElement) => void;
   onCancelEditComment: (commentId: string) => void;
@@ -47,6 +62,12 @@ export function IssueDetailPanel({
   commentLoadState,
   activityEvents,
   activityLoadState,
+  issueDependencies,
+  dependencyLoadState,
+  dependencyIssueId,
+  setDependencyIssueId,
+  dependencyError,
+  isDependencySubmitting,
   commentBody,
   setCommentBody,
   commentError,
@@ -63,6 +84,8 @@ export function IssueDetailPanel({
   onCloseIssueDetail,
   onArchiveIssue,
   onUnarchiveIssue,
+  onSubmitIssueDependency,
+  onRemoveIssueDependency,
   onSubmitComment,
   onStartEditComment,
   onCancelEditComment,
@@ -130,6 +153,13 @@ export function IssueDetailPanel({
               </div>
             ) : null}
 
+            {selectedIssue.isBlocked ? (
+              <div className="blocked-banner" role="status">
+                <strong>Blocked</strong>
+                <span>Waiting on at least one active dependency.</span>
+              </div>
+            ) : null}
+
             <div className="issue-detail-grid" aria-label="Issue details">
               <div>
                 <span>Status</span>
@@ -156,6 +186,11 @@ export function IssueDetailPanel({
                 <span>Archive</span>
                 <strong>{selectedIssue.archivedAt ? 'Archived' : 'Active'}</strong>
               </div>
+              <div>
+                <span>Dependencies</span>
+                <strong>{selectedIssue.dependsOnIssueIds.length}</strong>
+                {selectedIssue.isBlocked ? <em>Blocked</em> : null}
+              </div>
             </div>
 
             {selectedIssue.description ? (
@@ -173,6 +208,87 @@ export function IssueDetailPanel({
                 ))}
               </div>
             ) : null}
+
+            <section className="dependency-section" aria-labelledby="dependency-heading">
+              <div className="dependency-header">
+                <h3 id="dependency-heading">Dependencies</h3>
+                <span>{issueDependencies?.dependencies.length ?? selectedIssue.dependsOnIssueIds.length}</span>
+              </div>
+
+              {dependencyLoadState === 'loading' ? (
+                <div className="state-message compact" role="status">
+                  Loading dependencies...
+                </div>
+              ) : null}
+
+              {dependencyLoadState === 'error' ? (
+                <div className="state-message compact error" role="alert">
+                  Unable to load dependencies.
+                </div>
+              ) : null}
+
+              {dependencyLoadState === 'loaded' && issueDependencies?.dependencies.length === 0 ? (
+                <div className="state-message compact">No dependencies yet.</div>
+              ) : null}
+
+              {issueDependencies && issueDependencies.dependencies.length > 0 ? (
+                <ul className="dependency-list" aria-label="Issue dependencies">
+                  {issueDependencies.dependencies.map((dependency) => {
+                    const isBlocking = dependency.archivedAt === null && dependency.status !== 'done';
+
+                    return (
+                      <li key={dependency.id} className={isBlocking ? 'dependency-item blocking' : 'dependency-item'}>
+                        <div>
+                          <strong>{dependency.title}</strong>
+                          <span>{statusLabels[dependency.status]}</span>
+                          {dependency.archivedAt ? <span className="archived-pill">Archived</span> : null}
+                          {isBlocking ? <span className="blocked-pill">Blocking</span> : null}
+                        </div>
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          onClick={() => onRemoveIssueDependency(dependency.id)}
+                          disabled={isDependencySubmitting}
+                          aria-label={`Remove dependency ${dependency.title}`}
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+
+              <form className="dependency-form" aria-label="Dependency form" onSubmit={onSubmitIssueDependency}>
+                <label htmlFor="dependency-issue-id">
+                  <span>Add blocker issue ID</span>
+                  <input
+                    id="dependency-issue-id"
+                    value={dependencyIssueId}
+                    onChange={(event) => setDependencyIssueId(event.target.value)}
+                    disabled={isDependencySubmitting || dependencyLoadState === 'loading'}
+                    aria-invalid={dependencyError ? true : undefined}
+                    aria-describedby={dependencyError ? 'dependency-form-error' : undefined}
+                  />
+                </label>
+
+                {dependencyError ? (
+                  <div className="form-error" id="dependency-form-error" role="alert">
+                    {dependencyError}
+                  </div>
+                ) : null}
+
+                <div className="form-actions">
+                  <button
+                    type="submit"
+                    className="primary-button"
+                    disabled={isDependencySubmitting || dependencyLoadState === 'loading'}
+                  >
+                    Add Dependency
+                  </button>
+                </div>
+              </form>
+            </section>
 
             <section className="activity-section" aria-labelledby="activity-heading">
               <div className="activity-header">

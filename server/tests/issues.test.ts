@@ -972,6 +972,8 @@ describe('issues API', () => {
       dependsOnIssueIds: [blocker.body.id]
     });
 
+    await request(app).put(`/api/issues/${blocker.body.id}`).send({ title: 'Renamed blocking issue' }).expect(200);
+
     await request(app).post(`/api/issues/${blocker.body.id}/close`).expect(200);
     await request(app)
       .get(`/api/issues/${blocked.body.id}`)
@@ -996,6 +998,12 @@ describe('issues API', () => {
       'issue_created',
       'issue_dependency_added'
     ]);
+    expect(
+      dependencyActivity.body.find((event: { type: string }) => event.type === 'issue_dependency_added')?.metadata
+    ).toEqual({
+      dependsOnIssueId: blocker.body.id,
+      title: 'Blocking issue'
+    });
 
     const removed = await request(app)
       .delete(`/api/issues/${blocked.body.id}/dependencies/${blocker.body.id}`)
@@ -1015,6 +1023,19 @@ describe('issues API', () => {
           dependsOnIssueIds: []
         });
       });
+
+    const finalActivity = await request(app).get(`/api/issues/${blocked.body.id}/activity`).expect(200);
+    expect(finalActivity.body.map((event: { type: string }) => event.type)).toEqual([
+      'issue_created',
+      'issue_dependency_added',
+      'issue_dependency_removed'
+    ]);
+    expect(
+      finalActivity.body.find((event: { type: string }) => event.type === 'issue_dependency_removed')?.metadata
+    ).toEqual({
+      dependsOnIssueId: blocker.body.id,
+      title: 'Renamed blocking issue'
+    });
   });
 
   it('rejects invalid dependency mutations and obvious cycles', async () => {

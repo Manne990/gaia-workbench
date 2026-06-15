@@ -1280,6 +1280,18 @@ describe('issues API', () => {
       .expect(409, {
         error: 'Issue dependency already exists'
       });
+
+    const firstDependenciesAfterDuplicate = await request(app)
+      .get(`/api/issues/${first.body.id}/dependencies`)
+      .expect(200);
+
+    expect(firstDependenciesAfterDuplicate.body).toMatchObject({
+      issueId: first.body.id,
+      isBlocked: true,
+      dependencies: [expect.objectContaining({ id: second.body.id })]
+    });
+    expect(firstDependenciesAfterDuplicate.body.dependencies).toHaveLength(1);
+
     await request(app)
       .post(`/api/issues/${second.body.id}/dependencies`)
       .send({ dependsOnIssueId: third.body.id })
@@ -1290,6 +1302,14 @@ describe('issues API', () => {
       .expect(409, {
         error: 'Issue dependency cycle detected'
       });
+
+    const thirdDependenciesAfterCycle = await request(app).get(`/api/issues/${third.body.id}/dependencies`).expect(200);
+
+    expect(thirdDependenciesAfterCycle.body).toMatchObject({
+      issueId: third.body.id,
+      isBlocked: false,
+      dependencies: []
+    });
   });
 
   it('returns blockers and dependents for issue dependency detail and hydrates archived blockers', async () => {

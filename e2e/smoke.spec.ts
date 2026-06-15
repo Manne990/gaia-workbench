@@ -1304,6 +1304,87 @@ test('dependency links show and clear blocked issue visibility', async ({ page }
   await expect(dependentsSection.getByText(dependent.title)).toBeVisible();
 });
 
+test('dependency duplicate and cycle rejections keep UI graph state unchanged', async ({ page }) => {
+  const first = await createIssueThroughApi(page, {
+    title: 'Duplicate cycle first issue',
+    description: 'Owns the first dependency edge.',
+    status: 'in_progress',
+    priority: 'medium'
+  });
+  const second = await createIssueThroughApi(page, {
+    title: 'Duplicate cycle second issue',
+    description: 'Blocks the first issue and depends on the third.',
+    status: 'todo',
+    priority: 'high'
+  });
+  const third = await createIssueThroughApi(page, {
+    title: 'Duplicate cycle third issue',
+    description: 'Must reject a cycle back to the first issue.',
+    status: 'review',
+    priority: 'low'
+  });
+
+  await page.goto(`/issues/${first.id}`);
+
+  const firstDetail = page.getByRole('region', { name: first.title });
+  const firstDependencyForm = firstDetail.getByRole('form', { name: 'Dependency form' });
+
+  await firstDependencyForm.getByLabel('Add blocker issue ID').fill(second.id);
+  await firstDependencyForm.getByRole('button', { name: 'Add Dependency' }).click();
+
+  const firstBlockers = firstDetail.getByLabel('Issue blockers');
+  const secondBlockerItem = firstBlockers.getByRole('listitem').filter({ hasText: second.title });
+
+  await expect(secondBlockerItem).toBeVisible();
+  await expect(firstDetail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(
+    page.getByRole('row', { name: /Duplicate cycle first issue.*In Progress.*Medium/ }).locator('.blocked-pill')
+  ).toHaveText('Blocked');
+
+  await firstDependencyForm.getByLabel('Add blocker issue ID').fill(second.id);
+  await firstDependencyForm.getByRole('button', { name: 'Add Dependency' }).click();
+  await expect(firstDetail.getByRole('alert')).toHaveText('Issue dependency already exists');
+  await expect(firstBlockers.getByRole('listitem')).toHaveCount(1);
+  await expect(secondBlockerItem).toBeVisible();
+  await expect(firstDetail.getByLabel('Issue activity').getByText('Dependency added')).toHaveCount(1);
+  await expect(firstDetail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+
+  const secondDependency = await page.request.post(`/api/issues/${second.id}/dependencies`, {
+    data: {
+      dependsOnIssueId: third.id
+    }
+  });
+
+  expect(secondDependency.ok()).toBe(true);
+
+  await page.goto(`/issues/${third.id}`);
+
+  const thirdDetail = page.getByRole('region', { name: third.title });
+  const thirdDependencyForm = thirdDetail.getByRole('form', { name: 'Dependency form' });
+  const thirdBlockers = thirdDetail.getByLabel('Issue blockers');
+
+  await expect(thirdBlockers).toContainText('No blockers.');
+
+  await thirdDependencyForm.getByLabel('Add blocker issue ID').fill(first.id);
+  await thirdDependencyForm.getByRole('button', { name: 'Add Dependency' }).click();
+  await expect(thirdDetail.getByRole('alert')).toHaveText('Issue dependency cycle detected');
+  await expect(thirdBlockers).toContainText('No blockers.');
+  await expect(thirdBlockers.getByRole('listitem')).toHaveCount(0);
+  await expect(thirdDetail.getByText('Waiting on at least one active dependency.')).toHaveCount(0);
+  await expect(
+    page.getByRole('row', { name: /Duplicate cycle third issue.*Review.*Low/ }).locator('.blocked-pill')
+  ).toHaveCount(0);
+
+  const thirdStateResponse = await page.request.get(`/api/issues/${third.id}/dependencies`);
+  const thirdState = (await thirdStateResponse.json()) as { dependencies: unknown[]; isBlocked: boolean };
+
+  expect(thirdStateResponse.ok()).toBe(true);
+  expect(thirdState).toMatchObject({
+    dependencies: [],
+    isBlocked: false
+  });
+});
+
 test('dependency dependents show blocking only when the selected issue can block', async ({ page }) => {
   const completedBlocker = await createIssueThroughApi(page, {
     title: 'Completed dependency source',

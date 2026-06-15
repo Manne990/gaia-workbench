@@ -186,9 +186,11 @@ test('keyboard users can create open comment edit and close an issue', async ({ 
 
   await expect(issueTitle).toBeFocused();
   await page.keyboard.type('Keyboard issue');
+  await expect(issueTitle).toHaveValue('Keyboard issue');
   await page.keyboard.press('Tab');
   await expect(issueDescription).toBeFocused();
   await page.keyboard.type('Created with keyboard navigation.');
+  await expect(issueDescription).toHaveValue('Created with keyboard navigation.');
   await pressTabUntilFocused(page, createIssueButton);
   await page.keyboard.press('Enter');
 
@@ -218,8 +220,11 @@ test('keyboard users can create open comment edit and close an issue', async ({ 
   const commentTextarea = commentForm.getByLabel('New comment');
   const addCommentButton = commentForm.getByRole('button', { name: 'Add Comment' });
 
+  await expect(detail.getByText('No comments yet.')).toBeVisible();
+  await expect(commentTextarea).toBeEnabled();
   await pressTabUntilFocused(page, commentTextarea);
   await page.keyboard.type('Keyboard comment one');
+  await expect(commentTextarea).toHaveValue('Keyboard comment one');
   await pressTabUntilFocused(page, addCommentButton);
   await page.keyboard.press('Enter');
 
@@ -241,6 +246,7 @@ test('keyboard users can create open comment edit and close an issue', async ({ 
   await expect(editCommentTextarea).toBeFocused();
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
   await page.keyboard.type('Keyboard comment edited');
+  await expect(editCommentTextarea).toHaveValue('Keyboard comment edited');
   await pressTabUntilFocused(page, saveCommentButton);
   await page.keyboard.press('Enter');
 

@@ -127,6 +127,54 @@ describe('persistence layer', () => {
     }
   });
 
+  it('preserves timestamps and activity for normalized no-op issue field updates', () => {
+    const database = createDatabase(':memory:');
+    const issueRepository = new IssueRepository(database);
+    const activityRepository = new ActivityRepository(database);
+    const staleUpdatedAt = '2026-04-01T00:00:00.000Z';
+
+    try {
+      const issue = issueRepository.create({
+        title: 'No-op issue fields',
+        description: 'Normalized field updates should not refresh provenance.',
+        status: 'review',
+        priority: 'high',
+        labels: ['api', 'Docs'],
+        dueDate: '2999-12-31'
+      });
+
+      database
+        .prepare(
+          `
+          UPDATE issues
+          SET updated_at = @staleUpdatedAt
+          WHERE id = @id
+        `
+        )
+        .run({ id: issue.id, staleUpdatedAt });
+
+      const before = issueRepository.getById(issue.id);
+      const beforeActivity = activityRepository.listByIssueId(issue.id);
+
+      const noOpUpdate = issueRepository.update(issue.id, {
+        title: '  No-op issue fields  ',
+        description: '  Normalized field updates should not refresh provenance.  ',
+        status: 'review',
+        priority: 'high',
+        labels: [' api ', 'Docs', 'API'],
+        dueDate: '2999-12-31'
+      });
+
+      expect(noOpUpdate).toEqual(before);
+      expect(noOpUpdate?.updatedAt).toBe(staleUpdatedAt);
+      expect(issueRepository.getById(issue.id)).toEqual(before);
+      expect(activityRepository.listByIssueId(issue.id)).toEqual(beforeActivity);
+      expect(beforeActivity.map((event) => event.type)).toEqual(['issue_created']);
+    } finally {
+      database.close();
+    }
+  });
+
   it('returns an empty activity list for legacy issues without activity history', () => {
     const database = createDatabase(':memory:');
     const activityRepository = new ActivityRepository(database);

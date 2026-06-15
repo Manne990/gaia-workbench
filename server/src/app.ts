@@ -45,6 +45,7 @@ type TrackerExport = {
 const DEFAULT_ISSUE_PAGE = 1;
 const DEFAULT_ISSUE_LIMIT = 25;
 const MAX_ISSUE_LIMIT = 100;
+const SPREADSHEET_FORMULA_PREFIX_PATTERN = /^[=+\-@\t\r\n]/;
 
 const emptyImportPlan = (error: ImportPlan['errors'][number]): ImportPlan => ({
   valid: false,
@@ -228,14 +229,23 @@ function buildIssueListFilters(query: {
   };
 }
 
-function escapeCsvCell(value: string): string {
-  const needsEscaping = /[",\r\n]/.test(value);
-
-  if (!needsEscaping) {
+function neutralizeSpreadsheetFormulaCell(value: string): string {
+  if (!SPREADSHEET_FORMULA_PREFIX_PATTERN.test(value)) {
     return value;
   }
 
-  return `"${value.replaceAll('"', '""')}"`;
+  return `'${value}`;
+}
+
+function escapeCsvCell(value: string): string {
+  const cellValue = neutralizeSpreadsheetFormulaCell(value);
+  const needsEscaping = /[",\r\n]/.test(cellValue);
+
+  if (!needsEscaping) {
+    return cellValue;
+  }
+
+  return `"${cellValue.replaceAll('"', '""')}"`;
 }
 
 function buildIssueListCsv(issues: Issue[]): string {

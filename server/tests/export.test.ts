@@ -477,6 +477,54 @@ describe('tracker export API', () => {
     ]);
   });
 
+  it('neutralizes spreadsheet formula-leading CSV cells without changing JSON export', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const formulaIssue = await request(app)
+      .post('/api/issues')
+      .send({
+        title: '=HYPERLINK("https://example.test","open")',
+        description: '+SUM(1,2)',
+        labels: ['-risk', 'safe']
+      })
+      .expect(201);
+    const atIssue = await request(app)
+      .post('/api/issues')
+      .send({
+        title: '@external-reference',
+        description: '-10'
+      })
+      .expect(201);
+
+    const csvResponse = await request(app)
+      .get('/api/export.csv?includeArchived=true')
+      .expect(200)
+      .expect('Content-Type', /text\/csv/);
+    const csvRowsById = new Map(
+      parseCsvRows(csvResponse.text)
+        .slice(1)
+        .map((row) => [row[0], row])
+    );
+
+    expect(csvRowsById.get(formulaIssue.body.id)?.[1]).toBe(`'=HYPERLINK("https://example.test","open")`);
+    expect(csvRowsById.get(formulaIssue.body.id)?.[2]).toBe("'+SUM(1,2)");
+    expect(csvRowsById.get(formulaIssue.body.id)?.[10]).toBe("'-risk|safe");
+    expect(csvRowsById.get(atIssue.body.id)?.[1]).toBe("'@external-reference");
+    expect(csvRowsById.get(atIssue.body.id)?.[2]).toBe("'-10");
+
+    const jsonExport = await request(app).get('/api/export').expect(200);
+    const exportedFormulaIssue = (jsonExport.body as TrackerExport).issues.find(
+      (issue) => issue.id === formulaIssue.body.id
+    );
+    const exportedAtIssue = (jsonExport.body as TrackerExport).issues.find((issue) => issue.id === atIssue.body.id);
+
+    expect(exportedFormulaIssue?.title).toBe(formulaIssue.body.title);
+    expect(exportedFormulaIssue?.description).toBe(formulaIssue.body.description);
+    expect(exportedFormulaIssue?.labels).toEqual(['-risk', 'safe']);
+    expect(exportedAtIssue?.title).toBe(atIssue.body.title);
+    expect(exportedAtIssue?.description).toBe(atIssue.body.description);
+  });
+
   it('exports archived issues with archive state and activity', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

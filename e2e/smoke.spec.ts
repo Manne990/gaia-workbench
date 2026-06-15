@@ -98,6 +98,16 @@ async function createIssueThroughApi(
   return (await response.json()) as CreatedIssue;
 }
 
+async function waitForIssueActionResponse(page: Page, issueId: string, action: 'archive' | 'unarchive'): Promise<void> {
+  const response = await page.waitForResponse((nextResponse) => {
+    const responseUrl = new URL(nextResponse.url());
+
+    return nextResponse.request().method() === 'POST' && responseUrl.pathname === `/api/issues/${issueId}/${action}`;
+  });
+
+  expect(response.ok()).toBe(true);
+}
+
 async function changeDashboardFiltersInSameTask(
   page: Page,
   values: { search?: string; status?: string; priority?: string; label?: string }
@@ -757,6 +767,7 @@ test('archive action offers undo recovery in active and include-archived modes',
   const includeArchived = filters.getByLabel('Include archived');
   const issueRow = page.getByRole('row', { name: new RegExp(`Undo archive recovery issue.*Todo.*Medium`) });
   const undoArchiveButton = page.getByRole('button', { name: `Undo archive of ${issue.title}` });
+  const archiveNotice = page.getByRole('status').filter({ hasText: `Issue "${issue.title}" archived.` });
 
   await expect(includeArchived).not.toBeChecked();
   await expect(issueRow).toBeVisible();
@@ -765,15 +776,19 @@ test('archive action offers undo recovery in active and include-archived modes',
     expect(dialog.message()).toContain('Archive "Undo archive recovery issue"?');
     await dialog.accept();
   });
+  const activeArchiveResponse = waitForIssueActionResponse(page, issue.id, 'archive');
   await page.getByRole('button', { name: `Archive ${issue.title}` }).click();
+  await activeArchiveResponse;
 
-  await expect(page.getByText(`Issue "${issue.title}" archived.`)).toBeVisible();
+  await expect(archiveNotice).toBeVisible();
   await expect(undoArchiveButton).toBeVisible();
   await expect(issueRow).toHaveCount(0);
 
+  const activeUndoResponse = waitForIssueActionResponse(page, issue.id, 'unarchive');
   await undoArchiveButton.click();
+  await activeUndoResponse;
 
-  await expect(page.getByText(`Issue "${issue.title}" archived.`), { timeout: 5000 }).toHaveCount(0);
+  await expect(archiveNotice).toHaveCount(0);
   await expect(issueRow).toBeVisible();
 
   await includeArchived.check();
@@ -782,14 +797,18 @@ test('archive action offers undo recovery in active and include-archived modes',
     expect(dialog.message()).toContain('Archive "Undo archive recovery issue"?');
     await dialog.accept();
   });
+  const includedArchiveResponse = waitForIssueActionResponse(page, issue.id, 'archive');
   await page.getByRole('button', { name: `Archive ${issue.title}` }).click();
+  await includedArchiveResponse;
 
-  await expect(page.getByText(`Issue "${issue.title}" archived.`)).toBeVisible();
+  await expect(archiveNotice).toBeVisible();
   await expect(issueRow.locator('.archived-pill')).toHaveText('Archived');
 
+  const includedUndoResponse = waitForIssueActionResponse(page, issue.id, 'unarchive');
   await undoArchiveButton.click();
+  await includedUndoResponse;
 
-  await expect(page.getByText(`Issue "${issue.title}" archived.`), { timeout: 5000 }).toHaveCount(0);
+  await expect(archiveNotice).toHaveCount(0);
   await expect(issueRow.locator('.archived-pill')).toHaveCount(0);
 });
 

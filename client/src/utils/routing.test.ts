@@ -29,6 +29,7 @@ describe('client routing helpers', () => {
       priority: 'high',
       includeArchived: false,
       blockedOnly: false,
+      staleOnly: false,
       pageSize: 25
     });
   });
@@ -42,6 +43,7 @@ describe('client routing helpers', () => {
       priority: 'all',
       includeArchived: false,
       blockedOnly: false,
+      staleOnly: false,
       pageSize: 25
     });
   });
@@ -53,6 +55,7 @@ describe('client routing helpers', () => {
       priority: 'all',
       includeArchived: true,
       blockedOnly: false,
+      staleOnly: false,
       pageSize: 25
     });
   });
@@ -64,6 +67,19 @@ describe('client routing helpers', () => {
       priority: 'all',
       includeArchived: false,
       blockedOnly: true,
+      staleOnly: false,
+      pageSize: 25
+    });
+  });
+
+  it('parses staleOnly when explicitly true', () => {
+    expect(parseDashboardFiltersFromSearch('?staleOnly=true')).toEqual({
+      search: '',
+      status: 'all',
+      priority: 'all',
+      includeArchived: false,
+      blockedOnly: false,
+      staleOnly: true,
       pageSize: 25
     });
   });
@@ -75,6 +91,7 @@ describe('client routing helpers', () => {
       priority: 'all',
       includeArchived: false,
       blockedOnly: false,
+      staleOnly: false,
       pageSize: 50
     });
     expect(parseDashboardFiltersFromSearch('?limit=0')).toEqual({
@@ -83,6 +100,7 @@ describe('client routing helpers', () => {
       priority: 'all',
       includeArchived: false,
       blockedOnly: false,
+      staleOnly: false,
       pageSize: 25
     });
     expect(parseDashboardFiltersFromSearch('?limit=101')).toEqual({
@@ -91,6 +109,7 @@ describe('client routing helpers', () => {
       priority: 'all',
       includeArchived: false,
       blockedOnly: false,
+      staleOnly: false,
       pageSize: 25
     });
   });
@@ -103,9 +122,12 @@ describe('client routing helpers', () => {
         priority: 'high',
         includeArchived: true,
         blockedOnly: true,
+        staleOnly: true,
         pageSize: 50
       })
-    ).toBe('/?search=ready+for+review&status=review&priority=high&includeArchived=true&blockedOnly=true&limit=50');
+    ).toBe(
+      '/?search=ready+for+review&status=review&priority=high&includeArchived=true&blockedOnly=true&staleOnly=true&limit=50'
+    );
     expect(
       buildDashboardPath({
         search: '  ',
@@ -113,6 +135,7 @@ describe('client routing helpers', () => {
         priority: 'all',
         includeArchived: false,
         blockedOnly: false,
+        staleOnly: false,
         pageSize: 25
       })
     ).toBe('/');
@@ -126,10 +149,11 @@ describe('client routing helpers', () => {
         priority: 'low',
         includeArchived: true,
         blockedOnly: true,
+        staleOnly: true,
         pageSize: 100
       })
     ).toBe(
-      '/issues/issue%20id?search=api+export&status=done&priority=low&includeArchived=true&blockedOnly=true&limit=100'
+      '/issues/issue%20id?search=api+export&status=done&priority=low&includeArchived=true&blockedOnly=true&staleOnly=true&limit=100'
     );
   });
 });

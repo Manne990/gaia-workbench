@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 
 // Add future migrations to MIGRATIONS in version order and bump this value.
 // Existing file-backed databases may start at user_version 0.
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 const createIssuesTable = `
   CREATE TABLE IF NOT EXISTS issues (
@@ -78,6 +78,7 @@ const createSavedFilterViewsTable = `
     priority TEXT NOT NULL DEFAULT 'all' CHECK (priority IN ('all', 'low', 'medium', 'high')),
     include_archived INTEGER NOT NULL DEFAULT 0 CHECK (include_archived IN (0, 1)),
     blocked_only INTEGER NOT NULL DEFAULT 0 CHECK (blocked_only IN (0, 1)),
+    stale_only INTEGER NOT NULL DEFAULT 0 CHECK (stale_only IN (0, 1)),
     page_size INTEGER NOT NULL DEFAULT 25 CHECK (page_size >= 1 AND page_size <= 100),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -132,21 +133,7 @@ type TableColumnRow = {
   name: string;
 };
 
-function ensureIssueColumn(database: Database.Database, columnName: string, definition: string): void {
-  const columns = database.prepare('PRAGMA table_info(issues)').all() as Array<{ name: string }>;
-  const hasColumn = columns.some((column) => column.name === columnName);
-
-  if (!hasColumn) {
-    database.exec(`ALTER TABLE issues ADD COLUMN ${definition};`);
-  }
-}
-
-function ensureTableColumn(
-  database: Database.Database,
-  tableName: string,
-  columnName: string,
-  definition: string
-): void {
+function ensureColumn(database: Database.Database, tableName: string, columnName: string, definition: string): void {
   const columns = database.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
   const hasColumn = columns.some((column) => column.name === columnName);
 
@@ -157,9 +144,9 @@ function ensureTableColumn(
 
 function runCurrentSchemaMigration(database: Database.Database): void {
   database.exec(createIssuesTable);
-  ensureIssueColumn(database, 'labels', "labels TEXT NOT NULL DEFAULT '[]'");
-  ensureIssueColumn(database, 'due_date', 'due_date TEXT DEFAULT NULL');
-  ensureIssueColumn(database, 'archived_at', 'archived_at TEXT DEFAULT NULL');
+  ensureColumn(database, TABLE_NAMES.issues, 'labels', "labels TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(database, TABLE_NAMES.issues, 'due_date', 'due_date TEXT DEFAULT NULL');
+  ensureColumn(database, TABLE_NAMES.issues, 'archived_at', 'archived_at TEXT DEFAULT NULL');
   database.exec(createIssuesArchivedIndex);
   database.exec(createActivityEventsTable);
   database.exec(createActivityEventsIssueIndex);
@@ -176,13 +163,27 @@ function runSavedFilterViewsMigration(database: Database.Database): void {
 }
 
 function runSavedFilterViewsBlockedOnlyMigration(database: Database.Database): void {
-  ensureTableColumn(database, TABLE_NAMES.savedFilterViews, 'blocked_only', 'blocked_only INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(
+    database,
+    TABLE_NAMES.savedFilterViews,
+    'blocked_only',
+    'blocked_only INTEGER NOT NULL DEFAULT 0 CHECK (blocked_only IN (0, 1))'
+  );
 }
 
 function runIssueDependenciesMigration(database: Database.Database): void {
   database.exec(createIssueDependenciesTable);
   database.exec(createIssueDependenciesIssueIndex);
   database.exec(createIssueDependenciesDependsOnIndex);
+}
+
+function runSavedFilterViewsStaleOnlyMigration(database: Database.Database): void {
+  ensureColumn(
+    database,
+    TABLE_NAMES.savedFilterViews,
+    'stale_only',
+    'stale_only INTEGER NOT NULL DEFAULT 0 CHECK (stale_only IN (0, 1))'
+  );
 }
 
 export const TABLE_NAMES = {
@@ -239,6 +240,7 @@ const REQUIRED_COLUMNS_BY_TABLE: Record<(typeof REQUIRED_TABLES)[number], readon
     'priority',
     'include_archived',
     'blocked_only',
+    'stale_only',
     'page_size',
     'created_at',
     'updated_at'
@@ -265,6 +267,11 @@ const MIGRATIONS: Migration[] = [
     version: 4,
     name: '004_add_blocked_only_to_saved_filter_views',
     up: runSavedFilterViewsBlockedOnlyMigration
+  },
+  {
+    version: 5,
+    name: '005_add_saved_filter_view_stale_only',
+    up: runSavedFilterViewsStaleOnlyMigration
   }
 ];
 

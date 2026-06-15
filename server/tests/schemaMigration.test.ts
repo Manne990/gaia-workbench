@@ -12,6 +12,7 @@ import {
   getTinyTrackerSchemaVersion,
   IssueRepository,
   SCHEMA_VERSION,
+  SavedFilterViewRepository,
   TABLE_NAMES
 } from '../src/db/index.js';
 
@@ -72,6 +73,7 @@ function expectCurrentSchema(database: Database.Database): void {
       'priority',
       'include_archived',
       'blocked_only',
+      'stale_only',
       'page_size',
       'created_at',
       'updated_at'
@@ -146,6 +148,59 @@ function createVersionOneDatabase(databasePath: string): void {
       ON issues (archived_at, created_at);
 
       PRAGMA user_version = 1;
+    `);
+  } finally {
+    database.close();
+  }
+}
+
+function createVersionFourDatabaseWithoutStaleFilter(databasePath: string): void {
+  createVersionOneDatabase(databasePath);
+
+  const database = createRawDatabase(databasePath);
+  const now = new Date('2026-06-15T00:00:00.000Z').toISOString();
+
+  try {
+    database.exec(`
+      CREATE TABLE saved_filter_views (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL COLLATE NOCASE,
+        search TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'all' CHECK (status IN ('all', 'todo', 'in_progress', 'review', 'done')),
+        priority TEXT NOT NULL DEFAULT 'all' CHECK (priority IN ('all', 'low', 'medium', 'high')),
+        include_archived INTEGER NOT NULL DEFAULT 0 CHECK (include_archived IN (0, 1)),
+        blocked_only INTEGER NOT NULL DEFAULT 0 CHECK (blocked_only IN (0, 1)),
+        page_size INTEGER NOT NULL DEFAULT 25 CHECK (page_size >= 1 AND page_size <= 100),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE UNIQUE INDEX idx_saved_filter_views_name
+      ON saved_filter_views (name COLLATE NOCASE);
+      CREATE INDEX idx_saved_filter_views_updated_at
+      ON saved_filter_views (updated_at);
+
+      CREATE TABLE issue_dependencies (
+        issue_id TEXT NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+        depends_on_issue_id TEXT NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (issue_id, depends_on_issue_id)
+      );
+
+      CREATE INDEX idx_issue_dependencies_issue_id
+      ON issue_dependencies (issue_id);
+      CREATE INDEX idx_issue_dependencies_depends_on_issue_id
+      ON issue_dependencies (depends_on_issue_id);
+
+      INSERT INTO saved_filter_views (
+        id, name, search, status, priority, include_archived, blocked_only, page_size, created_at, updated_at
+      )
+      VALUES (
+        'legacy-saved-view', 'Legacy view', 'legacy', 'review', 'high', 1, 1, 50, '${now}', '${now}'
+      );
+
+      PRAGMA user_version = 4;
     `);
   } finally {
     database.close();
@@ -344,6 +399,34 @@ describe('schema migrations', () => {
       try {
         expectCurrentSchema(database);
         expect(getTinyTrackerSchemaVersion(database)).toBe(SCHEMA_VERSION);
+      } finally {
+        database.close();
+      }
+    });
+  });
+
+  it('upgrades existing saved filter views with a default stale-only flag', async () => {
+    await withTempDatabasePath((databasePath) => {
+      createVersionFourDatabaseWithoutStaleFilter(databasePath);
+
+      const database = createDatabase(databasePath);
+      const savedFilterViewRepository = new SavedFilterViewRepository(database);
+
+      try {
+        expectCurrentSchema(database);
+        expect(savedFilterViewRepository.list()).toMatchObject([
+          {
+            id: 'legacy-saved-view',
+            name: 'Legacy view',
+            search: 'legacy',
+            status: 'review',
+            priority: 'high',
+            includeArchived: true,
+            blockedOnly: true,
+            staleOnly: false,
+            pageSize: 50
+          }
+        ]);
       } finally {
         database.close();
       }

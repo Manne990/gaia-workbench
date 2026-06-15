@@ -39,6 +39,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>(initialFilters.priority);
   const [includeArchived, setIncludeArchived] = useState(initialFilters.includeArchived);
   const [blockedOnly, setBlockedOnly] = useState(initialFilters.blockedOnly);
+  const [staleOnly, setStaleOnly] = useState(initialFilters.staleOnly);
   const [pageSize, setPageSize] = useState(initialFilters.pageSize);
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState<IssueListPagination>(defaultPagination);
@@ -75,6 +76,10 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
         params.set('blockedOnly', 'true');
       }
 
+      if (staleOnly) {
+        params.set('staleOnly', 'true');
+      }
+
       try {
         setLoadState('loading');
         const response = await fetch(`/api/issues?${params.toString()}`, {
@@ -105,7 +110,17 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     void loadIssues();
 
     return () => controller.abort();
-  }, [blockedOnly, currentPage, includeArchived, pageSize, priorityFilter, reloadToken, searchFilter, statusFilter]);
+  }, [
+    blockedOnly,
+    currentPage,
+    includeArchived,
+    pageSize,
+    priorityFilter,
+    reloadToken,
+    searchFilter,
+    staleOnly,
+    statusFilter
+  ]);
 
   const activeFilterSummaries = useMemo(() => {
     const filters: ActiveFilterSummary[] = [];
@@ -131,12 +146,16 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
       filters.push({ key: 'blockedOnly', label: 'Blocked', value: 'Only' });
     }
 
+    if (staleOnly) {
+      filters.push({ key: 'staleOnly', label: 'Stale', value: 'Only' });
+    }
+
     if (pageSize !== defaultDashboardFilters.pageSize) {
       filters.push({ key: 'pageSize', label: 'Page size', value: String(pageSize) });
     }
 
     return filters;
-  }, [blockedOnly, includeArchived, pageSize, priorityFilter, searchFilter, statusFilter]);
+  }, [blockedOnly, includeArchived, pageSize, priorityFilter, searchFilter, staleOnly, statusFilter]);
 
   const hasActiveFilters = activeFilterSummaries.length > 0;
 
@@ -163,6 +182,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     setPriorityFilter('all');
     setIncludeArchived(false);
     setBlockedOnly(false);
+    setStaleOnly(false);
     setPageSize(defaultDashboardFilters.pageSize);
     setCurrentPage(1);
   }
@@ -173,6 +193,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     setPriorityFilter(filters.priority);
     setIncludeArchived(filters.includeArchived);
     setBlockedOnly(filters.blockedOnly);
+    setStaleOnly(filters.staleOnly);
     setPageSize(filters.pageSize);
     setCurrentPage(1);
   }
@@ -199,6 +220,11 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
 
   function setBlockedOnlyAndResetPage(value: boolean) {
     setBlockedOnly(value);
+    setCurrentPage(1);
+  }
+
+  function setStaleOnlyAndResetPage(value: boolean) {
+    setStaleOnly(value);
     setCurrentPage(1);
   }
 
@@ -237,6 +263,8 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     setIncludeArchived: setIncludeArchivedAndResetPage,
     blockedOnly,
     setBlockedOnly: setBlockedOnlyAndResetPage,
+    staleOnly,
+    setStaleOnly: setStaleOnlyAndResetPage,
     pageSize,
     setPageSize: setPageSizeAndResetPage,
     currentPage,

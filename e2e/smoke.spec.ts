@@ -558,6 +558,96 @@ test('archive action offers undo recovery in active and include-archived modes',
   await expect(issueRow.locator('.archived-pill')).toHaveCount(0);
 });
 
+test('stale issue signal filters and persists through saved views', async ({ page }) => {
+  const staleIssueId = '00000000-0000-4000-8000-000000000215';
+  const importResponse = await page.request.post('/api/import/apply', {
+    data: {
+      exportVersion: 1,
+      issues: [
+        {
+          id: staleIssueId,
+          title: 'Stale triage issue',
+          description: 'Needs operator attention after a long quiet period.',
+          status: 'todo',
+          priority: 'medium',
+          labels: ['triage'],
+          dueDate: null,
+          isOverdue: false,
+          isBlocked: false,
+          dependsOnIssueIds: [],
+          archivedAt: null,
+          createdAt: '2000-01-01T00:00:00.000Z',
+          updatedAt: '2000-01-01T00:00:00.000Z',
+          comments: [],
+          activityEvents: []
+        }
+      ]
+    }
+  });
+
+  expect(importResponse.ok()).toBe(true);
+
+  await createIssueThroughApi(page, {
+    title: 'Fresh triage issue',
+    description: 'Recently updated work should not match stale-only.',
+    status: 'todo',
+    priority: 'medium'
+  });
+
+  await page.goto('/?staleOnly=true');
+
+  const filters = page.getByLabel('Issue filters');
+  const staleRow = page.getByRole('row', { name: /Stale triage issue.*Todo.*Medium/ });
+
+  await expect(filters.getByLabel('Stale only')).toBeChecked();
+  await expect(page.getByLabel('Active filters')).toContainText('Stale: Only');
+  await expect.poll(() => new URL(page.url()).searchParams.get('staleOnly')).toBe('true');
+  await expect(staleRow).toBeVisible();
+  await expect(staleRow.locator('.stale-pill')).toHaveText('Stale');
+  await expect(page.getByRole('row', { name: /Fresh triage issue.*Todo.*Medium/ })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Open Stale triage issue' }).click();
+
+  const detail = page.getByRole('region', { name: 'Stale triage issue' });
+
+  await expect(detail.getByText('No updates in 30+ days.')).toBeVisible();
+  await expect(detail.getByText('Freshness')).toBeVisible();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${staleIssueId}`);
+  await detail.getByRole('button', { name: 'Close issue detail for Stale triage issue' }).click();
+
+  const settings = await expandDashboardSettings(page);
+  const savedViews = settings.getByLabel('Saved filter views');
+
+  await savedViews.getByLabel('View name').fill('Stale triage view');
+  await savedViews.getByRole('button', { name: 'Save View' }).click();
+  await expect(savedViews.getByLabel('Saved views')).toContainText('Stale triage view');
+
+  await filters.getByRole('button', { name: 'Clear Filters' }).click();
+  await expect(filters.getByLabel('Stale only')).not.toBeChecked();
+  await expect(page.getByLabel('Active filters')).toHaveCount(0);
+
+  await savedViews.getByRole('button', { name: 'Apply View' }).click();
+  await expect(filters.getByLabel('Stale only')).toBeChecked();
+  await expect.poll(() => new URL(page.url()).searchParams.get('staleOnly')).toBe('true');
+  await expect(staleRow).toBeVisible();
+
+  const savedViewList = await page.request.get('/api/filter-views');
+  const savedViewListBody = (await savedViewList.json()) as Array<{ name: string; staleOnly: boolean }>;
+
+  expect(savedViewList.ok()).toBe(true);
+  expect(savedViewListBody).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        name: 'Stale triage view',
+        staleOnly: true
+      })
+    ])
+  );
+
+  await savedViews.getByRole('button', { name: 'Delete' }).click();
+  await expect(savedViews.getByRole('option', { name: 'Stale triage view' })).toHaveCount(0);
+});
+
 test('dependency links show and clear blocked issue visibility', async ({ page }) => {
   const blocker = await createIssueThroughApi(page, {
     title: 'Dependency blocker issue',
@@ -703,6 +793,7 @@ test('secondary dashboard controls are discoverable and accessible on mobile', a
   await expect(filters.getByLabel('Status')).toBeVisible();
   await expect(filters.getByLabel('Priority')).toBeVisible();
   await expect(filters.getByLabel('Include archived')).toBeVisible();
+  await expect(filters.getByLabel('Stale only')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Download JSON' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Import JSON', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'New Issue' })).toBeVisible();

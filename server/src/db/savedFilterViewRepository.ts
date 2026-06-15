@@ -22,6 +22,7 @@ type SavedFilterViewRow = {
   priority: SavedFilterPriority;
   include_archived: 0 | 1;
   blocked_only: 0 | 1;
+  stale_only: 0 | 1;
   page_size: number;
   created_at: string;
   updated_at: string;
@@ -115,6 +116,18 @@ function normalizeBlockedOnly(value: unknown): boolean {
   return value;
 }
 
+function normalizeStaleOnly(value: unknown): boolean {
+  if (value === undefined) {
+    return false;
+  }
+
+  if (typeof value !== 'boolean') {
+    throw new Error('Invalid saved view staleOnly');
+  }
+
+  return value;
+}
+
 function normalizePageSize(value: unknown): number {
   if (value === undefined) {
     return DEFAULT_PAGE_SIZE;
@@ -136,6 +149,7 @@ function mapSavedFilterViewRow(row: SavedFilterViewRow): SavedFilterView {
     priority: row.priority,
     includeArchived: row.include_archived === 1,
     blockedOnly: row.blocked_only === 1,
+    staleOnly: row.stale_only === 1,
     pageSize: row.page_size,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -149,7 +163,7 @@ export class SavedFilterViewRepository {
     const rows = this.database
       .prepare(
         `
-        SELECT id, name, search, status, priority, include_archived, blocked_only, page_size, created_at, updated_at
+        SELECT id, name, search, status, priority, include_archived, blocked_only, stale_only, page_size, created_at, updated_at
         FROM saved_filter_views
         ORDER BY updated_at DESC, name COLLATE NOCASE ASC, id ASC
       `
@@ -163,7 +177,7 @@ export class SavedFilterViewRepository {
     const row = this.database
       .prepare(
         `
-        SELECT id, name, search, status, priority, include_archived, blocked_only, page_size, created_at, updated_at
+        SELECT id, name, search, status, priority, include_archived, blocked_only, stale_only, page_size, created_at, updated_at
         FROM saved_filter_views
         WHERE id = @id
       `
@@ -183,6 +197,7 @@ export class SavedFilterViewRepository {
       priority: normalizePriority(input.priority),
       includeArchived: normalizeIncludeArchived(input.includeArchived),
       blockedOnly: normalizeBlockedOnly(input.blockedOnly),
+      staleOnly: normalizeStaleOnly(input.staleOnly),
       pageSize: normalizePageSize(input.pageSize),
       createdAt: now,
       updatedAt: now
@@ -194,10 +209,10 @@ export class SavedFilterViewRepository {
       .prepare(
         `
         INSERT INTO saved_filter_views (
-          id, name, search, status, priority, include_archived, blocked_only, page_size, created_at, updated_at
+          id, name, search, status, priority, include_archived, blocked_only, stale_only, page_size, created_at, updated_at
         )
         VALUES (
-          @id, @name, @search, @status, @priority, @includeArchived, @blockedOnly, @pageSize, @createdAt, @updatedAt
+          @id, @name, @search, @status, @priority, @includeArchived, @blockedOnly, @staleOnly, @pageSize, @createdAt, @updatedAt
         )
       `
       )
@@ -209,6 +224,7 @@ export class SavedFilterViewRepository {
         priority: view.priority,
         includeArchived: view.includeArchived ? 1 : 0,
         blockedOnly: view.blockedOnly ? 1 : 0,
+        staleOnly: view.staleOnly ? 1 : 0,
         pageSize: view.pageSize,
         createdAt: view.createdAt,
         updatedAt: view.updatedAt
@@ -233,6 +249,7 @@ export class SavedFilterViewRepository {
       includeArchived:
         input.includeArchived === undefined ? current.includeArchived : normalizeIncludeArchived(input.includeArchived),
       blockedOnly: input.blockedOnly === undefined ? current.blockedOnly : normalizeBlockedOnly(input.blockedOnly),
+      staleOnly: input.staleOnly === undefined ? current.staleOnly : normalizeStaleOnly(input.staleOnly),
       pageSize: input.pageSize === undefined ? current.pageSize : normalizePageSize(input.pageSize),
       updatedAt: nowIso()
     };
@@ -252,6 +269,7 @@ export class SavedFilterViewRepository {
           priority = @priority,
           include_archived = @includeArchived,
           blocked_only = @blockedOnly,
+          stale_only = @staleOnly,
           page_size = @pageSize,
           updated_at = @updatedAt
         WHERE id = @id
@@ -265,6 +283,7 @@ export class SavedFilterViewRepository {
         priority: next.priority,
         includeArchived: next.includeArchived ? 1 : 0,
         blockedOnly: next.blockedOnly ? 1 : 0,
+        staleOnly: next.staleOnly ? 1 : 0,
         pageSize: next.pageSize,
         updatedAt: next.updatedAt
       });

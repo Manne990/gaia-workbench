@@ -199,7 +199,7 @@ describe('issues API', () => {
       totalArchivedIssues: 1,
       totalBlockedIssues: 1,
       totalOverdueIssues: 2,
-      totalStaleIssues: 2,
+      totalStaleIssues: 0,
       byStatus: {
         todo: 2,
         in_progress: 1,
@@ -234,7 +234,7 @@ describe('issues API', () => {
       totalArchivedIssues: 0,
       totalBlockedIssues: 1,
       totalOverdueIssues: 1,
-      totalStaleIssues: 1,
+      totalStaleIssues: 0,
       byStatus: {
         todo: 0,
         in_progress: 1,
@@ -299,6 +299,59 @@ describe('issues API', () => {
     expect(blockedWithFilter.body.items).toHaveLength(1);
     expect(blockedWithFilter.body.items[0].id).toBe(blockedIssue.body.id);
     expect(blockedWithFilter.body.pagination.total).toBe(1);
+  });
+
+  it('filters stale issues by updated timestamp', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    await request(app)
+      .post('/api/import/apply')
+      .send({
+        exportVersion: 1,
+        issues: [
+          {
+            id: '00000000-0000-4000-8000-000000000115',
+            title: 'Stale API issue',
+            description: 'No recent movement.',
+            status: 'todo',
+            priority: 'medium',
+            labels: [],
+            dueDate: null,
+            isOverdue: false,
+            isBlocked: false,
+            dependsOnIssueIds: [],
+            archivedAt: null,
+            createdAt: '2026-04-01T00:00:00.000Z',
+            updatedAt: '2026-04-01T00:00:00.000Z',
+            comments: [],
+            activityEvents: []
+          }
+        ]
+      })
+      .expect(200);
+
+    await request(app).post('/api/issues').send({ title: 'Fresh API issue' }).expect(201);
+
+    const staleOnly = await request(app).get('/api/issues?staleOnly=true').expect(200);
+
+    expect(staleOnly.body.items).toHaveLength(1);
+    expect(staleOnly.body.items[0]).toMatchObject({
+      id: '00000000-0000-4000-8000-000000000115',
+      title: 'Stale API issue'
+    });
+    expect(staleOnly.body.pagination).toMatchObject({
+      page: 1,
+      limit: 25,
+      total: 1,
+      totalPages: 1
+    });
+
+    const staleSummary = await request(app).get('/api/issues/audit-summary?staleOnly=true').expect(200);
+
+    expect(staleSummary.body).toMatchObject({
+      totalIssues: 1,
+      totalStaleIssues: 1
+    });
   });
 
   it('returns empty pages with stable metadata when requested page is out of range', async () => {
@@ -759,6 +812,10 @@ describe('issues API', () => {
 
     await request(app).get('/api/issues?blockedOnly=yes').expect(400, {
       error: 'Invalid blockedOnly parameter'
+    });
+
+    await request(app).get('/api/issues?staleOnly=yes').expect(400, {
+      error: 'Invalid staleOnly parameter'
     });
 
     await request(app)

@@ -337,7 +337,7 @@ h3 {
   display: grid;
   grid-template-columns:
     minmax(220px, 1fr) minmax(132px, 160px) minmax(132px, 160px) minmax(144px, auto)
-    auto;
+    minmax(112px, auto) auto;
   gap: 14px;
   align-items: end;
   padding: 16px 20px;
@@ -1010,14 +1010,16 @@ td > span:not(.pill) {
 .issue-table-density-compact .label-pill,
 .issue-table-density-compact .overdue-pill,
 .issue-table-density-compact .archived-pill,
-.issue-table-density-compact .blocked-pill {
+.issue-table-density-compact .blocked-pill,
+.issue-table-density-compact .stale-pill {
   min-height: 22px;
   padding: 3px 7px;
   font-size: 0.74rem;
 }
 
 .issue-table-density-compact .archived-pill,
-.issue-table-density-compact .blocked-pill {
+.issue-table-density-compact .blocked-pill,
+.issue-table-density-compact .stale-pill {
   margin-bottom: 5px;
 }
 
@@ -1106,6 +1108,14 @@ td > span:not(.pill) {
   color: #59636e;
 }
 
+.stale-row {
+  background: #fffaf0;
+}
+
+.stale-row td {
+  border-bottom-color: #ead8ad;
+}
+
 .label-row {
   display: flex;
   flex-wrap: wrap;
@@ -1190,6 +1200,23 @@ td > span:not(.pill) {
   border-radius: 999px;
   background: #eef7e6;
   color: #3e6821;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.stale-pill {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  min-height: 24px;
+  margin: 0 0 8px;
+  padding: 4px 8px;
+  border: 1px solid #d8c28a;
+  border-radius: 999px;
+  background: #fff4cf;
+  color: #6f5518;
   font-size: 0.78rem;
   font-weight: 800;
   line-height: 1;
@@ -1297,6 +1324,28 @@ td > span:not(.pill) {
   font-weight: 700;
 }
 
+.stale-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border: 1px solid #d8c28a;
+  border-radius: 8px;
+  background: #fff9e6;
+  color: #5b4630;
+}
+
+.stale-banner strong {
+  color: #5b3f05;
+}
+
+.stale-banner span {
+  color: #6f5518;
+  font-weight: 700;
+}
+
 .issue-detail-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -1348,6 +1397,15 @@ td > span:not(.pill) {
 
 .issue-detail-grid .detail-overdue strong {
   color: #9a2f2f;
+}
+
+.issue-detail-grid .detail-stale {
+  border-color: #d8c28a;
+  background: #fff9e6;
+}
+
+.issue-detail-grid .detail-stale strong {
+  color: #6f5518;
 }
 
 .detail-description {
@@ -1677,7 +1735,9 @@ td > span:not(.pill) {
   .header-actions,
   .form-actions,
   .panel-actions,
-  .archive-banner {
+  .archive-banner,
+  .blocked-banner,
+  .stale-banner {
     align-items: stretch;
     flex-direction: column;
   }

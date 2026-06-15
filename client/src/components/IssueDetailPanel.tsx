@@ -11,6 +11,7 @@ import type {
 import { activityDetail, activityTitle } from '../utils/activity';
 import { formatDate, formatDueDate } from '../utils/formatters';
 import { renderMarkdownLite, renderMarkdownLiteInline } from '../utils/markdown';
+import { isIssueStale, staleIssueDescription } from '../utils/stale';
 
 type IssueDetailPanelProps = {
   isIssueDetailLoading: boolean;
@@ -93,6 +94,7 @@ export function IssueDetailPanel({
 }: IssueDetailPanelProps) {
   const blockers = issueDependencies?.dependencies ?? [];
   const dependents = issueDependencies?.dependents ?? [];
+  const selectedIssueIsStale = selectedIssue ? isIssueStale(selectedIssue.updatedAt) : false;
 
   return (
     <>
@@ -163,6 +165,13 @@ export function IssueDetailPanel({
               </div>
             ) : null}
 
+            {selectedIssueIsStale ? (
+              <div className="stale-banner" role="status">
+                <strong>Stale</strong>
+                <span>{staleIssueDescription()}.</span>
+              </div>
+            ) : null}
+
             <div className="issue-detail-grid" aria-label="Issue details">
               <div>
                 <span>Status</span>
@@ -180,6 +189,11 @@ export function IssueDetailPanel({
               <div>
                 <span>Created</span>
                 <strong>{formatDate(selectedIssue.createdAt)}</strong>
+              </div>
+              <div className={selectedIssueIsStale ? 'detail-stale' : undefined}>
+                <span>Freshness</span>
+                <strong>{selectedIssueIsStale ? 'Stale' : 'Current'}</strong>
+                {selectedIssueIsStale ? <em>{staleIssueDescription()}</em> : null}
               </div>
               <div>
                 <span>Comments</span>

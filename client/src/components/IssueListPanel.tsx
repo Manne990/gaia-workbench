@@ -183,20 +183,6 @@ export function IssueListPanel({
           <span>Include archived</span>
         </label>
 
-        <label className="filter-field" htmlFor="issue-page-size-filter">
-          <span>Page size</span>
-          <select
-            id="issue-page-size-filter"
-            value={pageSize}
-            onChange={(event) => onPageSizeChange(Number(event.target.value))}
-          >
-            <option value={10}>10</option>
-            <option value={25}>25</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-          </select>
-        </label>
-
         <div className="filter-actions">
           <button type="button" className="secondary-button" onClick={onClearFilters} disabled={!hasActiveFilters}>
             Clear Filters
@@ -204,68 +190,94 @@ export function IssueListPanel({
         </div>
       </div>
 
-      <div className="saved-view-panel" aria-label="Saved filter views">
-        <label className="filter-field" htmlFor="saved-view-select">
-          <span>Saved views</span>
-          <select
-            id="saved-view-select"
-            value={selectedSavedViewId}
-            onChange={(event) => onSavedViewSelect(event.target.value)}
-          >
-            <option value="">Choose a view</option>
-            {savedViews.map((view) => (
-              <option key={view.id} value={view.id}>
-                {view.name}
-              </option>
-            ))}
-          </select>
-        </label>
+      <details className="secondary-controls" aria-label="Saved views and page settings">
+        <summary>
+          <span className="secondary-controls-title">Saved views & page settings</span>
+          <span className="secondary-controls-state" aria-hidden="true">
+            <span className="secondary-controls-state-closed">Show</span>
+            <span className="secondary-controls-state-open">Hide</span>
+          </span>
+        </summary>
 
-        <label className="filter-field saved-view-name-field" htmlFor="saved-view-name">
-          <span>View name</span>
-          <input
-            id="saved-view-name"
-            value={savedViewName}
-            onChange={(event) => onSavedViewNameChange(event.target.value)}
-          />
-        </label>
+        <div className="secondary-controls-content">
+          <label className="filter-field page-size-field" htmlFor="issue-page-size-filter">
+            <span>Page size</span>
+            <select
+              id="issue-page-size-filter"
+              value={pageSize}
+              onChange={(event) => onPageSizeChange(Number(event.target.value))}
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </label>
 
-        <div className="saved-view-actions">
-          <button type="button" className="secondary-button" onClick={onSaveCurrentView} disabled={isSavedViewBusy}>
-            Save View
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={onApplySavedView}
-            disabled={isSavedViewBusy || !selectedSavedViewId}
-          >
-            Apply View
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={onRenameSavedView}
-            disabled={isSavedViewBusy || !selectedSavedViewId}
-          >
-            Rename
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={onDeleteSavedView}
-            disabled={isSavedViewBusy || !selectedSavedViewId}
-          >
-            Delete
-          </button>
+          <div className="saved-view-panel" aria-label="Saved filter views">
+            <label className="filter-field" htmlFor="saved-view-select">
+              <span>Saved views</span>
+              <select
+                id="saved-view-select"
+                value={selectedSavedViewId}
+                onChange={(event) => onSavedViewSelect(event.target.value)}
+              >
+                <option value="">Choose a view</option>
+                {savedViews.map((view) => (
+                  <option key={view.id} value={view.id}>
+                    {view.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="filter-field saved-view-name-field" htmlFor="saved-view-name">
+              <span>View name</span>
+              <input
+                id="saved-view-name"
+                value={savedViewName}
+                onChange={(event) => onSavedViewNameChange(event.target.value)}
+              />
+            </label>
+
+            <div className="saved-view-actions">
+              <button type="button" className="secondary-button" onClick={onSaveCurrentView} disabled={isSavedViewBusy}>
+                Save View
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={onApplySavedView}
+                disabled={isSavedViewBusy || !selectedSavedViewId}
+              >
+                Apply View
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={onRenameSavedView}
+                disabled={isSavedViewBusy || !selectedSavedViewId}
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={onDeleteSavedView}
+                disabled={isSavedViewBusy || !selectedSavedViewId}
+              >
+                Delete
+              </button>
+            </div>
+
+            {savedViewError ? (
+              <p className="saved-view-error" role="alert">
+                {savedViewError}
+              </p>
+            ) : null}
+          </div>
         </div>
-
-        {savedViewError ? (
-          <p className="saved-view-error" role="alert">
-            {savedViewError}
-          </p>
-        ) : null}
-      </div>
+      </details>
 
       {hasActiveFilters ? (
         <div className="active-filter-summary" aria-label="Active filters">

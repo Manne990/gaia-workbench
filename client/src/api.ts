@@ -21,11 +21,7 @@ export async function fetchServiceHealth(signal?: AbortSignal): Promise<ServiceH
 export async function fetchCommentHistory(commentId: string, signal?: AbortSignal): Promise<CommentEditHistory[]> {
   const response = await fetch(`/api/comments/${commentId}/history`, { signal });
 
-  if (!response.ok) {
-    throw new Error('Comment history request failed');
-  }
-
-  return (await response.json()) as CommentEditHistory[];
+  return readJsonOrThrow<CommentEditHistory[]>(response, 'Comment history request failed');
 }
 
 export async function fetchIssue(issueId: string, signal?: AbortSignal): Promise<Issue | null> {
@@ -35,21 +31,13 @@ export async function fetchIssue(issueId: string, signal?: AbortSignal): Promise
     return null;
   }
 
-  if (!response.ok) {
-    throw new Error('Issue detail request failed');
-  }
-
-  return (await response.json()) as Issue;
+  return readJsonOrThrow<Issue>(response, 'Issue detail request failed');
 }
 
 export async function fetchIssueActivity(issueId: string, signal?: AbortSignal): Promise<ActivityEvent[]> {
   const response = await fetch(`/api/issues/${issueId}/activity`, { signal });
 
-  if (!response.ok) {
-    throw new Error('Activity request failed');
-  }
-
-  return (await response.json()) as ActivityEvent[];
+  return readJsonOrThrow<ActivityEvent[]>(response, 'Activity request failed');
 }
 
 export async function fetchIssueDependencies(issueId: string, signal?: AbortSignal): Promise<IssueDependencyState> {
@@ -81,11 +69,7 @@ async function postIssueAction(issueId: string, action: 'archive' | 'unarchive' 
     method: 'POST'
   });
 
-  if (!response.ok) {
-    throw new Error(`Issue ${action} request failed`);
-  }
-
-  return (await response.json()) as Issue;
+  return readJsonOrThrow<Issue>(response, `Issue ${action} request failed`);
 }
 
 export function archiveIssue(issueId: string): Promise<Issue> {

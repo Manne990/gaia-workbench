@@ -54,6 +54,10 @@ import { parseDueDateInput, parseLabelsInput } from './utils/parse';
 import { defaultDashboardFilters, getRouteStateFromLocation, writeRoute } from './utils/routing';
 
 const DEFAULT_IMPORT_POLICY: ImportConflictPolicy = 'skip-conflicts';
+type IssueAnchorTarget = {
+  type: 'comment' | 'activity';
+  id: string;
+};
 
 function importReadyMessage(plan: ImportPlan): string {
   return `Ready to create ${plan.summary.toCreate.issues} issues, replace ${plan.summary.toReplace.issues} changed issues, and skip ${plan.summary.skip.issues}.`;
@@ -61,6 +65,27 @@ function importReadyMessage(plan: ImportPlan): string {
 
 function importAppliedMessage(plan: ImportPlan): string {
   return `Import applied: ${plan.summary.toCreate.issues} issues created, ${plan.summary.toReplace.issues} changed issues replaced, ${plan.summary.skip.issues} skipped.`;
+}
+
+function parseIssueAnchorTarget(hash: string): IssueAnchorTarget | null {
+  const match = /^(?:#)(comment|activity)-(.+)$/.exec(hash.trim());
+
+  if (!match) {
+    return null;
+  }
+
+  const type = match[1] as IssueAnchorTarget['type'];
+  const id = match[2].trim();
+
+  if (!id) {
+    return null;
+  }
+
+  try {
+    return { type, id: decodeURIComponent(id) };
+  } catch {
+    return { type, id };
+  }
 }
 
 export function App() {
@@ -107,6 +132,7 @@ export function App() {
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(
     () => initialRouteStateRef.current?.issueId ?? null
   );
+  const [issueAnchorHash, setIssueAnchorHash] = useState(() => window.location.hash);
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [selectedIssueLoadState, setSelectedIssueLoadState] = useState<IssueDetailLoadState>('idle');
   const [activeForm, setActiveForm] = useState<ActiveForm | null>(null);
@@ -372,7 +398,9 @@ export function App() {
     }
 
     didCanonicalizeInitialRouteRef.current = true;
-    writeRoute(selectedIssueId, dashboardFilters, 'replace');
+    if (!window.location.hash) {
+      writeRoute(selectedIssueId, dashboardFilters, 'replace');
+    }
   }, []);
 
   useEffect(() => {
@@ -420,6 +448,7 @@ export function App() {
       detailReturnFocusRef.current = null;
       setDashboardFilters(routeState.filters);
       setSelectedIssueId(routeState.issueId);
+      setIssueAnchorHash(window.location.hash);
     }
 
     window.addEventListener('popstate', syncSelectedIssueFromLocation);
@@ -427,8 +456,23 @@ export function App() {
     return () => window.removeEventListener('popstate', syncSelectedIssueFromLocation);
   }, []);
 
+  useEffect(() => {
+    function syncIssueAnchorHash() {
+      setIssueAnchorHash(window.location.hash);
+    }
+
+    window.addEventListener('hashchange', syncIssueAnchorHash);
+
+    return () => window.removeEventListener('hashchange', syncIssueAnchorHash);
+  }, []);
+
+  function writeRouteState(issueId: string | null, filters: DashboardFilters, mode: 'push' | 'replace') {
+    writeRoute(issueId, filters, mode);
+    setIssueAnchorHash(window.location.hash);
+  }
+
   function writeDashboardRoute(filters: DashboardFilters, mode: 'push' | 'replace') {
-    writeRoute(selectedIssueId, filters, mode);
+    writeRouteState(selectedIssueId, filters, mode);
   }
 
   function handleSearchFilterChange(value: string) {
@@ -482,7 +526,7 @@ export function App() {
 
   function handleClearFilters() {
     clearFilters();
-    writeRoute(null, defaultDashboardFilters, 'replace');
+    writeRouteState(null, defaultDashboardFilters, 'replace');
     setSelectedIssueId(null);
     setSelectedIssue(null);
     setSelectedIssueLoadState('idle');
@@ -553,7 +597,7 @@ export function App() {
 
       upsertSavedView(view);
       setDashboardFilters(nextFilters);
-      writeRoute(selectedIssueId, nextFilters, 'push');
+      writeRouteState(selectedIssueId, nextFilters, 'push');
     } catch (error) {
       setSavedViewError(error instanceof Error ? error.message : 'Saved view apply failed.');
       setSavedViews((current) => current.filter((view) => view.id !== selectedSavedViewId));
@@ -876,6 +920,57 @@ export function App() {
     return () => controller.abort();
   }, [selectedIssueId, selectedIssue?.id]);
 
+  function scrollToAnchorTarget() {
+    const anchorTarget = parseIssueAnchorTarget(issueAnchorHash);
+    if (!anchorTarget || !selectedIssue || selectedIssue.id !== selectedIssueId) {
+      return;
+    }
+
+    if (anchorTarget.type === 'comment' && commentLoadState !== 'loaded') {
+      return;
+    }
+
+    if (anchorTarget.type === 'activity' && activityLoadState !== 'loaded') {
+      return;
+    }
+
+    const anchorElement = document.getElementById(`${anchorTarget.type}-${anchorTarget.id}`);
+
+    if (!anchorElement) {
+      return;
+    }
+
+    anchorElement.scrollIntoView({ behavior: 'auto', block: 'start' });
+
+    if (anchorElement.tabIndex < 0) {
+      anchorElement.setAttribute('tabindex', '0');
+    }
+
+    anchorElement.focus({ preventScroll: true });
+  }
+
+  useEffect(() => {
+    if (!selectedIssueId || !selectedIssue || selectedIssue.id !== selectedIssueId) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      scrollToAnchorTarget();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    issueAnchorHash,
+    selectedIssueId,
+    selectedIssue?.id,
+    commentLoadState,
+    activityLoadState,
+    comments.length,
+    activityEvents.length
+  ]);
+
   function startCreate(trigger?: HTMLElement) {
     formReturnFocusRef.current = trigger ?? null;
     setActiveForm({ mode: 'create' });
@@ -916,7 +1011,7 @@ export function App() {
     detailReturnFocusRef.current = trigger ?? null;
     setSelectedIssue(issue);
     setSelectedIssueLoadState('loaded');
-    writeRoute(issue.id, dashboardFilters, 'push');
+    writeRouteState(issue.id, dashboardFilters, 'push');
     setSelectedIssueId(issue.id);
     cancelForm({ restoreFocus: false });
   }
@@ -927,7 +1022,7 @@ export function App() {
     setSelectedIssueId(null);
     setSelectedIssue(null);
     setSelectedIssueLoadState('idle');
-    writeRoute(null, dashboardFilters, detailReturnFocusRef.current ? 'replace' : 'push');
+    writeRouteState(null, dashboardFilters, detailReturnFocusRef.current ? 'replace' : 'push');
     setCommentBody('');
     setCommentError(null);
     setEditingCommentId(null);

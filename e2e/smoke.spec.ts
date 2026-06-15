@@ -1020,6 +1020,33 @@ test('shareable issue detail URLs support direct load refresh and history', asyn
   await expect(page).toHaveURL('/');
 });
 
+test('issue detail URLs deep-link directly to comment entries', async ({ page }) => {
+  const issue = await createIssueThroughApi(page, {
+    title: 'Comment deep link issue',
+    description: 'Target for comment anchor links.'
+  });
+  const commentResponse = await page.request.post(`/api/issues/${issue.id}/comments`, {
+    data: {
+      body: 'Deep link comment body'
+    }
+  });
+
+  expect(commentResponse.ok()).toBe(true);
+
+  const comment = (await commentResponse.json()) as { id: string; body: string };
+
+  await page.goto(`/issues/${issue.id}#comment-${comment.id}`);
+
+  const detail = page.getByRole('region', { name: issue.title });
+  const commentItem = detail.locator(`#comment-${comment.id}`);
+
+  await expect(detail.getByRole('heading', { name: issue.title })).toBeVisible();
+  await expect(commentItem).toBeVisible();
+  await expect(commentItem).toContainText('Deep link comment body');
+  await expect(commentItem).toBeFocused();
+  await expect(page).toHaveURL(`/issues/${issue.id}#comment-${comment.id}`);
+});
+
 test('direct issue detail URLs hydrate before the full issue list finishes loading', async ({ page }) => {
   const issue = await createIssueThroughApi(page, {
     title: 'List-independent detail issue',

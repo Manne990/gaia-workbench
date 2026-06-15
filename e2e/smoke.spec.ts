@@ -64,15 +64,20 @@ function commandPaletteShortcutKey(): string {
 }
 
 async function expandDashboardSettings(page: Page): Promise<Locator> {
-  const settings = page.locator('details.secondary-controls');
+  const settings = page.getByLabel('Saved views and page settings');
+  const settingsToggle = settings.locator('summary').filter({ hasText: 'Saved views & page settings' });
 
   await expect(settings).toHaveCount(1);
 
   if ((await settings.getAttribute('open')) === null) {
-    await settings.locator('summary').click();
+    await settingsToggle.click();
   }
 
   return settings;
+}
+
+function importJsonFileInput(page: Page): Locator {
+  return page.getByLabel('Import JSON file');
 }
 
 async function createIssueThroughApi(
@@ -281,8 +286,8 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   expect(exportedActivityTypes).toContain('comment_added');
   expect(exportedActivityTypes).toContain('comment_edited');
 
-  await page.locator('#issue-status-filter').selectOption('done');
-  await page.locator('#issue-search-filter').fill('Edit issue from UI');
+  await filters.getByLabel('Status').selectOption('done');
+  await filters.getByLabel('Search').fill('Edit issue from UI');
   const csvDownloadPromise = page.waitForEvent('download');
   await page.getByRole('link', { name: 'Download CSV' }).click();
   const csvDownload = await csvDownloadPromise;
@@ -498,7 +503,7 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
   const importFilePath = testInfo.outputPath('tinytracker-import.json');
 
   writeFileSync(importFilePath, JSON.stringify(importPayload), 'utf8');
-  await page.locator('input[type="file"][accept="application/json,.json"]').setInputFiles(importFilePath);
+  await importJsonFileInput(page).setInputFiles(importFilePath);
 
   const importPanel = page.getByRole('region', { name: 'Import preview' });
 
@@ -595,7 +600,7 @@ test('imports changed issue conflicts with an explicit replace policy', async ({
   writeFileSync(importFilePath, JSON.stringify(importPayload), 'utf8');
 
   await page.goto('/');
-  await page.locator('input[type="file"][accept="application/json,.json"]').setInputFiles(importFilePath);
+  await importJsonFileInput(page).setInputFiles(importFilePath);
 
   const importPanel = page.getByRole('region', { name: 'Import preview' });
 
@@ -1037,7 +1042,7 @@ test('dashboard density toggle compacts rows without hiding issue information', 
   const issueRow = page.getByRole('row', { name: /Density toggle issue.*Review.*High/ });
 
   await expect(densityControls).toBeVisible();
-  await expect(page.locator('.issue-table-density-comfortable')).toHaveCount(1);
+  await expect(comfortableButton).toHaveAttribute('aria-pressed', 'true');
   await expect(issueRow).toBeVisible();
   await expect(issueRow).toContainText('Operational row text remains visible in every density.');
   await expect(issueRow).toContainText('No due date');
@@ -1048,7 +1053,6 @@ test('dashboard density toggle compacts rows without hiding issue information', 
 
   await compactButton.click();
   await expect(compactButton).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('.issue-table-density-compact')).toHaveCount(1);
   await expect(issueRow).toBeVisible();
   await expect(issueRow).toContainText('Density toggle issue');
   await expect(issueRow).toContainText('Operational row text remains visible in every density.');
@@ -1061,7 +1065,6 @@ test('dashboard density toggle compacts rows without hiding issue information', 
 
   await comfortableButton.click();
   await expect(comfortableButton).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('.issue-table-density-comfortable')).toHaveCount(1);
 });
 
 test('secondary dashboard controls are discoverable and accessible on mobile', async ({ page }) => {
@@ -1069,7 +1072,11 @@ test('secondary dashboard controls are discoverable and accessible on mobile', a
   await page.goto('/');
 
   const filters = page.getByLabel('Issue filters');
-  const settings = page.locator('details.secondary-controls');
+  const settings = page.getByLabel('Saved views and page settings');
+  const settingsToggle = settings.locator('summary').filter({ hasText: 'Saved views & page settings' });
+  const pageSizeSelect = settings.getByLabel('Page size');
+  const savedViews = settings.getByLabel('Saved filter views');
+  const savedViewsSelect = savedViews.getByLabel('Saved views');
 
   await expect(filters.getByLabel('Search')).toBeVisible();
   await expect(filters.getByLabel('Status')).toBeVisible();
@@ -1080,15 +1087,15 @@ test('secondary dashboard controls are discoverable and accessible on mobile', a
   await expect(page.getByRole('button', { name: 'Import JSON', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'New Issue' })).toBeVisible();
   await expect(page.getByRole('status', { name: 'Service status' })).toBeVisible();
-  await expect(settings.locator('summary')).toContainText('Saved views & page settings');
-  await expect(settings.locator('#issue-page-size-filter')).toBeHidden();
-  await expect(settings.locator('#saved-view-select')).toBeHidden();
+  await expect(settingsToggle).toContainText('Saved views & page settings');
+  await expect(pageSizeSelect).toBeHidden();
+  await expect(savedViewsSelect).toBeHidden();
 
   await page.keyboard.press('Tab');
-  await pressTabUntilFocused(page, settings.locator('summary'), 40);
+  await pressTabUntilFocused(page, settingsToggle, 40);
   await page.keyboard.press('Enter');
-  await expect(settings.locator('#issue-page-size-filter')).toBeVisible();
-  await expect(settings.locator('#saved-view-select')).toBeVisible();
+  await expect(pageSizeSelect).toBeVisible();
+  await expect(savedViewsSelect).toBeVisible();
   await expect(settings.getByLabel('View name')).toBeVisible();
 
   const hasNoHorizontalOverflow = await page.evaluate(

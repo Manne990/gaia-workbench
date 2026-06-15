@@ -15,6 +15,19 @@ type CreatedIssue = {
   description: string;
 };
 
+type ApiIssue = CreatedIssue & {
+  status: string;
+  priority: string;
+  labels: string[];
+  dueDate: string | null;
+  isOverdue: boolean;
+  archivedAt: string | null;
+  isBlocked: boolean;
+  dependsOnIssueIds: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 type IssueListResponse = {
   items: CreatedIssue[];
   pagination: {
@@ -686,6 +699,100 @@ test('imports changed issue conflicts with an explicit replace policy', async ({
 
   await expect(detail.getByText('Changed through explicit replace policy.')).toBeVisible();
   await expect(detail.getByLabel('Issue labels').getByText('conflict', { exact: true })).toBeVisible();
+});
+
+test('import replace refreshes an already open issue detail route', async ({ page }, testInfo) => {
+  const existingResponse = await page.request.post('/api/issues', {
+    data: {
+      title: 'Selected import stale issue',
+      description: 'Local detail before import.',
+      status: 'todo',
+      priority: 'medium',
+      labels: ['local']
+    }
+  });
+
+  expect(existingResponse.ok()).toBe(true);
+  const existing = (await existingResponse.json()) as ApiIssue;
+
+  await page.goto('/');
+  await page.getByRole('button', { name: `Open ${existing.title}` }).click();
+
+  const initialDetail = page.getByRole('region', { name: existing.title });
+
+  await expect(initialDetail.getByRole('heading', { name: existing.title })).toBeVisible();
+  await expect(initialDetail.locator('.detail-description')).toHaveText('Local detail before import.');
+  await expect(page).toHaveURL(new RegExp(`/issues/${existing.id}$`));
+
+  const importPayload = {
+    exportVersion: 1,
+    issues: [
+      {
+        id: existing.id,
+        title: 'Selected import replaced issue',
+        description: 'Imported detail after replace.',
+        status: 'review',
+        priority: 'high',
+        labels: ['import-refresh'],
+        dueDate: null,
+        isOverdue: false,
+        isBlocked: false,
+        dependsOnIssueIds: [],
+        archivedAt: null,
+        createdAt: existing.createdAt,
+        updatedAt: '2999-03-01T00:00:00.000Z',
+        comments: [
+          {
+            id: 'selected-import-refresh-comment',
+            issueId: existing.id,
+            body: 'Selected detail refreshed comment',
+            createdAt: '2999-03-01T00:01:00.000Z',
+            updatedAt: '2999-03-01T00:01:00.000Z',
+            editHistory: []
+          }
+        ],
+        activityEvents: [
+          {
+            id: 'selected-import-refresh-activity',
+            issueId: existing.id,
+            type: 'issue_created',
+            metadata: {
+              title: 'Selected import replaced issue'
+            },
+            createdAt: '2999-03-01T00:00:00.000Z'
+          }
+        ]
+      }
+    ]
+  };
+  const importFilePath = testInfo.outputPath('tinytracker-selected-refresh-import.json');
+
+  writeFileSync(importFilePath, JSON.stringify(importPayload), 'utf8');
+  await importJsonFileInput(page).setInputFiles(importFilePath);
+
+  const importPanel = page.getByRole('region', { name: 'Import preview' });
+
+  await expect(importPanel.getByText('Ready to create 0 issues, replace 0 changed issues, and skip 1.')).toBeVisible();
+  await importPanel.getByRole('radio', { name: 'Replace changed issues' }).check();
+  await expect(importPanel.getByText('Ready to create 0 issues, replace 1 changed issues, and skip 0.')).toBeVisible();
+
+  await importPanel.getByRole('button', { name: 'Apply Import' }).click();
+
+  await expect(
+    importPanel.getByText('Import applied: 0 issues created, 1 changed issues replaced, 0 skipped.')
+  ).toBeVisible();
+
+  const refreshedDetail = page.getByRole('region', { name: 'Selected import replaced issue' });
+
+  await expect(refreshedDetail.getByRole('heading', { name: 'Selected import replaced issue' })).toBeVisible();
+  await expect(refreshedDetail.locator('.detail-description')).toHaveText('Imported detail after replace.');
+  await expect(refreshedDetail.getByLabel('Issue labels').getByText('import-refresh', { exact: true })).toBeVisible();
+  await expect(refreshedDetail.getByText('Selected detail refreshed comment')).toBeVisible();
+  await expect(
+    refreshedDetail.getByLabel('Issue activity').getByText('Created Selected import replaced issue.')
+  ).toBeVisible();
+  await expect(page.getByRole('row', { name: /Selected import replaced issue.*Review.*High/ })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/issues/${existing.id}$`));
 });
 
 test('archives hides restores and preserves issue activity', async ({ page }) => {

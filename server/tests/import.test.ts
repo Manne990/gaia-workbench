@@ -628,29 +628,28 @@ describe('tracker import API', () => {
     expect(afterImport.body).toEqual(beforeImport.body);
   });
 
-  it('returns a structured error for invalid JSON', async () => {
+  it('returns a structured import plan error for invalid JSON on preview and apply', async () => {
     const app = createApp({ databasePath: ':memory:' });
 
-    const response = await request(app)
-      .post('/api/import/preview')
-      .set('Content-Type', 'application/json')
-      .send('{')
-      .expect(400);
+    for (const route of ['/api/import/preview', '/api/import/apply']) {
+      const response = await request(app).post(route).set('Content-Type', 'application/json').send('{').expect(400);
 
-    expect(response.body).toMatchObject({
-      valid: false,
-      exportVersion: null,
-      summary: {
-        reject: 1
-      },
-      errors: [
-        {
-          code: 'invalid_json',
-          path: '$',
-          message: 'Request body must be valid JSON.'
-        }
-      ]
-    });
+      expect(response.body).toMatchObject({
+        valid: false,
+        exportVersion: null,
+        summary: {
+          reject: 1
+        },
+        errors: [
+          {
+            code: 'invalid_json',
+            path: '$',
+            message: 'Request body must be valid JSON.'
+          }
+        ]
+      });
+      expect(response.body).not.toHaveProperty('error');
+    }
   });
 
   it('rejects unsupported export versions', async () => {

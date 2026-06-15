@@ -119,6 +119,37 @@ describe('comments API', () => {
     });
   });
 
+  it('returns standard JSON parse errors for comment mutations', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const issue = await request(app).post('/api/issues').send({ title: 'Malformed comment contract' }).expect(201);
+    const comment = await request(app)
+      .post(`/api/issues/${issue.body.id}/comments`)
+      .send({ body: 'Valid comment' })
+      .expect(201);
+
+    await request(app)
+      .post(`/api/issues/${issue.body.id}/comments`)
+      .set('Content-Type', 'application/json')
+      .send('{')
+      .expect(400)
+      .expect((response) => {
+        expect(response.body).toEqual({ error: 'Request body must be valid JSON.' });
+        expect(response.body).not.toHaveProperty('valid');
+        expect(response.body).not.toHaveProperty('errors');
+      });
+
+    await request(app)
+      .put(`/api/comments/${comment.body.id}`)
+      .set('Content-Type', 'application/json')
+      .send('{')
+      .expect(400)
+      .expect((response) => {
+        expect(response.body).toEqual({ error: 'Request body must be valid JSON.' });
+        expect(response.body).not.toHaveProperty('valid');
+        expect(response.body).not.toHaveProperty('errors');
+      });
+  });
+
   it('returns 404 for missing comment resources', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

@@ -1,11 +1,55 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { archiveIssue, fetchCommentHistory, fetchIssue, fetchIssueActivity, fetchServiceHealth } from './api';
+import {
+  addIssueDependency,
+  applyImport,
+  archiveIssue,
+  fetchCommentHistory,
+  fetchIssue,
+  fetchIssueActivity,
+  fetchServiceHealth,
+  previewImport
+} from './api';
+import type { ImportPlan } from './types';
 
 function jsonResponse(body: unknown, init: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
     ...init,
     headers: { 'Content-Type': 'application/json', ...init.headers }
   });
+}
+
+function invalidImportPlan(code = 'invalid_json'): ImportPlan {
+  const emptyCounts = {
+    issues: 0,
+    comments: 0,
+    editHistory: 0,
+    activityEvents: 0,
+    savedFilterViews: 0
+  };
+
+  return {
+    valid: false,
+    exportVersion: null,
+    policy: 'skip-conflicts',
+    summary: {
+      input: emptyCounts,
+      toCreate: emptyCounts,
+      toReplace: emptyCounts,
+      skip: emptyCounts,
+      exactMatches: emptyCounts,
+      changed: emptyCounts,
+      reject: 1
+    },
+    decisions: [],
+    errors: [
+      {
+        code,
+        path: '$',
+        message: 'Request body must be valid JSON.'
+      }
+    ],
+    warnings: []
+  };
 }
 
 describe('client API errors', () => {
@@ -33,6 +77,17 @@ describe('client API errors', () => {
     await expect(fetchCommentHistory('missing-comment')).rejects.toThrow('Comment not found');
   });
 
+  it('preserves dependency mutation server error messages', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ error: 'dependsOnIssueId is required' }, { status: 400 }));
+
+    await expect(addIssueDependency('issue-1', '')).rejects.toThrow('dependsOnIssueId is required');
+    expect(fetch).toHaveBeenCalledWith('/api/issues/issue-1/dependencies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dependsOnIssueId: '' })
+    });
+  });
+
   it('keeps issue detail 404 as null while preserving other API causes', async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(jsonResponse({ error: 'Issue not found' }, { status: 404 }))
@@ -46,5 +101,17 @@ describe('client API errors', () => {
     vi.mocked(fetch).mockResolvedValue(new Response('', { status: 200 }));
 
     await expect(fetchServiceHealth()).rejects.toThrow('Service health request failed');
+  });
+
+  it('resolves structured import validation plans returned on HTTP 400', async () => {
+    const previewPlan = invalidImportPlan('invalid_json');
+    const applyPlan = invalidImportPlan('unsupported_version');
+
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse(previewPlan, { status: 400 }))
+      .mockResolvedValueOnce(jsonResponse(applyPlan, { status: 400 }));
+
+    await expect(previewImport({ exportVersion: 2, issues: [] })).resolves.toEqual(previewPlan);
+    await expect(applyImport({ exportVersion: 2, issues: [] })).resolves.toEqual(applyPlan);
   });
 });

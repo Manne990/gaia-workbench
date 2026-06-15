@@ -36,11 +36,12 @@ import type {
   CommentLoadState,
   DashboardDensity,
   DashboardFilters,
+  ImportConflictPolicy,
+  ImportPlan,
   Issue,
   IssueDependencyState,
   IssueDetailLoadState,
   IssueFormValues,
-  ImportPlan,
   PriorityFilter,
   SavedFilterView,
   StatusFilter
@@ -48,6 +49,16 @@ import type {
 import { restoreFocus } from './utils/focus';
 import { parseDueDateInput, parseLabelsInput } from './utils/parse';
 import { defaultDashboardFilters, getRouteStateFromLocation, writeRoute } from './utils/routing';
+
+const DEFAULT_IMPORT_POLICY: ImportConflictPolicy = 'skip-conflicts';
+
+function importReadyMessage(plan: ImportPlan): string {
+  return `Ready to create ${plan.summary.toCreate.issues} issues, replace ${plan.summary.toReplace.issues} changed issues, and skip ${plan.summary.skip.issues}.`;
+}
+
+function importAppliedMessage(plan: ImportPlan): string {
+  return `Import applied: ${plan.summary.toCreate.issues} issues created, ${plan.summary.toReplace.issues} changed issues replaced, ${plan.summary.skip.issues} skipped.`;
+}
 
 export function App() {
   const initialRouteStateRef = useRef<{
@@ -115,6 +126,7 @@ export function App() {
   const [importPayload, setImportPayload] = useState<unknown | null>(null);
   const [importFileName, setImportFileName] = useState<string | null>(null);
   const [importPlan, setImportPlan] = useState<ImportPlan | null>(null);
+  const [importPolicy, setImportPolicy] = useState<ImportConflictPolicy>(DEFAULT_IMPORT_POLICY);
   const [importError, setImportError] = useState<string | null>(null);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [isImportPreviewing, setIsImportPreviewing] = useState(false);
@@ -395,6 +407,7 @@ export function App() {
     setImportPayload(null);
     setImportFileName(null);
     setImportPlan(null);
+    setImportPolicy(DEFAULT_IMPORT_POLICY);
     setImportError(null);
     setImportMessage(null);
     setIsImportPreviewing(false);
@@ -412,6 +425,7 @@ export function App() {
     setImportPayload(null);
     setImportFileName(file.name);
     setImportPlan(null);
+    setImportPolicy(DEFAULT_IMPORT_POLICY);
     setImportError(null);
     setImportMessage(null);
     setIsImportPreviewing(true);
@@ -419,16 +433,12 @@ export function App() {
     try {
       const text = await file.text();
       const payload = JSON.parse(text) as unknown;
-      const plan = await previewImport(payload);
+      const plan = await previewImport(payload, DEFAULT_IMPORT_POLICY);
 
       setImportPayload(payload);
       setImportPlan(plan);
       setImportError(plan.valid ? null : 'Import preview found validation errors.');
-      setImportMessage(
-        plan.valid
-          ? `Ready to create ${plan.summary.toCreate.issues} issues and skip ${plan.summary.skip.issues}.`
-          : null
-      );
+      setImportMessage(plan.valid ? importReadyMessage(plan) : null);
     } catch (error) {
       setImportPayload(null);
       setImportPlan(null);
@@ -448,7 +458,7 @@ export function App() {
     setImportError(null);
 
     try {
-      const plan = await applyImport(importPayload);
+      const plan = await applyImport(importPayload, importPolicy);
 
       setImportPlan(plan);
 
@@ -458,15 +468,37 @@ export function App() {
       }
 
       setImportPayload(null);
-      setImportMessage(
-        `Import applied: ${plan.summary.toCreate.issues} issues created, ${plan.summary.skip.issues} skipped.`
-      );
+      setImportMessage(importAppliedMessage(plan));
       returnToFirstPage();
     } catch {
       setImportError('Import apply failed.');
     } finally {
       setIsImportApplying(false);
       resetImportInput();
+    }
+  }
+
+  async function changeImportPolicy(nextPolicy: ImportConflictPolicy) {
+    setImportPolicy(nextPolicy);
+
+    if (!importPayload) {
+      return;
+    }
+
+    setIsImportPreviewing(true);
+    setImportError(null);
+    setImportMessage(null);
+
+    try {
+      const plan = await previewImport(importPayload, nextPolicy);
+
+      setImportPlan(plan);
+      setImportError(plan.valid ? null : 'Import preview found validation errors.');
+      setImportMessage(plan.valid ? importReadyMessage(plan) : null);
+    } catch {
+      setImportError('Import preview failed.');
+    } finally {
+      setIsImportPreviewing(false);
     }
   }
 
@@ -967,11 +999,13 @@ export function App() {
           <ImportPanel
             fileName={importFileName}
             importPlan={importPlan}
+            importPolicy={importPolicy}
             importError={importError}
             importMessage={importMessage}
             isPreviewing={isImportPreviewing}
             isApplying={isImportApplying}
             canApply={canApplyImport}
+            onPolicyChange={changeImportPolicy}
             onApply={submitImport}
             onCancel={clearImportState}
           />

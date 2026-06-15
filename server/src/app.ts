@@ -45,6 +45,7 @@ const MAX_ISSUE_LIMIT = 100;
 const emptyImportPlan = (error: ImportPlan['errors'][number]): ImportPlan => ({
   valid: false,
   exportVersion: null,
+  policy: 'skip-conflicts',
   summary: {
     input: {
       issues: 0,
@@ -58,7 +59,25 @@ const emptyImportPlan = (error: ImportPlan['errors'][number]): ImportPlan => ({
       editHistory: 0,
       activityEvents: 0
     },
+    toReplace: {
+      issues: 0,
+      comments: 0,
+      editHistory: 0,
+      activityEvents: 0
+    },
     skip: {
+      issues: 0,
+      comments: 0,
+      editHistory: 0,
+      activityEvents: 0
+    },
+    exactMatches: {
+      issues: 0,
+      comments: 0,
+      editHistory: 0,
+      activityEvents: 0
+    },
+    changed: {
       issues: 0,
       comments: 0,
       editHistory: 0,

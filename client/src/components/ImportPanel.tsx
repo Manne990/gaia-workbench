@@ -1,13 +1,15 @@
-import type { ImportCounts, ImportErrorDetail, ImportPlan } from '../types';
+import type { ImportConflictPolicy, ImportCounts, ImportErrorDetail, ImportPlan } from '../types';
 
 type ImportPanelProps = {
   fileName: string | null;
   importPlan: ImportPlan | null;
+  importPolicy: ImportConflictPolicy;
   importError: string | null;
   importMessage: string | null;
   isPreviewing: boolean;
   isApplying: boolean;
   canApply: boolean;
+  onPolicyChange: (policy: ImportConflictPolicy) => void;
   onApply: () => void;
   onCancel: () => void;
 };
@@ -26,19 +28,28 @@ function totalCounts(counts: ImportCounts): number {
 function ImportCountRow({
   label,
   input,
+  exact,
+  changed,
   toCreate,
+  toReplace,
   skip
 }: {
   label: string;
   input: number;
+  exact: number;
+  changed: number;
   toCreate: number;
+  toReplace: number;
   skip: number;
 }) {
   return (
     <tr>
       <th scope="row">{label}</th>
       <td>{input}</td>
+      <td>{exact}</td>
+      <td>{changed}</td>
       <td>{toCreate}</td>
+      <td>{toReplace}</td>
       <td>{skip}</td>
     </tr>
   );
@@ -68,11 +79,13 @@ function ImportErrors({ errors }: { errors: ImportErrorDetail[] }) {
 export function ImportPanel({
   fileName,
   importPlan,
+  importPolicy,
   importError,
   importMessage,
   isPreviewing,
   isApplying,
   canApply,
+  onPolicyChange,
   onApply,
   onCancel
 }: ImportPanelProps) {
@@ -98,14 +111,52 @@ export function ImportPanel({
 
         {importPlan ? (
           <>
+            <fieldset className="import-policy-control" disabled={isPreviewing || isApplying}>
+              <legend>Conflict policy</legend>
+              <p id="import-policy-help">Choose how existing issue IDs are handled before applying this import.</p>
+              <label>
+                <input
+                  type="radio"
+                  name="import-conflict-policy"
+                  value="skip-conflicts"
+                  checked={importPolicy === 'skip-conflicts'}
+                  aria-describedby="import-policy-help"
+                  onChange={() => onPolicyChange('skip-conflicts')}
+                />
+                <span>Skip existing conflicts (default)</span>
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="import-conflict-policy"
+                  value="replace-conflicts"
+                  checked={importPolicy === 'replace-conflicts'}
+                  aria-describedby="import-policy-help"
+                  onChange={() => onPolicyChange('replace-conflicts')}
+                />
+                <span>Replace changed issues</span>
+              </label>
+            </fieldset>
             <div className="import-total-row">
               <div>
                 <span>Input records</span>
                 <strong>{totalCounts(importPlan.summary.input)}</strong>
               </div>
               <div>
+                <span>Exact matches</span>
+                <strong>{totalCounts(importPlan.summary.exactMatches)}</strong>
+              </div>
+              <div>
+                <span>Changed</span>
+                <strong>{totalCounts(importPlan.summary.changed)}</strong>
+              </div>
+              <div>
                 <span>Create</span>
                 <strong>{totalCounts(importPlan.summary.toCreate)}</strong>
+              </div>
+              <div>
+                <span>Replace</span>
+                <strong>{totalCounts(importPlan.summary.toReplace)}</strong>
               </div>
               <div>
                 <span>Skip</span>
@@ -118,7 +169,10 @@ export function ImportPanel({
                   <tr>
                     <th scope="col">Type</th>
                     <th scope="col">Input</th>
+                    <th scope="col">Exact</th>
+                    <th scope="col">Changed</th>
                     <th scope="col">Create</th>
+                    <th scope="col">Replace</th>
                     <th scope="col">Skip</th>
                   </tr>
                 </thead>
@@ -128,7 +182,10 @@ export function ImportPanel({
                       key={key}
                       label={label}
                       input={importPlan.summary.input[key]}
+                      exact={importPlan.summary.exactMatches[key]}
+                      changed={importPlan.summary.changed[key]}
                       toCreate={importPlan.summary.toCreate[key]}
+                      toReplace={importPlan.summary.toReplace[key]}
                       skip={importPlan.summary.skip[key]}
                     />
                   ))}

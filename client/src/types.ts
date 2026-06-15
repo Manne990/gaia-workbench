@@ -97,7 +97,10 @@ export type ActivityEvent = {
 };
 
 export type ImportEntity = 'issue' | 'comment' | 'commentEditHistory' | 'activityEvent';
-export type ImportDecisionType = 'import' | 'skip-existing' | 'reject';
+export type ImportConflictPolicy = 'skip-conflicts' | 'replace-conflicts';
+export type ImportDecisionType = 'import' | 'skip-existing' | 'replace-existing' | 'reject';
+export type ImportMatchType = 'new' | 'exact' | 'changed';
+export type ImportPolicyDecision = 'import' | 'skip' | 'replace' | 'reject';
 
 export type ImportCounts = {
   issues: number;
@@ -109,7 +112,10 @@ export type ImportCounts = {
 export type ImportSummary = {
   input: ImportCounts;
   toCreate: ImportCounts;
+  toReplace: ImportCounts;
   skip: ImportCounts;
+  exactMatches: ImportCounts;
+  changed: ImportCounts;
   reject: number;
 };
 
@@ -120,6 +126,8 @@ export type ImportDecision = {
   issueId?: string;
   commentId?: string;
   decision: ImportDecisionType;
+  matchType?: ImportMatchType;
+  policyDecision?: ImportPolicyDecision;
   reasons: string[];
 };
 
@@ -133,6 +141,7 @@ export type ImportErrorDetail = {
 export type ImportPlan = {
   valid: boolean;
   exportVersion: number | null;
+  policy: ImportConflictPolicy;
   summary: ImportSummary;
   decisions: ImportDecision[];
   errors: ImportErrorDetail[];

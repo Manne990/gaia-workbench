@@ -13,6 +13,8 @@ type ExportedComment = {
   id: string;
   issueId: string;
   body?: string;
+  createdAt?: string;
+  updatedAt?: string;
   editHistory: Array<{ id: string; commentId: string }>;
 };
 
@@ -21,10 +23,23 @@ type ExportedIssue = {
   title?: string;
   description?: string;
   status: string;
+  priority?: string;
+  labels?: string[];
+  dueDate?: string | null;
+  isOverdue?: boolean;
+  isBlocked?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
   archivedAt?: string | null;
   dependsOnIssueIds?: string[];
   comments: ExportedComment[];
-  activityEvents: Array<{ id: string; issueId: string }>;
+  activityEvents: Array<{
+    id: string;
+    issueId: string;
+    type?: string;
+    metadata?: Record<string, unknown>;
+    createdAt?: string;
+  }>;
 };
 
 type TrackerExport = {
@@ -309,6 +324,155 @@ describe('tracker import API', () => {
       }
     });
     expect(afterReimport.body).toEqual(beforeReimport.body);
+  });
+
+  it('classifies exact duplicate and changed issue conflicts in preview', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const counts = countExport(payload);
+
+    await request(app).post('/api/import/apply').send(payload).expect(200);
+
+    const exactPreview = await request(app).post('/api/import/preview').send(payload).expect(200);
+
+    expect(exactPreview.body).toMatchObject({
+      policy: 'skip-conflicts',
+      summary: {
+        exactMatches: counts,
+        changed: {
+          issues: 0,
+          comments: 0,
+          editHistory: 0,
+          activityEvents: 0
+        },
+        toCreate: {
+          issues: 0,
+          comments: 0,
+          editHistory: 0,
+          activityEvents: 0
+        },
+        skip: counts
+      }
+    });
+
+    const derivedOnly = cloneExport(payload);
+    derivedOnly.issues[0].isOverdue = !derivedOnly.issues[0].isOverdue;
+
+    const derivedOnlyPreview = await request(app).post('/api/import/preview').send(derivedOnly).expect(200);
+
+    expect(derivedOnlyPreview.body.summary.changed.issues).toBe(0);
+    expect(derivedOnlyPreview.body.summary.exactMatches.issues).toBe(counts.issues);
+
+    const changed = cloneExport(payload);
+    changed.issues[0].title = 'Changed conflict title';
+    changed.issues[0].isOverdue = !changed.issues[0].isOverdue;
+
+    const changedPreview = await request(app).post('/api/import/preview').send(changed).expect(200);
+    const changedIssueDecision = changedPreview.body.decisions.find(
+      (decision: { entity: string; issueId?: string }) =>
+        decision.entity === 'issue' && decision.issueId === changed.issues[0].id
+    );
+
+    expect(changedPreview.body.summary.changed.issues).toBe(1);
+    expect(changedPreview.body.summary.toReplace.issues).toBe(0);
+    expect(changedIssueDecision).toMatchObject({
+      decision: 'skip-existing',
+      matchType: 'changed',
+      policyDecision: 'skip'
+    });
+  });
+
+  it('replaces changed issue fields and dependencies while importing new descendants under replace policy', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const changed = cloneExport(payload);
+    const changedIssue = changed.issues[0];
+    const dependencyTarget = changed.issues[1];
+
+    await request(app).post('/api/import/apply').send(payload).expect(200);
+
+    changedIssue.title = 'Replaced import issue';
+    changedIssue.description = 'Changed through replace-conflicts import.';
+    changedIssue.status = 'in_progress';
+    changedIssue.priority = 'low';
+    changedIssue.labels = ['replace', 'conflict'];
+    changedIssue.dueDate = null;
+    changedIssue.updatedAt = '2999-12-30T00:00:00.000Z';
+    changedIssue.dependsOnIssueIds = [dependencyTarget.id];
+    changedIssue.isBlocked = dependencyTarget.status !== 'done';
+    changedIssue.comments.push({
+      id: 'replace-policy-new-comment',
+      issueId: changedIssue.id,
+      body: 'New comment imported with replaced issue',
+      createdAt: '2999-12-30T00:01:00.000Z',
+      updatedAt: '2999-12-30T00:01:00.000Z',
+      editHistory: []
+    });
+
+    const preview = await request(app)
+      .post('/api/import/preview')
+      .send({ ...changed, conflictPolicy: 'replace-conflicts' })
+      .expect(200);
+
+    expect(preview.body).toMatchObject({
+      policy: 'replace-conflicts',
+      summary: {
+        changed: expect.objectContaining({ issues: 1 }),
+        toReplace: expect.objectContaining({ issues: 1 }),
+        toCreate: expect.objectContaining({ comments: 1 })
+      }
+    });
+
+    const applied = await request(app)
+      .post('/api/import/apply')
+      .send({ ...changed, conflictPolicy: 'replace-conflicts' })
+      .expect(200);
+    const detail = await request(app).get(`/api/issues/${changedIssue.id}`).expect(200);
+    const comments = await request(app).get(`/api/issues/${changedIssue.id}/comments`).expect(200);
+    const reapplied = await request(app)
+      .post('/api/import/apply')
+      .send({ ...changed, conflictPolicy: 'replace-conflicts' })
+      .expect(200);
+
+    expect(applied.body.summary.toReplace.issues).toBe(1);
+    expect(detail.body).toMatchObject({
+      id: changedIssue.id,
+      title: 'Replaced import issue',
+      description: 'Changed through replace-conflicts import.',
+      status: 'in_progress',
+      priority: 'low',
+      labels: ['replace', 'conflict'],
+      dueDate: null,
+      dependsOnIssueIds: [dependencyTarget.id],
+      isBlocked: true
+    });
+    expect(comments.body.some((comment: { id: string }) => comment.id === 'replace-policy-new-comment')).toBe(true);
+    expect(reapplied.body.summary.toReplace.issues).toBe(0);
+    expect(reapplied.body.summary.changed.issues).toBe(0);
+  });
+
+  it('rejects unsupported import conflict policies without mutating existing data', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const beforeImport = await request(app).get('/api/export').expect(200);
+
+    const response = await request(app)
+      .post('/api/import/apply')
+      .send({ ...payload, conflictPolicy: 'overwrite-everything' })
+      .expect(400);
+    const afterImport = await request(app).get('/api/export').expect(200);
+
+    expect(response.body).toMatchObject({
+      valid: false,
+      policy: 'skip-conflicts',
+      errors: [
+        expect.objectContaining({
+          code: 'invalid_import_policy',
+          path: '$.conflictPolicy'
+        })
+      ]
+    });
+    expect(afterImport.body).toEqual(beforeImport.body);
   });
 
   it('returns a structured error for invalid JSON', async () => {

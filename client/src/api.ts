@@ -2,6 +2,7 @@ import type {
   ActivityEvent,
   CommentEditHistory,
   ImportPlan,
+  ImportConflictPolicy,
   Issue,
   IssueDependencyState,
   SavedFilterView,
@@ -146,6 +147,12 @@ export async function deleteSavedFilterView(id: string): Promise<void> {
   }
 }
 
+function withImportPolicy(payload: unknown, conflictPolicy: ImportConflictPolicy): unknown {
+  return payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? { ...(payload as Record<string, unknown>), conflictPolicy }
+    : payload;
+}
+
 async function readImportPlan(response: Response): Promise<ImportPlan> {
   const body = (await response.json().catch(() => null)) as ImportPlan | null;
 
@@ -156,21 +163,27 @@ async function readImportPlan(response: Response): Promise<ImportPlan> {
   return body;
 }
 
-export async function previewImport(payload: unknown): Promise<ImportPlan> {
+export async function previewImport(
+  payload: unknown,
+  conflictPolicy: ImportConflictPolicy = 'skip-conflicts'
+): Promise<ImportPlan> {
   const response = await fetch('/api/import/preview', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(withImportPolicy(payload, conflictPolicy))
   });
 
   return readImportPlan(response);
 }
 
-export async function applyImport(payload: unknown): Promise<ImportPlan> {
+export async function applyImport(
+  payload: unknown,
+  conflictPolicy: ImportConflictPolicy = 'skip-conflicts'
+): Promise<ImportPlan> {
   const response = await fetch('/api/import/apply', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(withImportPolicy(payload, conflictPolicy))
   });
 
   return readImportPlan(response);

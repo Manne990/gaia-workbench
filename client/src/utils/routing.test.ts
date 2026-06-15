@@ -27,6 +27,7 @@ describe('client routing helpers', () => {
       search: 'ready for review',
       status: 'review',
       priority: 'high',
+      label: '',
       includeArchived: false,
       blockedOnly: false,
       staleOnly: false,
@@ -41,6 +42,7 @@ describe('client routing helpers', () => {
       search: '',
       status: 'all',
       priority: 'all',
+      label: '',
       includeArchived: false,
       blockedOnly: false,
       staleOnly: false,
@@ -53,6 +55,7 @@ describe('client routing helpers', () => {
       search: '',
       status: 'all',
       priority: 'all',
+      label: '',
       includeArchived: true,
       blockedOnly: false,
       staleOnly: false,
@@ -65,6 +68,7 @@ describe('client routing helpers', () => {
       search: '',
       status: 'all',
       priority: 'all',
+      label: '',
       includeArchived: false,
       blockedOnly: true,
       staleOnly: false,
@@ -77,6 +81,7 @@ describe('client routing helpers', () => {
       search: '',
       status: 'all',
       priority: 'all',
+      label: '',
       includeArchived: false,
       blockedOnly: false,
       staleOnly: true,
@@ -89,6 +94,7 @@ describe('client routing helpers', () => {
       search: '',
       status: 'all',
       priority: 'all',
+      label: '',
       includeArchived: false,
       blockedOnly: false,
       staleOnly: false,
@@ -98,6 +104,7 @@ describe('client routing helpers', () => {
       search: '',
       status: 'all',
       priority: 'all',
+      label: '',
       includeArchived: false,
       blockedOnly: false,
       staleOnly: false,
@@ -107,6 +114,7 @@ describe('client routing helpers', () => {
       search: '',
       status: 'all',
       priority: 'all',
+      label: '',
       includeArchived: false,
       blockedOnly: false,
       staleOnly: false,
@@ -120,19 +128,21 @@ describe('client routing helpers', () => {
         search: 'ready for review',
         status: 'review',
         priority: 'high',
+        label: 'api',
         includeArchived: true,
         blockedOnly: true,
         staleOnly: true,
         pageSize: 50
       })
     ).toBe(
-      '/?search=ready+for+review&status=review&priority=high&includeArchived=true&blockedOnly=true&staleOnly=true&limit=50'
+      '/?search=ready+for+review&status=review&priority=high&label=api&includeArchived=true&blockedOnly=true&staleOnly=true&limit=50'
     );
     expect(
       buildDashboardPath({
         search: '  ',
         status: 'all',
         priority: 'all',
+        label: '  ',
         includeArchived: false,
         blockedOnly: false,
         staleOnly: false,
@@ -147,13 +157,33 @@ describe('client routing helpers', () => {
         search: 'api export',
         status: 'done',
         priority: 'low',
+        label: 'docs',
         includeArchived: true,
         blockedOnly: true,
         staleOnly: true,
         pageSize: 100
       })
     ).toBe(
-      '/issues/issue%20id?search=api+export&status=done&priority=low&includeArchived=true&blockedOnly=true&staleOnly=true&limit=100'
+      '/issues/issue%20id?search=api+export&status=done&priority=low&label=docs&includeArchived=true&blockedOnly=true&staleOnly=true&limit=100'
     );
+  });
+
+  it('parses and builds dashboard label filters', () => {
+    expect(parseDashboardFiltersFromSearch('?label=%20api%20')).toMatchObject({
+      label: 'api'
+    });
+
+    expect(
+      buildDashboardPath({
+        search: '',
+        status: 'all',
+        priority: 'all',
+        label: 'backend',
+        includeArchived: false,
+        blockedOnly: false,
+        staleOnly: false,
+        pageSize: 25
+      })
+    ).toBe('/?label=backend');
   });
 });

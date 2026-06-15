@@ -203,6 +203,7 @@ describe('persistence layer', () => {
         search: 'api',
         status: 'review',
         priority: 'high',
+        label: 'backend',
         includeArchived: true,
         staleOnly: true,
         pageSize: 50
@@ -228,6 +229,7 @@ describe('persistence layer', () => {
           id: created.id,
           name: 'Ops backlog',
           search: 'api',
+          label: 'backend',
           status: 'review',
           priority: 'high',
           includeArchived: true,

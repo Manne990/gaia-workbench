@@ -198,6 +198,7 @@ export type DashboardFilters = {
   search: string;
   status: StatusFilter;
   priority: PriorityFilter;
+  label: string;
   includeArchived: boolean;
   blockedOnly: boolean;
   staleOnly: boolean;

@@ -53,6 +53,7 @@ export interface IssueUpdate {
 export interface IssueListFilters {
   status?: IssueStatus;
   priority?: IssuePriority;
+  label?: string;
   search?: string;
   includeArchived?: boolean;
   blockedOnly?: boolean;
@@ -127,6 +128,7 @@ export interface SavedFilterView {
   search: string;
   status: SavedFilterStatus;
   priority: SavedFilterPriority;
+  label: string;
   includeArchived: boolean;
   blockedOnly: boolean;
   staleOnly: boolean;
@@ -140,6 +142,7 @@ export interface NewSavedFilterView {
   search?: string;
   status?: SavedFilterStatus;
   priority?: SavedFilterPriority;
+  label?: string;
   includeArchived?: boolean;
   blockedOnly?: boolean;
   staleOnly?: boolean;
@@ -151,6 +154,7 @@ export interface SavedFilterViewUpdate {
   search?: string;
   status?: SavedFilterStatus;
   priority?: SavedFilterPriority;
+  label?: string;
   includeArchived?: boolean;
   blockedOnly?: boolean;
   staleOnly?: boolean;

@@ -8,6 +8,7 @@ export const defaultDashboardFilters: DashboardFilters = {
   search: '',
   status: 'all',
   priority: 'all',
+  label: '',
   includeArchived: false,
   blockedOnly: false,
   staleOnly: false,
@@ -37,6 +38,7 @@ export function parseDashboardFiltersFromSearch(search: string | URLSearchParams
   const searchFilter = (params.get('search') ?? '').trim();
   const statusFilter = parseStatusFilter(params.get('status'));
   const priorityFilter = parsePriorityFilter(params.get('priority'));
+  const label = (params.get('label') ?? '').trim();
   const includeArchived = params.get('includeArchived') === 'true';
   const blockedOnly = params.get('blockedOnly') === 'true';
   const staleOnly = params.get('staleOnly') === 'true';
@@ -46,6 +48,7 @@ export function parseDashboardFiltersFromSearch(search: string | URLSearchParams
     search: searchFilter,
     status: statusFilter,
     priority: priorityFilter,
+    label,
     includeArchived,
     blockedOnly,
     staleOnly,
@@ -122,6 +125,11 @@ export function buildDashboardQuery(
 
   if (filters.priority !== 'all') {
     params.set('priority', filters.priority);
+  }
+
+  const label = filters.label.trim();
+  if (label) {
+    params.set('label', label);
   }
 
   if (filters.includeArchived) {

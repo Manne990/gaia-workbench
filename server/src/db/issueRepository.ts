@@ -328,6 +328,20 @@ function buildIssueListWhereClause(
     values.priority = filters.priority;
   }
 
+  const label = filters.label?.trim();
+  if (label) {
+    clauses.push(
+      `
+      EXISTS (
+        SELECT 1
+        FROM json_each(issues.labels) AS issue_labels
+        WHERE issue_labels.value = @label
+      )
+      `
+    );
+    values.label = label;
+  }
+
   const search = filters.search?.trim().toLowerCase();
   if (search) {
     clauses.push("(LOWER(title) LIKE @search ESCAPE '\\' OR LOWER(description) LIKE @search ESCAPE '\\')");

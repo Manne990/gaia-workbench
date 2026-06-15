@@ -109,6 +109,7 @@ const validationErrorMessages = new Set([
   'Invalid saved view search',
   'Invalid saved view status',
   'Invalid saved view priority',
+  'Invalid saved view label',
   'Invalid saved view includeArchived',
   'Invalid saved view blockedOnly',
   'Invalid saved view staleOnly',
@@ -188,6 +189,7 @@ function buildIssueListFilters(query: {
   status?: unknown;
   priority?: unknown;
   search?: unknown;
+  label?: unknown;
   includeArchived?: unknown;
   blockedOnly?: unknown;
   staleOnly?: unknown;
@@ -196,6 +198,7 @@ function buildIssueListFilters(query: {
     status: getOptionalQueryString(query.status) as IssueListFilters['status'],
     priority: getOptionalQueryString(query.priority) as IssueListFilters['priority'],
     search: getOptionalQueryString(query.search),
+    label: getOptionalQueryString(query.label),
     includeArchived: parseOptionalBooleanQuery(query.includeArchived, false, 'Invalid includeArchived parameter'),
     blockedOnly: parseOptionalBooleanQuery(query.blockedOnly, false, 'Invalid blockedOnly parameter'),
     staleOnly: parseOptionalBooleanQuery(query.staleOnly, false, 'Invalid staleOnly parameter')

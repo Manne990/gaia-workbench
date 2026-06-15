@@ -7,7 +7,7 @@
     system-ui,
     -apple-system,
     BlinkMacSystemFont,
-    "Segoe UI",
+    'Segoe UI',
     sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -1029,7 +1029,7 @@ td > span:not(.pill) {
   border-radius: 5px;
   background: #f1f5f7;
   color: #25313b;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
   font-size: 0.92em;
 }
 
@@ -1381,6 +1381,49 @@ td > span:not(.pill) {
   list-style: none;
 }
 
+.dependency-graph {
+  display: grid;
+  gap: 16px;
+  margin: 16px 0 0;
+}
+
+.dependency-subsection {
+  display: grid;
+  gap: 10px;
+}
+
+.dependency-subsection .state-message.compact {
+  margin: 0;
+}
+
+.dependency-subheader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #5f6a74;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.dependency-subheader h4 {
+  margin: 0;
+  color: #15181c;
+  font-size: 0.88rem;
+}
+
+.dependency-subheader span {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #eef2f6;
+  color: #52606d;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
 .dependency-item {
   display: flex;
   align-items: center;
@@ -1555,6 +1598,12 @@ td > span:not(.pill) {
   margin: 10px 0 0;
   color: #30363d;
   line-height: 1.5;
+}
+
+@media (min-width: 860px) {
+  .dependency-graph {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .comment-actions {

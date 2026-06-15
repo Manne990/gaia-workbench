@@ -551,31 +551,82 @@ test('dependency links show and clear blocked issue visibility', async ({ page }
     status: 'in_progress',
     priority: 'medium'
   });
+  const dependent = await createIssueThroughApi(page, {
+    title: 'Dependency dependent issue',
+    description: 'Blocked by the target issue.',
+    status: 'review',
+    priority: 'low'
+  });
+  const blockerAfterArchive = await createIssueThroughApi(page, {
+    title: 'Dependency blocker after archive',
+    description: 'Used to clear block state after an archived blocker remains.',
+    status: 'todo',
+    priority: 'low'
+  });
 
   await page.goto(`/issues/${blocked.id}`);
 
   const detail = page.getByRole('region', { name: blocked.title });
   const dependencyForm = detail.getByRole('form', { name: 'Dependency form' });
 
-  await expect(detail.getByText('No dependencies yet.')).toBeVisible();
+  await expect(detail.getByRole('heading', { name: 'Blockers' })).toBeVisible();
+  await expect(detail.getByRole('heading', { name: 'Dependents' })).toBeVisible();
+  await expect(detail.getByLabel('Issue blockers')).toContainText('No blockers.');
+  await expect(detail.getByLabel('Issue dependents')).toContainText('No dependents.');
+
   await dependencyForm.getByLabel('Add blocker issue ID').fill(blocker.id);
   await dependencyForm.getByRole('button', { name: 'Add Dependency' }).click();
 
+  const blockersSection = detail.getByLabel('Issue blockers');
+  const blockerItem = blockersSection.getByRole('listitem').filter({ hasText: blocker.title });
+
   await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
-  await expect(detail.getByLabel('Issue dependencies').getByText('Dependency blocker issue')).toBeVisible();
-  await expect(detail.getByLabel('Issue dependencies').locator('.blocked-pill')).toHaveText('Blocking');
+  await expect(blockerItem.getByText(blocker.title)).toBeVisible();
+  await expect(blockerItem.getByRole('button', { name: `Remove dependency ${blocker.title}` })).toBeVisible();
+  await expect(blockerItem.locator('.blocked-pill')).toHaveText('Blocking');
   await expect(detail.getByLabel('Issue activity').getByText('Dependency added')).toBeVisible();
 
   const blockedRow = page.getByRole('row', { name: /Dependency blocked issue.*In Progress.*Medium/ });
 
   await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
 
-  await detail.getByRole('button', { name: 'Remove dependency Dependency blocker issue' }).click();
+  await page.request.post(`/api/issues/${dependent.id}/dependencies`, {
+    data: {
+      dependsOnIssueId: blocked.id
+    }
+  });
+  await page.reload();
+
+  const dependentsSection = detail.getByLabel('Issue dependents');
+  const dependentItem = dependentsSection.getByRole('listitem').filter({ hasText: dependent.title });
+
+  await expect(dependentItem).toBeVisible();
+  await expect(dependentItem.getByText('Review')).toBeVisible();
+
+  await page.request.post(`/api/issues/${blocker.id}/archive`);
+  await page.reload();
+
+  const archivedBlockerItem = blockersSection.getByRole('listitem').filter({ hasText: blocker.title });
+
+  await expect(archivedBlockerItem.getByText('Archived')).toBeVisible();
+  await expect(archivedBlockerItem.getByText('Blocking')).toHaveCount(0);
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toHaveCount(0);
+
+  await dependencyForm.getByLabel('Add blocker issue ID').fill(blockerAfterArchive.id);
+  await dependencyForm.getByRole('button', { name: 'Add Dependency' }).click();
+
+  const blockerAfterArchiveItem = blockersSection.getByRole('listitem').filter({ hasText: blockerAfterArchive.title });
+
+  await expect(blockerAfterArchiveItem).toBeVisible();
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByLabel('Issue activity').getByText('Dependency added')).toHaveCount(2);
+
+  await blockerAfterArchiveItem.getByRole('button', { name: `Remove dependency ${blockerAfterArchive.title}` }).click();
 
   await expect(detail.getByText('Waiting on at least one active dependency.')).toHaveCount(0);
-  await expect(detail.getByText('No dependencies yet.')).toBeVisible();
-  await expect(detail.getByLabel('Issue activity').getByText('Dependency removed')).toBeVisible();
   await expect(blockedRow.locator('.blocked-pill')).toHaveCount(0);
+  await expect(detail.getByLabel('Issue activity').getByText('Dependency removed')).toBeVisible();
+  await expect(dependentsSection.getByText(dependent.title)).toBeVisible();
 });
 
 test('dashboard density toggle compacts rows without hiding issue information', async ({ page }) => {

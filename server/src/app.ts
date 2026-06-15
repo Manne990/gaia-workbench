@@ -100,12 +100,14 @@ const validationErrorMessages = new Set([
   'Invalid page parameter',
   'Invalid limit parameter',
   'Invalid includeArchived parameter',
+  'Invalid blockedOnly parameter',
   'Saved view name is required',
   'Invalid saved view name',
   'Invalid saved view search',
   'Invalid saved view status',
   'Invalid saved view priority',
   'Invalid saved view includeArchived',
+  'Invalid saved view blockedOnly',
   'Invalid saved view pageSize'
 ]);
 
@@ -360,7 +362,8 @@ export function createApp(config: AppConfig = {}) {
           req.query.includeArchived,
           false,
           'Invalid includeArchived parameter'
-        )
+        ),
+        blockedOnly: parseOptionalBooleanQuery(req.query.blockedOnly, false, 'Invalid blockedOnly parameter')
       };
 
       return res.status(200).json(issueRepository.list(filters, getIssueListPagination(req.query)));

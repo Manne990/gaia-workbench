@@ -246,6 +246,22 @@ function buildIssueListWhereClause(filters: IssueListFilters): {
     values.status = filters.status;
   }
 
+  if (filters.blockedOnly === true) {
+    clauses.push(
+      `
+      EXISTS (
+        SELECT 1
+        FROM issue_dependencies AS dependencies
+        INNER JOIN issues AS blocked_dependencies
+          ON blocked_dependencies.id = dependencies.depends_on_issue_id
+        WHERE dependencies.issue_id = issues.id
+          AND blocked_dependencies.archived_at IS NULL
+          AND blocked_dependencies.status != 'done'
+      )
+      `
+    );
+  }
+
   if (filters.priority !== undefined) {
     assertValidPriority(filters.priority);
     clauses.push('priority = @priority');

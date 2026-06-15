@@ -30,6 +30,8 @@ type IssueListPanelProps = {
   onPriorityFilterChange: (value: PriorityFilter) => void;
   includeArchived: boolean;
   onIncludeArchivedChange: (value: boolean) => void;
+  blockedOnly: boolean;
+  onBlockedOnlyChange: (value: boolean) => void;
   pageSize: number;
   onPageSizeChange: (value: number) => void;
   dashboardDensity: DashboardDensity;
@@ -72,6 +74,8 @@ export function IssueListPanel({
   onPriorityFilterChange,
   includeArchived,
   onIncludeArchivedChange,
+  blockedOnly,
+  onBlockedOnlyChange,
   pageSize,
   onPageSizeChange,
   dashboardDensity,
@@ -181,6 +185,16 @@ export function IssueListPanel({
             onChange={(event) => onIncludeArchivedChange(event.target.checked)}
           />
           <span>Include archived</span>
+        </label>
+
+        <label className="filter-toggle" htmlFor="issue-blocked-only-filter">
+          <input
+            id="issue-blocked-only-filter"
+            type="checkbox"
+            checked={blockedOnly}
+            onChange={(event) => onBlockedOnlyChange(event.target.checked)}
+          />
+          <span>Blocked only</span>
         </label>
 
         <div className="filter-actions">

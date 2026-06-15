@@ -71,6 +71,7 @@ function expectCurrentSchema(database: Database.Database): void {
       'status',
       'priority',
       'include_archived',
+      'blocked_only',
       'page_size',
       'created_at',
       'updated_at'

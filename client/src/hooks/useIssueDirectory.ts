@@ -38,6 +38,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialFilters.status);
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>(initialFilters.priority);
   const [includeArchived, setIncludeArchived] = useState(initialFilters.includeArchived);
+  const [blockedOnly, setBlockedOnly] = useState(initialFilters.blockedOnly);
   const [pageSize, setPageSize] = useState(initialFilters.pageSize);
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState<IssueListPagination>(defaultPagination);
@@ -70,6 +71,10 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
         params.set('includeArchived', 'true');
       }
 
+      if (blockedOnly) {
+        params.set('blockedOnly', 'true');
+      }
+
       try {
         setLoadState('loading');
         const response = await fetch(`/api/issues?${params.toString()}`, {
@@ -100,7 +105,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     void loadIssues();
 
     return () => controller.abort();
-  }, [currentPage, includeArchived, pageSize, priorityFilter, reloadToken, searchFilter, statusFilter]);
+  }, [blockedOnly, currentPage, includeArchived, pageSize, priorityFilter, reloadToken, searchFilter, statusFilter]);
 
   const activeFilterSummaries = useMemo(() => {
     const filters: ActiveFilterSummary[] = [];
@@ -122,12 +127,16 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
       filters.push({ key: 'includeArchived', label: 'Archived', value: 'Included' });
     }
 
+    if (blockedOnly) {
+      filters.push({ key: 'blockedOnly', label: 'Blocked', value: 'Only' });
+    }
+
     if (pageSize !== defaultDashboardFilters.pageSize) {
       filters.push({ key: 'pageSize', label: 'Page size', value: String(pageSize) });
     }
 
     return filters;
-  }, [includeArchived, pageSize, priorityFilter, searchFilter, statusFilter]);
+  }, [blockedOnly, includeArchived, pageSize, priorityFilter, searchFilter, statusFilter]);
 
   const hasActiveFilters = activeFilterSummaries.length > 0;
 
@@ -153,6 +162,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     setStatusFilter('all');
     setPriorityFilter('all');
     setIncludeArchived(false);
+    setBlockedOnly(false);
     setPageSize(defaultDashboardFilters.pageSize);
     setCurrentPage(1);
   }
@@ -162,6 +172,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     setStatusFilter(filters.status);
     setPriorityFilter(filters.priority);
     setIncludeArchived(filters.includeArchived);
+    setBlockedOnly(filters.blockedOnly);
     setPageSize(filters.pageSize);
     setCurrentPage(1);
   }
@@ -183,6 +194,11 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
 
   function setIncludeArchivedAndResetPage(value: boolean) {
     setIncludeArchived(value);
+    setCurrentPage(1);
+  }
+
+  function setBlockedOnlyAndResetPage(value: boolean) {
+    setBlockedOnly(value);
     setCurrentPage(1);
   }
 
@@ -219,6 +235,8 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     setPriorityFilter: setPriorityFilterAndResetPage,
     includeArchived,
     setIncludeArchived: setIncludeArchivedAndResetPage,
+    blockedOnly,
+    setBlockedOnly: setBlockedOnlyAndResetPage,
     pageSize,
     setPageSize: setPageSizeAndResetPage,
     currentPage,

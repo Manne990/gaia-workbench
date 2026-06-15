@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 
 // Add future migrations to MIGRATIONS in version order and bump this value.
 // Existing file-backed databases may start at user_version 0.
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 const createIssuesTable = `
   CREATE TABLE IF NOT EXISTS issues (
@@ -77,6 +77,7 @@ const createSavedFilterViewsTable = `
     status TEXT NOT NULL DEFAULT 'all' CHECK (status IN ('all', 'todo', 'in_progress', 'review', 'done')),
     priority TEXT NOT NULL DEFAULT 'all' CHECK (priority IN ('all', 'low', 'medium', 'high')),
     include_archived INTEGER NOT NULL DEFAULT 0 CHECK (include_archived IN (0, 1)),
+    blocked_only INTEGER NOT NULL DEFAULT 0 CHECK (blocked_only IN (0, 1)),
     page_size INTEGER NOT NULL DEFAULT 25 CHECK (page_size >= 1 AND page_size <= 100),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -140,6 +141,20 @@ function ensureIssueColumn(database: Database.Database, columnName: string, defi
   }
 }
 
+function ensureTableColumn(
+  database: Database.Database,
+  tableName: string,
+  columnName: string,
+  definition: string
+): void {
+  const columns = database.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  const hasColumn = columns.some((column) => column.name === columnName);
+
+  if (!hasColumn) {
+    database.exec(`ALTER TABLE ${tableName} ADD COLUMN ${definition};`);
+  }
+}
+
 function runCurrentSchemaMigration(database: Database.Database): void {
   database.exec(createIssuesTable);
   ensureIssueColumn(database, 'labels', "labels TEXT NOT NULL DEFAULT '[]'");
@@ -158,6 +173,10 @@ function runSavedFilterViewsMigration(database: Database.Database): void {
   database.exec(createSavedFilterViewsTable);
   database.exec(createSavedFilterViewsNameIndex);
   database.exec(createSavedFilterViewsUpdatedAtIndex);
+}
+
+function runSavedFilterViewsBlockedOnlyMigration(database: Database.Database): void {
+  ensureTableColumn(database, TABLE_NAMES.savedFilterViews, 'blocked_only', 'blocked_only INTEGER NOT NULL DEFAULT 0');
 }
 
 function runIssueDependenciesMigration(database: Database.Database): void {
@@ -219,6 +238,7 @@ const REQUIRED_COLUMNS_BY_TABLE: Record<(typeof REQUIRED_TABLES)[number], readon
     'status',
     'priority',
     'include_archived',
+    'blocked_only',
     'page_size',
     'created_at',
     'updated_at'
@@ -240,6 +260,11 @@ const MIGRATIONS: Migration[] = [
     version: 3,
     name: '003_create_issue_dependencies',
     up: runIssueDependenciesMigration
+  },
+  {
+    version: 4,
+    name: '004_add_blocked_only_to_saved_filter_views',
+    up: runSavedFilterViewsBlockedOnlyMigration
   }
 ];
 

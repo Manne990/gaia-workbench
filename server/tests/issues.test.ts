@@ -323,6 +323,58 @@ describe('issues API', () => {
     expect(blockedWithFilter.body.pagination.total).toBe(1);
   });
 
+  it('recomputes blocked state when blockers are closed archived unarchived or removed', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const blocker = await request(app).post('/api/issues').send({ title: 'Mutable blocker issue' }).expect(201);
+    const blocked = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Blocked issue with mutable dependency', status: 'in_progress' })
+      .expect(201);
+
+    await request(app)
+      .post(`/api/issues/${blocked.body.id}/dependencies`)
+      .send({ dependsOnIssueId: blocker.body.id })
+      .expect(201);
+
+    const expectBlockedProjection = async (isBlocked: boolean, dependsOnIssueIds = [blocker.body.id]) => {
+      const detail = await request(app).get(`/api/issues/${blocked.body.id}`).expect(200);
+      const dependencyDetail = await request(app).get(`/api/issues/${blocked.body.id}/dependencies`).expect(200);
+      const blockedOnly = await request(app).get('/api/issues?blockedOnly=true').expect(200);
+
+      expect(detail.body).toMatchObject({
+        id: blocked.body.id,
+        isBlocked,
+        dependsOnIssueIds
+      });
+      expect(dependencyDetail.body).toMatchObject({
+        issueId: blocked.body.id,
+        isBlocked
+      });
+      expect(blockedOnly.body.items.map((issue: { id: string }) => issue.id)).toEqual(
+        isBlocked ? [blocked.body.id] : []
+      );
+      expect(blockedOnly.body.pagination.total).toBe(isBlocked ? 1 : 0);
+    };
+
+    await expectBlockedProjection(true);
+
+    await request(app).post(`/api/issues/${blocker.body.id}/close`).expect(200);
+    await expectBlockedProjection(false);
+
+    await request(app).post(`/api/issues/${blocker.body.id}/reopen`).expect(200);
+    await expectBlockedProjection(true);
+
+    await request(app).post(`/api/issues/${blocker.body.id}/archive`).expect(200);
+    await expectBlockedProjection(false);
+
+    await request(app).post(`/api/issues/${blocker.body.id}/unarchive`).expect(200);
+    await expectBlockedProjection(true);
+
+    await request(app).delete(`/api/issues/${blocked.body.id}/dependencies/${blocker.body.id}`).expect(200);
+    await expectBlockedProjection(false, []);
+  });
+
   it('filters stale issues by updated timestamp', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

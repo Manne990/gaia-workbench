@@ -609,7 +609,35 @@ describe('tracker import API', () => {
     );
   });
 
-  it('rejects dangling dependency references and dependency cycles', async () => {
+  it('rejects invalid dependency IDs and self-dependencies in import preview', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const invalid = cloneExport(payload);
+
+    invalid.issues[0].dependsOnIssueIds = ['', invalid.issues[0].id, invalid.issues[1].id, invalid.issues[1].id];
+
+    const response = await request(app).post('/api/import/preview').send(invalid).expect(400);
+
+    expect(response.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'invalid_dependency',
+          path: '$.issues[0].dependsOnIssueIds[0]'
+        }),
+        expect.objectContaining({
+          code: 'invalid_dependency',
+          path: '$.issues[0].dependsOnIssueIds[1]',
+          message: 'An issue cannot depend on itself.'
+        }),
+        expect.objectContaining({
+          code: 'duplicate_dependency',
+          path: '$.issues[0].dependsOnIssueIds[3]'
+        })
+      ])
+    );
+  });
+
+  it('rejects dependency references to issues absent from the import payload and dependency cycles', async () => {
     const app = createApp({ databasePath: ':memory:' });
     const payload = await createExportFixture();
     const dangling = cloneExport(payload);
@@ -641,5 +669,48 @@ describe('tracker import API', () => {
         })
       ])
     );
+  });
+
+  it('rejects dependency validation errors on apply without mutating existing tracker state', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+
+    await request(app).post('/api/issues').send({ title: 'Keep dependency validation intact' }).expect(201);
+    const beforeImport = await request(app).get('/api/export').expect(200);
+
+    const dangling = cloneExport(payload);
+    dangling.issues[0].dependsOnIssueIds = ['missing-issue'];
+
+    const danglingResponse = await request(app).post('/api/import/apply').send(dangling).expect(400);
+    const afterDanglingImport = await request(app).get('/api/export').expect(200);
+
+    expect(danglingResponse.body.valid).toBe(false);
+    expect(danglingResponse.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'dangling_reference',
+          path: '$.issues[0].dependsOnIssueIds[0]'
+        })
+      ])
+    );
+    expect(afterDanglingImport.body).toEqual(beforeImport.body);
+
+    const selfDependency = cloneExport(payload);
+    selfDependency.issues[0].dependsOnIssueIds = [selfDependency.issues[0].id];
+
+    const selfDependencyResponse = await request(app).post('/api/import/apply').send(selfDependency).expect(400);
+    const afterSelfDependencyImport = await request(app).get('/api/export').expect(200);
+
+    expect(selfDependencyResponse.body.valid).toBe(false);
+    expect(selfDependencyResponse.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'invalid_dependency',
+          path: '$.issues[0].dependsOnIssueIds[0]',
+          message: 'An issue cannot depend on itself.'
+        })
+      ])
+    );
+    expect(afterSelfDependencyImport.body).toEqual(beforeImport.body);
   });
 });

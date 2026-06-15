@@ -1,13 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { priorityLabels, statusLabels, statusOrder } from '../constants';
-import type { ActiveFilterSummary, Issue, LoadState, PriorityFilter, StatusFilter } from '../types';
+import type {
+  ActiveFilterSummary,
+  DashboardFilters,
+  Issue,
+  LoadState,
+  PriorityFilter,
+  StatusFilter
+} from '../types';
+import { defaultDashboardFilters } from '../utils/routing';
 
-export function useIssueDirectory() {
+export function useIssueDirectory(initialFilters: DashboardFilters = defaultDashboardFilters) {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loadState, setLoadState] = useState<LoadState>('loading');
-  const [searchFilter, setSearchFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
+  const [searchFilter, setSearchFilter] = useState(initialFilters.search);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialFilters.status);
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>(initialFilters.priority);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -99,6 +107,12 @@ export function useIssueDirectory() {
     setPriorityFilter('all');
   }
 
+  function setDashboardFilters(filters: DashboardFilters) {
+    setSearchFilter(filters.search);
+    setStatusFilter(filters.status);
+    setPriorityFilter(filters.priority);
+  }
+
   return {
     issues,
     setIssues,
@@ -115,6 +129,7 @@ export function useIssueDirectory() {
     hasActiveFilters,
     statusCounts,
     issueListSummary,
-    clearFilters
+    clearFilters,
+    setDashboardFilters
   };
 }

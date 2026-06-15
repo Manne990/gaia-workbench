@@ -35,7 +35,7 @@ async function pressTabUntilFocused(page: Page, locator: Locator, maxTabs = 40):
 
 async function createIssueThroughApi(
   page: Page,
-  issue: { title: string; description?: string }
+  issue: { title: string; description?: string; status?: string; priority?: string }
 ): Promise<CreatedIssue> {
   const response = await page.request.post('/api/issues', { data: issue });
 
@@ -401,6 +401,77 @@ test('dashboard issue open updates the URL and unknown issue links can return to
   await expect(page).toHaveURL('/');
 });
 
+test('dashboard filters hydrate from URL and compose with issue detail routes', async ({ page }) => {
+  const targetIssue = await createIssueThroughApi(page, {
+    title: 'URL filter target',
+    description: 'Restored from a copied dashboard URL.',
+    status: 'review',
+    priority: 'high'
+  });
+  const otherIssue = await createIssueThroughApi(page, {
+    title: 'URL filter other',
+    description: 'Should be hidden by composed filters.',
+    status: 'todo',
+    priority: 'low'
+  });
+
+  await page.goto('/?search=URL%20filter%20target&status=review&priority=high');
+
+  const filters = page.getByLabel('Issue filters');
+  await expect(filters.getByLabel('Search')).toHaveValue('URL filter target');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(filters.getByLabel('Priority')).toHaveValue('high');
+  await expect(page.getByLabel('Active filters')).toContainText('Search: URL filter target');
+  await expect(page.getByLabel('Active filters')).toContainText('Status: Review');
+  await expect(page.getByLabel('Active filters')).toContainText('Priority: High');
+  await expect(page.getByRole('row', { name: /URL filter target.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /URL filter other.*Todo.*Low/ })).toHaveCount(0);
+
+  await filters.getByLabel('Search').fill('URL filter');
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('URL filter');
+  await expect(page.getByRole('row', { name: /URL filter target.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /URL filter other.*Todo.*Low/ })).toHaveCount(0);
+
+  await page.getByRole('button', { name: `Open ${targetIssue.title}` }).click();
+  await expect(page.getByRole('region', { name: targetIssue.title })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${targetIssue.id}`);
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('URL filter');
+  await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('review');
+  await expect.poll(() => new URL(page.url()).searchParams.get('priority')).toBe('high');
+
+  await page.goBack();
+  await expect(page.getByRole('region', { name: targetIssue.title })).toHaveCount(0);
+  await expect(filters.getByLabel('Search')).toHaveValue('URL filter');
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/');
+  await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('review');
+
+  await page.goForward();
+  await expect(page.getByRole('region', { name: targetIssue.title })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${targetIssue.id}`);
+
+  await page
+    .getByRole('region', { name: targetIssue.title })
+    .getByRole('button', { name: `Close issue detail for ${targetIssue.title}` })
+    .click();
+  await expect(page.getByRole('region', { name: targetIssue.title })).toHaveCount(0);
+  await expect(filters.getByLabel('Search')).toHaveValue('URL filter');
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/');
+  await expect.poll(() => new URL(page.url()).searchParams.get('priority')).toBe('high');
+
+  await filters.getByRole('button', { name: 'Clear Filters' }).click();
+  await expect(page.getByLabel('Active filters')).toHaveCount(0);
+  await expect(page.getByRole('row', { name: /URL filter target.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /URL filter other.*Todo.*Low/ })).toBeVisible();
+  await expect(page).toHaveURL('/');
+
+  await page.goto('/?search=%20%20&status=bogus&priority=weird');
+  await expect(filters.getByLabel('Search')).toHaveValue('');
+  await expect(filters.getByLabel('Status')).toHaveValue('all');
+  await expect(filters.getByLabel('Priority')).toHaveValue('all');
+  await expect(page.getByLabel('Active filters')).toHaveCount(0);
+  await expect(page).toHaveURL('/');
+});
+
 test('large issue lists remain filterable and can open detail', async ({ page }) => {
   test.setTimeout(60_000);
 
@@ -440,5 +511,6 @@ test('large issue lists remain filterable and can open detail', async ({ page })
 
   await expect(detail.getByRole('heading', { name: targetIssue.title })).toBeVisible();
   await expect(detail.locator('.detail-description')).toHaveText('Large-list guardrail item 0420');
-  await expect(page).toHaveURL(new RegExp(`/issues/${targetIssue.id}$`));
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${targetIssue.id}`);
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe(targetIssue.title);
 });

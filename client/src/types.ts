@@ -81,6 +81,12 @@ export type CommentEditCancelOptions = CancelOptions & {
 export type StatusFilter = 'all' | IssueStatus;
 export type PriorityFilter = 'all' | IssuePriority;
 
+export type DashboardFilters = {
+  search: string;
+  status: StatusFilter;
+  priority: PriorityFilter;
+};
+
 export type ActiveFilterSummary = {
   key: string;
   label: string;

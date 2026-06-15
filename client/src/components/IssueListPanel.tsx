@@ -1,4 +1,4 @@
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import type { RefObject } from 'react';
 import { priorityLabels, priorityOrder, statusLabels, statusOrder } from '../constants';
 import type {
   ActiveFilterSummary,
@@ -17,11 +17,11 @@ type IssueListPanelProps = {
   hasActiveFilters: boolean;
   activeFilterSummaries: ActiveFilterSummary[];
   searchFilter: string;
-  setSearchFilter: Dispatch<SetStateAction<string>>;
+  onSearchFilterChange: (value: string) => void;
   statusFilter: StatusFilter;
-  setStatusFilter: Dispatch<SetStateAction<StatusFilter>>;
+  onStatusFilterChange: (value: StatusFilter) => void;
   priorityFilter: PriorityFilter;
-  setPriorityFilter: Dispatch<SetStateAction<PriorityFilter>>;
+  onPriorityFilterChange: (value: PriorityFilter) => void;
   issueListHeadingRef: RefObject<HTMLHeadingElement | null>;
   onClearFilters: () => void;
   onOpenIssue: (issue: Issue, trigger: HTMLElement) => void;
@@ -36,11 +36,11 @@ export function IssueListPanel({
   hasActiveFilters,
   activeFilterSummaries,
   searchFilter,
-  setSearchFilter,
+  onSearchFilterChange,
   statusFilter,
-  setStatusFilter,
+  onStatusFilterChange,
   priorityFilter,
-  setPriorityFilter,
+  onPriorityFilterChange,
   issueListHeadingRef,
   onClearFilters,
   onOpenIssue,
@@ -66,7 +66,7 @@ export function IssueListPanel({
           <input
             id="issue-search-filter"
             value={searchFilter}
-            onChange={(event) => setSearchFilter(event.target.value)}
+            onChange={(event) => onSearchFilterChange(event.target.value)}
           />
         </label>
 
@@ -75,7 +75,7 @@ export function IssueListPanel({
           <select
             id="issue-status-filter"
             value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+            onChange={(event) => onStatusFilterChange(event.target.value as StatusFilter)}
           >
             <option value="all">All statuses</option>
             {statusOrder.map((status) => (
@@ -91,7 +91,7 @@ export function IssueListPanel({
           <select
             id="issue-priority-filter"
             value={priorityFilter}
-            onChange={(event) => setPriorityFilter(event.target.value as PriorityFilter)}
+            onChange={(event) => onPriorityFilterChange(event.target.value as PriorityFilter)}
           >
             <option value="all">All priorities</option>
             {priorityOrder.map((priority) => (

@@ -70,6 +70,18 @@ function importAppliedMessage(plan: ImportPlan): string {
   return `Import applied: ${plan.summary.toCreate.issues} issues created, ${plan.summary.toReplace.issues} changed issues replaced, ${plan.summary.skip.issues} skipped.`;
 }
 
+function importPlanTouchesIssue(plan: ImportPlan, issueId: string | null): issueId is string {
+  return Boolean(
+    issueId &&
+    plan.decisions.some(
+      (decision) =>
+        decision.entity === 'issue' &&
+        decision.issueId === issueId &&
+        (decision.decision === 'import' || decision.decision === 'replace-existing')
+    )
+  );
+}
+
 function parseIssueAnchorTarget(hash: string): IssueAnchorTarget | null {
   const match = /^(?:#)(comment|activity)-(.+)$/.exec(hash.trim());
 
@@ -140,6 +152,7 @@ export function App() {
   const [issueAnchorHash, setIssueAnchorHash] = useState(() => window.location.hash);
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [selectedIssueLoadState, setSelectedIssueLoadState] = useState<IssueDetailLoadState>('idle');
+  const [selectedIssueDetailReloadToken, setSelectedIssueDetailReloadToken] = useState(0);
   const [activeForm, setActiveForm] = useState<ActiveForm | null>(null);
   const [formValues, setFormValues] = useState<IssueFormValues>(emptyFormValues);
   const [formError, setFormError] = useState<string | null>(null);
@@ -200,6 +213,7 @@ export function App() {
   const [recentlyArchivedIssue, setRecentlyArchivedIssue] = useState<{ id: string; title: string } | null>(null);
   const didCanonicalizeInitialRouteRef = useRef(false);
   const dashboardFiltersRef = useRef<DashboardFilters>(initialRouteStateRef.current.filters);
+  const selectedIssueIdRef = useRef<string | null>(initialRouteStateRef.current.issueId);
 
   const dashboardFilters: DashboardFilters = useMemo(
     () => ({
@@ -267,6 +281,10 @@ export function App() {
     importFileName || importPlan || importError || isImportPreviewing || importMessage
   );
   const canApplyImport = Boolean(importPayload && importPlan?.valid && !isImportApplying);
+
+  useEffect(() => {
+    selectedIssueIdRef.current = selectedIssueId;
+  }, [selectedIssueId]);
 
   useEffect(() => {
     const visibleIds = new Set(filteredIssues.map((issue) => issue.id));
@@ -818,6 +836,11 @@ export function App() {
       setImportPayload(null);
       setImportMessage(importAppliedMessage(plan));
       returnToFirstPage();
+
+      const selectedIssueIdAtApply = selectedIssueIdRef.current;
+      if (importPlanTouchesIssue(plan, selectedIssueIdAtApply)) {
+        await refreshSelectedIssueAfterImport(selectedIssueIdAtApply);
+      }
     } catch {
       setImportError('Import apply failed.');
     } finally {
@@ -968,7 +991,7 @@ export function App() {
     void loadIssueDetailData();
 
     return () => controller.abort();
-  }, [selectedIssueId, selectedIssue?.id]);
+  }, [selectedIssueId, selectedIssue?.id, selectedIssueDetailReloadToken]);
 
   function scrollToAnchorTarget() {
     const anchorTarget = parseIssueAnchorTarget(issueAnchorHash);
@@ -1090,6 +1113,31 @@ export function App() {
       setActivityLoadState('loaded');
     } catch {
       setActivityLoadState('error');
+    }
+  }
+
+  async function refreshSelectedIssueAfterImport(issueId: string) {
+    try {
+      const refreshedIssue = await fetchIssue(issueId);
+
+      if (selectedIssueIdRef.current !== issueId) {
+        return;
+      }
+
+      if (!refreshedIssue) {
+        setSelectedIssue(null);
+        setSelectedIssueLoadState('not_found');
+        return;
+      }
+
+      setSelectedIssue(refreshedIssue);
+      setSelectedIssueLoadState('loaded');
+      setSelectedIssueDetailReloadToken((value) => value + 1);
+    } catch {
+      if (selectedIssueIdRef.current === issueId) {
+        setSelectedIssue(null);
+        setSelectedIssueLoadState('error');
+      }
     }
   }
 

@@ -5,6 +5,7 @@ import {
   addIssueDependency,
   applyImport,
   archiveIssue,
+  bulkUpdateIssueStatus,
   createSavedFilterView,
   deleteSavedFilterView,
   fetchCommentHistory,
@@ -26,7 +27,7 @@ import { IssueFormPanel } from './components/IssueFormPanel';
 import { IssueListPanel } from './components/IssueListPanel';
 import { IssueStatusSummary } from './components/IssueStatusSummary';
 import { CommandPalette } from './components/CommandPalette';
-import { emptyFormValues } from './constants';
+import { emptyFormValues, statusLabels } from './constants';
 import { useIssueDirectory } from './hooks/useIssueDirectory';
 import type {
   ActiveForm,
@@ -44,6 +45,7 @@ import type {
   IssueDependencyState,
   IssueDetailLoadState,
   IssueFormValues,
+  IssueStatus,
   PriorityFilter,
   SavedFilterView,
   ServiceHealthState,
@@ -171,6 +173,11 @@ export function App() {
   const [isSavedViewBusy, setIsSavedViewBusy] = useState(false);
   const [dashboardDensity, setDashboardDensity] = useState<DashboardDensity>('comfortable');
   const [serviceHealthState, setServiceHealthState] = useState<ServiceHealthState>('checking');
+  const [selectedBulkIssueIds, setSelectedBulkIssueIds] = useState<string[]>([]);
+  const [bulkStatus, setBulkStatus] = useState<IssueStatus>('in_progress');
+  const [bulkStatusMessage, setBulkStatusMessage] = useState<string | null>(null);
+  const [bulkStatusError, setBulkStatusError] = useState<string | null>(null);
+  const [isBulkStatusSubmitting, setIsBulkStatusSubmitting] = useState(false);
   const newIssueButtonRef = useRef<HTMLButtonElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const issueSearchInputRef = useRef<HTMLInputElement>(null);
@@ -252,6 +259,16 @@ export function App() {
     importFileName || importPlan || importError || isImportPreviewing || importMessage
   );
   const canApplyImport = Boolean(importPayload && importPlan?.valid && !isImportApplying);
+
+  useEffect(() => {
+    const visibleIds = new Set(filteredIssues.map((issue) => issue.id));
+
+    setSelectedBulkIssueIds((current) => {
+      const next = current.filter((issueId) => visibleIds.has(issueId));
+
+      return next.length === current.length ? current : next;
+    });
+  }, [filteredIssues]);
 
   function openCommandPalette(trigger?: HTMLElement | null) {
     if (isCommandPaletteOpen) {
@@ -1182,6 +1199,89 @@ export function App() {
     setRecentlyArchivedIssue(null);
   }
 
+  function clearBulkSelection() {
+    setSelectedBulkIssueIds([]);
+    setBulkStatusError(null);
+  }
+
+  function selectAllVisibleBulkIssues() {
+    setSelectedBulkIssueIds(filteredIssues.map((issue) => issue.id));
+    setBulkStatusError(null);
+  }
+
+  function toggleBulkIssueSelection(issueId: string, selected: boolean) {
+    setBulkStatusError(null);
+    setBulkStatusMessage(null);
+    setSelectedBulkIssueIds((current) => {
+      if (selected) {
+        return current.includes(issueId) ? current : [...current, issueId];
+      }
+
+      return current.filter((id) => id !== issueId);
+    });
+  }
+
+  async function submitBulkStatusChange() {
+    if (selectedBulkIssueIds.length === 0) {
+      setBulkStatusError('Select at least one visible issue.');
+      return;
+    }
+
+    const issueCount = selectedBulkIssueIds.length;
+    const confirmed = window.confirm(
+      `Change ${issueCount} selected issue${issueCount === 1 ? '' : 's'} to ${statusLabels[bulkStatus]}?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsBulkStatusSubmitting(true);
+    setBulkStatusError(null);
+    setBulkStatusMessage(null);
+
+    try {
+      const result = await bulkUpdateIssueStatus(selectedBulkIssueIds, bulkStatus);
+      const changedCount = result.updated.length;
+      const unchangedCount = result.unchangedIds.length;
+      const duplicateCount = result.duplicateIds.length;
+      const changedSelectedIssue = selectedIssueId
+        ? result.updated.some((issue) => issue.id === selectedIssueId)
+        : false;
+
+      setSelectedBulkIssueIds([]);
+      refreshIssues();
+
+      if (changedSelectedIssue && selectedIssueId) {
+        const refreshedIssue = await fetchIssue(selectedIssueId);
+
+        if (refreshedIssue) {
+          setSelectedIssue(refreshedIssue);
+          setSelectedIssueLoadState('loaded');
+          await refreshActivity(refreshedIssue.id);
+        }
+      }
+
+      setBulkStatusMessage(
+        [
+          `Changed ${changedCount} issue${changedCount === 1 ? '' : 's'} to ${statusLabels[result.status]}.`,
+          unchangedCount > 0
+            ? `${unchangedCount} already ${unchangedCount === 1 ? 'was' : 'were'} ${statusLabels[result.status]}.`
+            : null,
+          duplicateCount > 0
+            ? `${duplicateCount} duplicate ${duplicateCount === 1 ? 'id was' : 'ids were'} ignored.`
+            : null
+        ]
+          .filter(Boolean)
+          .join(' ')
+      );
+    } catch (error) {
+      setBulkStatusError(error instanceof Error ? error.message : 'Bulk status update failed.');
+    } finally {
+      setIsBulkStatusSubmitting(false);
+    }
+  }
+
   async function submitIssue(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -1480,6 +1580,19 @@ export function App() {
           recentlyArchivedIssue={recentlyArchivedIssue}
           onUndoArchiveIssue={(trigger) => handleUndoArchiveIssue(trigger)}
           onDismissArchiveRecovery={clearArchiveRecovery}
+          selectedBulkIssueIds={selectedBulkIssueIds}
+          bulkStatus={bulkStatus}
+          bulkStatusMessage={bulkStatusMessage}
+          bulkStatusError={bulkStatusError}
+          isBulkStatusSubmitting={isBulkStatusSubmitting}
+          onBulkStatusChange={(status) => {
+            setBulkStatus(status);
+            setBulkStatusError(null);
+          }}
+          onToggleIssueSelection={toggleBulkIssueSelection}
+          onSelectAllVisibleIssues={selectAllVisibleBulkIssues}
+          onClearBulkSelection={clearBulkSelection}
+          onApplyBulkStatus={submitBulkStatusChange}
         />
 
         <IssueDetailPanel

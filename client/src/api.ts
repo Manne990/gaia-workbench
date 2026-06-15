@@ -1,9 +1,11 @@
 import type {
   ActivityEvent,
+  BulkIssueStatusResult,
   CommentEditHistory,
   ImportPlan,
   ImportConflictPolicy,
   Issue,
+  IssueStatus,
   IssueDependencyState,
   ServiceHealth,
   SavedFilterView,
@@ -92,6 +94,16 @@ export function archiveIssue(issueId: string): Promise<Issue> {
 
 export function unarchiveIssue(issueId: string): Promise<Issue> {
   return postIssueAction(issueId, 'unarchive');
+}
+
+export async function bulkUpdateIssueStatus(issueIds: string[], status: IssueStatus): Promise<BulkIssueStatusResult> {
+  const response = await fetch('/api/issues/bulk-status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ issueIds, status })
+  });
+
+  return readJsonOrThrow<BulkIssueStatusResult>(response, 'Bulk status update failed');
 }
 
 async function readJsonOrThrow<T>(response: Response, fallbackMessage: string): Promise<T> {

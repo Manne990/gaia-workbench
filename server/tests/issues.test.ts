@@ -480,6 +480,143 @@ describe('issues API', () => {
     });
   });
 
+  it('bulk changes status for selected issues with duplicate and unchanged reporting', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const first = await request(app).post('/api/issues').send({ title: 'Bulk first issue' }).expect(201);
+    const second = await request(app).post('/api/issues').send({ title: 'Bulk second issue' }).expect(201);
+    const unchanged = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Bulk unchanged issue', status: 'review' })
+      .expect(201);
+
+    const response = await request(app)
+      .post('/api/issues/bulk-status')
+      .send({
+        status: 'review',
+        issueIds: [first.body.id, second.body.id, unchanged.body.id, first.body.id]
+      })
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      status: 'review',
+      unchangedIds: [unchanged.body.id],
+      duplicateIds: [first.body.id],
+      notFoundIds: []
+    });
+    expect(response.body.updated.map((issue: { id: string }) => issue.id)).toEqual([first.body.id, second.body.id]);
+    expect(response.body.updated).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: first.body.id, status: 'review' }),
+        expect.objectContaining({ id: second.body.id, status: 'review' })
+      ])
+    );
+
+    await request(app)
+      .get(`/api/issues/${first.body.id}`)
+      .expect(200)
+      .expect((fetched) => {
+        expect(fetched.body).toMatchObject({ status: 'review' });
+      });
+    await request(app)
+      .get(`/api/issues/${unchanged.body.id}/activity`)
+      .expect(200)
+      .expect((activity) => {
+        expect(activity.body.map((event: { type: string }) => event.type)).toEqual(['issue_created']);
+      });
+    await request(app)
+      .get(`/api/issues/${first.body.id}/activity`)
+      .expect(200)
+      .expect((activity) => {
+        expect(activity.body.map((event: { type: string }) => event.type)).toEqual([
+          'issue_created',
+          'issue_status_changed'
+        ]);
+        expect(activity.body[1].metadata).toEqual({ from: 'todo', to: 'review' });
+      });
+  });
+
+  it('rejects invalid bulk status requests without partial writes', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const issue = await request(app).post('/api/issues').send({ title: 'Bulk validation issue' }).expect(201);
+
+    await request(app)
+      .post('/api/issues/bulk-status')
+      .send({ status: 'waiting', issueIds: [issue.body.id] })
+      .expect(400, {
+        error: 'Invalid issue status'
+      });
+    await request(app).post('/api/issues/bulk-status').send({ status: 'done', issueIds: [] }).expect(400, {
+      error: 'Invalid bulk issue ids'
+    });
+    await request(app)
+      .post('/api/issues/bulk-status')
+      .send({ status: 'done', issueIds: [issue.body.id, ''] })
+      .expect(400, {
+        error: 'Invalid bulk issue ids'
+      });
+
+    await request(app)
+      .post('/api/issues/bulk-status')
+      .send({ status: 'done', issueIds: [issue.body.id, 'missing-bulk-issue'] })
+      .expect(404)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          error: 'Issue not found',
+          notFoundIds: ['missing-bulk-issue'],
+          duplicateIds: []
+        });
+      });
+
+    await request(app)
+      .get(`/api/issues/${issue.body.id}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.status).toBe('todo');
+      });
+    await request(app)
+      .get(`/api/issues/${issue.body.id}/activity`)
+      .expect(200)
+      .expect((activity) => {
+        expect(activity.body.map((event: { type: string }) => event.type)).toEqual(['issue_created']);
+      });
+  });
+
+  it('bulk status preserves archived issue behavior when the caller explicitly includes archived rows', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const issue = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Archived bulk status issue', status: 'todo' })
+      .expect(201);
+    const archived = await request(app).post(`/api/issues/${issue.body.id}/archive`).expect(200);
+
+    const response = await request(app)
+      .post('/api/issues/bulk-status')
+      .send({ status: 'done', issueIds: [issue.body.id] })
+      .expect(200);
+
+    expect(response.body.updated).toEqual([
+      expect.objectContaining({
+        id: issue.body.id,
+        status: 'done',
+        archivedAt: archived.body.archivedAt
+      })
+    ]);
+
+    await request(app)
+      .get(`/api/issues/${issue.body.id}/activity`)
+      .expect(200)
+      .expect((activity) => {
+        expect(activity.body.map((event: { type: string }) => event.type)).toEqual([
+          'issue_created',
+          'issue_archived',
+          'issue_status_changed'
+        ]);
+      });
+  });
+
   it('archives and unarchives issues without deleting detail comments or activity', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

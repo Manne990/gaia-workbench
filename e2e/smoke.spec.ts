@@ -47,6 +47,18 @@ async function pressTabUntilFocused(page: Page, locator: Locator, maxTabs = 40):
   throw new Error('Expected target to receive focus through keyboard tab navigation.');
 }
 
+async function pressShiftTabUntilFocused(page: Page, locator: Locator, maxTabs = 40): Promise<void> {
+  for (let count = 0; count <= maxTabs; count += 1) {
+    if (await isFocused(locator)) {
+      return;
+    }
+
+    await page.keyboard.press('Shift+Tab');
+  }
+
+  throw new Error('Expected target to receive focus through reverse keyboard tab navigation.');
+}
+
 function commandPaletteShortcutKey(): string {
   return process.platform === 'darwin' ? 'Meta+K' : 'Control+K';
 }
@@ -576,6 +588,84 @@ test('archive action offers undo recovery in active and include-archived modes',
   await expect(issueRow.locator('.archived-pill')).toHaveCount(0);
 });
 
+test('bulk visible selection changes issue status with confirmation and scoped activity', async ({ page }) => {
+  const first = await createIssueThroughApi(page, {
+    title: 'Bulk status visible first',
+    description: 'Selected from the current filtered page.',
+    status: 'todo',
+    priority: 'high'
+  });
+  await createIssueThroughApi(page, {
+    title: 'Bulk status visible second',
+    description: 'Also selected from the current filtered page.',
+    status: 'in_progress',
+    priority: 'medium'
+  });
+  const unchanged = await createIssueThroughApi(page, {
+    title: 'Bulk status visible unchanged',
+    description: 'Already has the target status.',
+    status: 'done',
+    priority: 'low'
+  });
+  const hidden = await createIssueThroughApi(page, {
+    title: 'Bulk status hidden issue',
+    description: 'Must not be changed by visible-only bulk status.',
+    status: 'todo',
+    priority: 'medium'
+  });
+
+  await page.goto('/?search=Bulk%20status%20visible');
+
+  const bulkActions = page.getByLabel('Bulk status actions');
+
+  await expect(page.getByRole('row', { name: /Bulk status visible first.*Todo.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Bulk status visible second.*In Progress.*Medium/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Bulk status visible unchanged.*Done.*Low/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Bulk status hidden issue/ })).toHaveCount(0);
+  await expect(bulkActions).toContainText('0 selected');
+
+  await bulkActions.getByRole('button', { name: 'Select all visible' }).click();
+  await expect(bulkActions).toContainText('3 selected');
+  await bulkActions.getByLabel('Status').selectOption('done');
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toBe('Change 3 selected issues to Done?');
+    await dialog.accept();
+  });
+  await bulkActions.getByRole('button', { name: 'Change Status' }).click();
+
+  await expect(bulkActions).toContainText('Changed 2 issues to Done.');
+  await expect(bulkActions).toContainText('1 already was Done.');
+  await expect(bulkActions).toContainText('0 selected');
+  await expect(page.getByRole('row', { name: /Bulk status visible first.*Done.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Bulk status visible second.*Done.*Medium/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Bulk status visible unchanged.*Done.*Low/ })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Bulk status visible');
+
+  const [firstActivityResponse, unchangedActivityResponse, hiddenIssueResponse] = await Promise.all([
+    page.request.get(`/api/issues/${first.id}/activity`),
+    page.request.get(`/api/issues/${unchanged.id}/activity`),
+    page.request.get(`/api/issues/${hidden.id}`)
+  ]);
+  const firstActivity = (await firstActivityResponse.json()) as Array<{
+    type: string;
+    metadata: Record<string, string>;
+  }>;
+  const unchangedActivity = (await unchangedActivityResponse.json()) as Array<{ type: string }>;
+  const hiddenIssue = (await hiddenIssueResponse.json()) as { status: string };
+
+  expect(firstActivity.filter((event) => event.type === 'issue_status_changed')).toEqual([
+    expect.objectContaining({
+      metadata: {
+        from: 'todo',
+        to: 'done'
+      }
+    })
+  ]);
+  expect(unchangedActivity.map((event) => event.type)).toEqual(['issue_created']);
+  expect(hiddenIssue.status).toBe('todo');
+});
+
 test('stale issue signal filters and persists through saved views', async ({ page }) => {
   const staleIssueId = '00000000-0000-4000-8000-000000000215';
   const importResponse = await page.request.post('/api/import/apply', {
@@ -941,6 +1031,13 @@ test('keyboard users can create open comment edit and close an issue', async ({ 
   await expect(keyboardRow).toBeVisible();
   await expect(newIssueButton).toBeFocused();
 
+  const selectKeyboardIssue = keyboardRow.getByRole('checkbox', { name: 'Select Keyboard issue' });
+  await pressTabUntilFocused(page, selectKeyboardIssue, 80);
+  await page.keyboard.press('Space');
+  await expect(selectKeyboardIssue).toBeChecked();
+  await page.keyboard.press('Space');
+  await expect(selectKeyboardIssue).not.toBeChecked();
+
   const editIssueButton = page.getByRole('button', { name: 'Edit Keyboard issue' });
   await pressTabUntilFocused(page, editIssueButton);
   await page.keyboard.press('Enter');
@@ -952,7 +1049,7 @@ test('keyboard users can create open comment edit and close an issue', async ({ 
   await expect(editIssueButton).toBeFocused();
 
   const openIssueButton = page.getByRole('button', { name: 'Open Keyboard issue' });
-  await pressTabUntilFocused(page, openIssueButton, 80);
+  await pressShiftTabUntilFocused(page, openIssueButton);
   await page.keyboard.press('Enter');
 
   const detail = page.getByRole('region', { name: 'Keyboard issue' });
@@ -1001,7 +1098,7 @@ test('keyboard users can create open comment edit and close an issue', async ({ 
   const closeDetailButton = detail.getByRole('button', {
     name: 'Close issue detail for Keyboard issue'
   });
-  await pressTabUntilFocused(page, closeDetailButton, 80);
+  await pressShiftTabUntilFocused(page, closeDetailButton);
   await page.keyboard.press('Enter');
 
   await expect(detail).toHaveCount(0);

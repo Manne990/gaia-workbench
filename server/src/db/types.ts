@@ -104,6 +104,19 @@ export interface IssueListResult {
   sort: IssueListSort;
 }
 
+export interface BulkIssueStatusUpdateInput {
+  issueIds: string[];
+  status: IssueStatus;
+}
+
+export interface BulkIssueStatusUpdateResult {
+  status: IssueStatus;
+  updated: Issue[];
+  unchangedIds: string[];
+  duplicateIds: string[];
+  notFoundIds: string[];
+}
+
 export type SavedFilterStatus = 'all' | IssueStatus;
 
 export type SavedFilterPriority = 'all' | IssuePriority;

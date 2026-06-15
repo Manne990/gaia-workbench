@@ -55,6 +55,14 @@ export type IssueListResponse = {
   };
 };
 
+export type BulkIssueStatusResult = {
+  status: IssueStatus;
+  updated: Issue[];
+  unchangedIds: string[];
+  duplicateIds: string[];
+  notFoundIds: string[];
+};
+
 export type ServiceHealth = {
   status: 'ok';
   service: 'TinyTracker';

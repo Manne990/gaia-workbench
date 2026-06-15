@@ -13,6 +13,7 @@ import {
   fetchIssueDependencies,
   fetchSavedFilterView,
   fetchSavedFilterViews,
+  fetchServiceHealth,
   previewImport,
   removeIssueDependency,
   unarchiveIssue,
@@ -44,6 +45,7 @@ import type {
   IssueFormValues,
   PriorityFilter,
   SavedFilterView,
+  ServiceHealthState,
   StatusFilter
 } from './types';
 import { restoreFocus } from './utils/focus';
@@ -137,6 +139,7 @@ export function App() {
   const [savedViewError, setSavedViewError] = useState<string | null>(null);
   const [isSavedViewBusy, setIsSavedViewBusy] = useState(false);
   const [dashboardDensity, setDashboardDensity] = useState<DashboardDensity>('comfortable');
+  const [serviceHealthState, setServiceHealthState] = useState<ServiceHealthState>('checking');
   const newIssueButtonRef = useRef<HTMLButtonElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const issueListHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -197,6 +200,26 @@ export function App() {
 
     didCanonicalizeInitialRouteRef.current = true;
     writeRoute(selectedIssueId, dashboardFilters, 'replace');
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadServiceHealth() {
+      try {
+        const health = await fetchServiceHealth(controller.signal);
+
+        setServiceHealthState(health.status === 'ok' ? 'online' : 'unavailable');
+      } catch {
+        if (!controller.signal.aborted) {
+          setServiceHealthState('unavailable');
+        }
+      }
+    }
+
+    void loadServiceHealth();
+
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {
@@ -987,6 +1010,7 @@ export function App() {
       <section className="workspace">
         <DashboardHeader
           totalIssues={totalIssueCount}
+          serviceHealthState={serviceHealthState}
           newIssueButtonRef={newIssueButtonRef}
           importInputRef={importInputRef}
           onCreateIssue={startCreate}

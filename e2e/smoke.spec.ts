@@ -89,10 +89,16 @@ async function createLargeIssueSet(page: Page, count: number): Promise<CreatedIs
 }
 
 test('TinyTracker smoke creates lists updates and comments on an issue', async ({ page }) => {
+  const healthResponse = await page.request.get('/api/health');
+
+  expect(healthResponse.ok()).toBe(true);
+  expect(await healthResponse.json()).toEqual({ status: 'ok', service: 'TinyTracker' });
+
   await page.goto('/');
 
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
   await expect(page.getByText('TinyTracker')).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Service status' })).toHaveText('Service: online');
   await expect(page.getByLabel('Issue status summary')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Issue List' })).toBeVisible();
   await expect(page.getByText('No issues yet.')).toBeVisible();

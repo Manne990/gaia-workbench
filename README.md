@@ -314,10 +314,24 @@ comment body was edited after seeding.
 
 The started application serves:
 
-* `GET /health`
-* `GET /api/health`
 * TinyTracker React UI at `/`
 * API routes under `/api`
+
+### Health API
+
+`GET /api/health` is the canonical service liveness endpoint:
+
+```json
+{
+  "status": "ok",
+  "service": "TinyTracker"
+}
+```
+
+The health contract intentionally reports process/API liveness only. SQLite is
+opened during app startup, so this endpoint does not run a per-request database
+readiness probe. A compatibility `GET /health` route exists for local checks, but
+new clients and smoke tests should use `/api/health`.
 
 ### Issue List API
 

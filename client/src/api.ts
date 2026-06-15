@@ -5,9 +5,16 @@ import type {
   ImportConflictPolicy,
   Issue,
   IssueDependencyState,
+  ServiceHealth,
   SavedFilterView,
   SavedFilterViewPayload
 } from './types';
+
+export async function fetchServiceHealth(signal?: AbortSignal): Promise<ServiceHealth> {
+  const response = await fetch('/api/health', { signal });
+
+  return readJsonOrThrow<ServiceHealth>(response, 'Service health request failed');
+}
 
 export async function fetchCommentHistory(commentId: string, signal?: AbortSignal): Promise<CommentEditHistory[]> {
   const response = await fetch(`/api/comments/${commentId}/history`, { signal });

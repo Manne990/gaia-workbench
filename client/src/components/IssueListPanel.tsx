@@ -1,0 +1,218 @@
+import type { Dispatch, RefObject, SetStateAction } from 'react';
+import { priorityLabels, priorityOrder, statusLabels, statusOrder } from '../constants';
+import type {
+  ActiveFilterSummary,
+  Issue,
+  LoadState,
+  PriorityFilter,
+  StatusFilter
+} from '../types';
+import { formatDate, formatDueDate } from '../utils/formatters';
+
+type IssueListPanelProps = {
+  loadState: LoadState;
+  issues: Issue[];
+  filteredIssues: Issue[];
+  issueListSummary: string;
+  hasActiveFilters: boolean;
+  activeFilterSummaries: ActiveFilterSummary[];
+  searchFilter: string;
+  setSearchFilter: Dispatch<SetStateAction<string>>;
+  statusFilter: StatusFilter;
+  setStatusFilter: Dispatch<SetStateAction<StatusFilter>>;
+  priorityFilter: PriorityFilter;
+  setPriorityFilter: Dispatch<SetStateAction<PriorityFilter>>;
+  issueListHeadingRef: RefObject<HTMLHeadingElement | null>;
+  onClearFilters: () => void;
+  onOpenIssue: (issue: Issue, trigger: HTMLElement) => void;
+  onEditIssue: (issue: Issue, trigger: HTMLElement) => void;
+};
+
+export function IssueListPanel({
+  loadState,
+  issues,
+  filteredIssues,
+  issueListSummary,
+  hasActiveFilters,
+  activeFilterSummaries,
+  searchFilter,
+  setSearchFilter,
+  statusFilter,
+  setStatusFilter,
+  priorityFilter,
+  setPriorityFilter,
+  issueListHeadingRef,
+  onClearFilters,
+  onOpenIssue,
+  onEditIssue
+}: IssueListPanelProps) {
+  return (
+    <section className="issue-panel" aria-labelledby="issue-list-heading" aria-busy={loadState === 'loading'}>
+      <div className="panel-header">
+        <div>
+          <h2 id="issue-list-heading" ref={issueListHeadingRef} tabIndex={-1}>
+            Issue List
+          </h2>
+          <p>{issueListSummary}</p>
+        </div>
+        <span className="panel-count" aria-label={`${filteredIssues.length} issues shown`}>
+          {filteredIssues.length}
+        </span>
+      </div>
+
+      <div className="filter-panel" role="search" aria-label="Issue filters">
+        <label className="filter-field" htmlFor="issue-search-filter">
+          <span>Search</span>
+          <input
+            id="issue-search-filter"
+            value={searchFilter}
+            onChange={(event) => setSearchFilter(event.target.value)}
+          />
+        </label>
+
+        <label className="filter-field" htmlFor="issue-status-filter">
+          <span>Status</span>
+          <select
+            id="issue-status-filter"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+          >
+            <option value="all">All statuses</option>
+            {statusOrder.map((status) => (
+              <option key={status} value={status}>
+                {statusLabels[status]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="filter-field" htmlFor="issue-priority-filter">
+          <span>Priority</span>
+          <select
+            id="issue-priority-filter"
+            value={priorityFilter}
+            onChange={(event) => setPriorityFilter(event.target.value as PriorityFilter)}
+          >
+            <option value="all">All priorities</option>
+            {priorityOrder.map((priority) => (
+              <option key={priority} value={priority}>
+                {priorityLabels[priority]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="filter-actions">
+          <button type="button" className="secondary-button" onClick={onClearFilters} disabled={!hasActiveFilters}>
+            Clear Filters
+          </button>
+        </div>
+      </div>
+
+      {hasActiveFilters ? (
+        <div className="active-filter-summary" aria-label="Active filters">
+          <span>{filteredIssues.length} shown</span>
+          <div className="active-filter-list">
+            {activeFilterSummaries.map((filter) => (
+              <span key={filter.key} className="active-filter-chip">
+                {filter.label}: {filter.value}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {loadState === 'loading' ? (
+        <div className="state-message" role="status">Loading issues...</div>
+      ) : null}
+
+      {loadState === 'error' ? (
+        <div className="state-message error" role="alert">Unable to load issues.</div>
+      ) : null}
+
+      {loadState === 'loaded' && issues.length === 0 ? (
+        <div className="state-message">No issues yet.</div>
+      ) : null}
+
+      {loadState === 'loaded' && issues.length > 0 && filteredIssues.length === 0 ? (
+        <div className="state-message filtered-empty">
+          <strong>No issues match the active filters.</strong>
+          <button type="button" className="secondary-button" onClick={onClearFilters}>
+            Clear Filters
+          </button>
+        </div>
+      ) : null}
+
+      {loadState === 'loaded' && filteredIssues.length > 0 ? (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Issue</th>
+                <th scope="col">Status</th>
+                <th scope="col">Priority</th>
+                <th scope="col">Due</th>
+                <th scope="col">Updated</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredIssues.map((issue) => (
+                <tr key={issue.id} className={issue.isOverdue ? 'overdue-row' : undefined}>
+                  <td>
+                    <strong>{issue.title}</strong>
+                    {issue.description ? <span>{issue.description}</span> : null}
+                    {issue.labels.length > 0 ? (
+                      <div className="label-row" aria-label={`Labels for ${issue.title}`}>
+                        {issue.labels.map((label) => (
+                          <span key={label} className="label-pill">
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </td>
+                  <td>
+                    <span className={`pill status-${issue.status}`}>{statusLabels[issue.status]}</span>
+                  </td>
+                  <td>
+                    <span className={`pill priority-${issue.priority}`}>{priorityLabels[issue.priority]}</span>
+                  </td>
+                  <td>
+                    <div className="due-date-cell">
+                      <span className={issue.isOverdue ? 'due-date-text overdue' : 'due-date-text'}>
+                        {issue.dueDate ? formatDueDate(issue.dueDate) : 'No due date'}
+                      </span>
+                      {issue.isOverdue ? <span className="overdue-pill">Overdue</span> : null}
+                    </div>
+                  </td>
+                  <td>{formatDate(issue.updatedAt)}</td>
+                  <td>
+                    <div className="row-actions">
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={(event) => onOpenIssue(issue, event.currentTarget)}
+                        aria-label={`Open ${issue.title}`}
+                      >
+                        Open
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={(event) => onEditIssue(issue, event.currentTarget)}
+                        aria-label={`Edit ${issue.title}`}
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </section>
+  );
+}

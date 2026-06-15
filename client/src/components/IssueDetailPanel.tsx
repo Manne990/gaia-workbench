@@ -9,6 +9,7 @@ import type {
 } from '../types';
 import { activityDetail, activityTitle } from '../utils/activity';
 import { formatDate, formatDueDate } from '../utils/formatters';
+import { renderMarkdownLite, renderMarkdownLiteInline } from '../utils/markdown';
 
 type IssueDetailPanelProps = {
   isIssueDetailLoading: boolean;
@@ -163,9 +164,11 @@ export function IssueDetailPanel({
               </div>
             </div>
 
-            <p className={selectedIssue.description ? 'detail-description' : 'detail-description muted'}>
-              {selectedIssue.description || 'No description.'}
-            </p>
+            {selectedIssue.description ? (
+              renderMarkdownLite(selectedIssue.description, { className: 'detail-description' })
+            ) : (
+              <p className="detail-description muted">No description.</p>
+            )}
 
             {selectedIssue.labels.length > 0 ? (
               <div className="label-row detail-labels" aria-label="Issue labels">
@@ -320,7 +323,9 @@ export function IssueDetailPanel({
                           </form>
                         ) : (
                           <>
-                            <p id={`comment-body-${comment.id}`}>{comment.body}</p>
+                            <div id={`comment-body-${comment.id}`} className="comment-body">
+                              {renderMarkdownLite(comment.body)}
+                            </div>
                             <div className="comment-actions">
                               <button
                                 type="button"
@@ -346,7 +351,10 @@ export function IssueDetailPanel({
                               {history.map((entry) => (
                                 <li key={entry.id}>
                                   <span>{formatDate(entry.editedAt)}</span>
-                                  <p>Previous: {entry.previousBody}</p>
+                                  <p>
+                                    <span>Previous: </span>
+                                    {renderMarkdownLiteInline(entry.previousBody)}
+                                  </p>
                                 </li>
                               ))}
                             </ul>

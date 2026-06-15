@@ -49,6 +49,7 @@ If Gaia can successfully build, maintain, and evolve TinyTracker, it demonstrate
 * Add comments
 * Edit comments
 * View comment history
+* Render safe markdown-lite formatting
 
 ### Search
 
@@ -79,6 +80,7 @@ Simple web interface:
 * Issue details
 * Search
 * Archived issue recovery
+* Safe markdown-lite rendering for descriptions and comments
 * JSON export and import
 
 No advanced enterprise features.
@@ -365,6 +367,25 @@ unknown fields, invalid status or priority values, invalid dates, and dangling
 nested references return structured validation errors. Failed validation does not
 write partial data.
 
+### Markdown-Lite Rendering
+
+Issue descriptions and comments are stored and exported as raw text, then
+rendered in the browser with a small safe markdown-lite subset:
+
+* paragraphs and line breaks
+* inline code and fenced code blocks
+* bold and italic text
+* links in `[label](url)` form
+
+Raw HTML is not supported and is rendered as text. Images, headings, lists,
+tables, blockquotes, task lists, autolinks, and arbitrary markdown extensions
+are not supported. Link URLs must use `http`, `https`, or `mailto`; malformed
+URLs, relative URLs, `javascript:`, `data:`, and `vbscript:` links are rendered
+as plain text instead of anchors.
+
+Edit forms always show the raw source text. Import and export preserve the raw
+text exactly; markdown-lite rendering is a UI display behavior only.
+
 ## Smoke Verification
 
 The Playwright smoke test starts TinyTracker with an in-memory SQLite database and verifies the V1 path:
@@ -374,6 +395,7 @@ The Playwright smoke test starts TinyTracker with an in-memory SQLite database a
 * Created issue appears in the issue list
 * Issue can be updated
 * Issue can be archived and restored
+* Markdown-lite descriptions and comments render safely
 * Issue detail view opens
 * Comment can be added
 * Comment can be edited

@@ -349,6 +349,70 @@ test('archives hides restores and preserves issue activity', async ({ page }) =>
   await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBeNull();
 });
 
+test('markdown-lite renders safe formatting and keeps unsafe input inert', async ({ page }) => {
+  const rawDescription = [
+    'Description with **bold text**, _italic text_, `inline code`, and [Example](https://example.com/docs?q=1#top).',
+    'Second line stays in the same paragraph.',
+    '',
+    '```',
+    'const safe = true;',
+    '<script>not real html</script>',
+    '```',
+    '',
+    'Unsafe text: <script>window.__tinytrackerXss = true</script> and [bad](javascript:alert(1)).'
+  ].join('\n');
+  const rawComment = 'Comment has **strong comment** and [bad](data:text/html,alert) plus <img src=x onerror=alert(1)>.';
+  const issue = await createIssueThroughApi(page, {
+    title: 'Markdown render issue',
+    description: rawDescription
+  });
+  const commentResponse = await page.request.post(`/api/issues/${issue.id}/comments`, {
+    data: {
+      body: rawComment
+    }
+  });
+
+  expect(commentResponse.ok()).toBe(true);
+
+  await page.goto(`/issues/${issue.id}`);
+
+  const detail = page.getByRole('region', { name: issue.title });
+  const description = detail.locator('.detail-description');
+
+  await expect(description.locator('strong').getByText('bold text')).toBeVisible();
+  await expect(description.locator('em').getByText('italic text')).toBeVisible();
+  await expect(description.locator('code').getByText('inline code')).toBeVisible();
+  await expect(description.locator('pre code')).toContainText('const safe = true;');
+  await expect(description.locator('pre code')).toContainText('<script>not real html</script>');
+
+  const safeLink = description.getByRole('link', { name: 'Example' });
+  await expect(safeLink).toHaveAttribute('href', 'https://example.com/docs?q=1#top');
+  await expect(safeLink).toHaveAttribute('target', '_blank');
+  await expect(safeLink).toHaveAttribute('rel', 'noopener noreferrer');
+
+  await expect(description.getByText('<script>window.__tinytrackerXss = true</script>')).toBeVisible();
+  await expect(description.getByText('[bad](javascript:alert(1)).')).toBeVisible();
+  await expect(detail.locator('script')).toHaveCount(0);
+  await expect(detail.locator('img')).toHaveCount(0);
+  await expect(detail.locator('a[href^="javascript:"]')).toHaveCount(0);
+  await expect(detail.locator('a[href^="data:"]')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as Window & { __tinytrackerXss?: boolean }).__tinytrackerXss)).toBeUndefined();
+
+  const commentItem = detail.getByLabel('Issue comments').getByRole('listitem').filter({ hasText: 'Comment has' });
+
+  await expect(commentItem.locator('strong').getByText('strong comment')).toBeVisible();
+  await expect(commentItem.getByText('[bad](data:text/html,alert)')).toBeVisible();
+  await expect(commentItem.getByText('<img src=x onerror=alert(1)>')).toBeVisible();
+  await expect(commentItem.locator('a[href^="data:"]')).toHaveCount(0);
+  await expect(commentItem.locator('img')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Edit Markdown render issue' }).click();
+
+  const issueForm = page.getByRole('form', { name: 'Issue form' });
+
+  await expect(issueForm.getByLabel('Description')).toHaveValue(rawDescription);
+});
+
 test('keyboard users can create open comment edit and close an issue', async ({ page }) => {
   await page.goto('/');
 

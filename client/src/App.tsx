@@ -619,6 +619,12 @@ export function App() {
     setSavedViewName(view.name);
   }
 
+  function removeMissingSavedView(viewId: string) {
+    setSavedViews((current) => current.filter((view) => view.id !== viewId));
+    setSelectedSavedViewId('');
+    setSavedViewName('');
+  }
+
   async function handleSaveCurrentView() {
     const name = savedViewName.trim();
 
@@ -676,8 +682,7 @@ export function App() {
       setSavedViewError(message);
 
       if (message === 'Saved view not found') {
-        setSavedViews((current) => current.filter((view) => view.id !== selectedSavedViewId));
-        setSelectedSavedViewId('');
+        removeMissingSavedView(selectedSavedViewId);
       }
     } finally {
       setIsSavedViewBusy(false);
@@ -703,7 +708,13 @@ export function App() {
     try {
       upsertSavedView(await updateSavedFilterView(selectedSavedViewId, { name }));
     } catch (error) {
-      setSavedViewError(error instanceof Error ? error.message : 'Saved view rename failed.');
+      const message = error instanceof Error ? error.message : 'Saved view rename failed.';
+
+      setSavedViewError(message);
+
+      if (message === 'Saved view not found') {
+        removeMissingSavedView(selectedSavedViewId);
+      }
     } finally {
       setIsSavedViewBusy(false);
     }
@@ -724,7 +735,13 @@ export function App() {
       setSelectedSavedViewId('');
       setSavedViewName('');
     } catch (error) {
-      setSavedViewError(error instanceof Error ? error.message : 'Saved view delete failed.');
+      const message = error instanceof Error ? error.message : 'Saved view delete failed.';
+
+      setSavedViewError(message);
+
+      if (message === 'Saved view not found') {
+        removeMissingSavedView(selectedSavedViewId);
+      }
     } finally {
       setIsSavedViewBusy(false);
     }

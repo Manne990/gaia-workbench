@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 type ExportedIssue = {
   title: string;
@@ -225,10 +225,79 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   expect(exportedActivityTypes).toContain('comment_edited');
 });
 
+test('imports tracker JSON through preview and apply', async ({ page }, testInfo) => {
+  await page.goto('/');
+
+  const importPayload = {
+    exportVersion: 1,
+    issues: [
+      {
+        id: 'e2e-import-issue',
+        title: 'Imported issue from JSON',
+        description: 'Created through the JSON import flow.',
+        status: 'review',
+        priority: 'high',
+        labels: ['imported'],
+        dueDate: null,
+        isOverdue: false,
+        createdAt: '2999-01-01T00:00:00.000Z',
+        updatedAt: '2999-01-01T00:00:00.000Z',
+        comments: [
+          {
+            id: 'e2e-import-comment',
+            issueId: 'e2e-import-issue',
+            body: 'Imported comment body',
+            createdAt: '2999-01-01T00:01:00.000Z',
+            updatedAt: '2999-01-01T00:01:00.000Z',
+            editHistory: []
+          }
+        ],
+        activityEvents: [
+          {
+            id: 'e2e-import-activity',
+            issueId: 'e2e-import-issue',
+            type: 'issue_created',
+            metadata: {
+              title: 'Imported issue from JSON'
+            },
+            createdAt: '2999-01-01T00:00:00.000Z'
+          }
+        ]
+      }
+    ]
+  };
+  const importFilePath = testInfo.outputPath('tinytracker-import.json');
+
+  writeFileSync(importFilePath, JSON.stringify(importPayload), 'utf8');
+  await page.locator('input[type="file"][accept="application/json,.json"]').setInputFiles(importFilePath);
+
+  const importPanel = page.getByRole('region', { name: 'Import preview' });
+
+  await expect(importPanel.getByRole('heading', { name: 'Import Preview' })).toBeVisible();
+  await expect(importPanel.getByText('Ready to create 1 issues and skip 0.')).toBeVisible();
+  await expect(importPanel.getByRole('row', { name: /Issues\s+1\s+1\s+0/ })).toBeVisible();
+
+  await importPanel.getByRole('button', { name: 'Apply Import' }).click();
+
+  await expect(importPanel.getByText('Import applied: 1 issues created, 0 skipped.')).toBeVisible();
+
+  const importedRow = page.getByRole('row', { name: /Imported issue from JSON.*Review.*High/ });
+  await expect(importedRow).toBeVisible();
+
+  await page.getByRole('button', { name: 'Open Imported issue from JSON' }).click();
+
+  const detail = page.getByRole('region', { name: 'Imported issue from JSON' });
+
+  await expect(detail.getByText('Created through the JSON import flow.')).toBeVisible();
+  await expect(detail.getByText('Imported comment body')).toBeVisible();
+  await expect(detail.getByLabel('Issue activity').getByText('Issue created')).toBeVisible();
+});
+
 test('keyboard users can create open comment edit and close an issue', async ({ page }) => {
   await page.goto('/');
 
   const downloadLink = page.getByRole('link', { name: 'Download JSON' });
+  const importButton = page.getByRole('button', { name: 'Import JSON', exact: true });
   const newIssueButton = page.getByRole('button', { name: 'New Issue' });
 
   await page.keyboard.press('Tab');
@@ -237,6 +306,9 @@ test('keyboard users can create open comment edit and close an issue', async ({ 
   await page.keyboard.press('Enter');
   const keyboardExportDownload = await keyboardExportDownloadPromise;
   expect(keyboardExportDownload.suggestedFilename()).toBe('tinytracker-export.json');
+
+  await page.keyboard.press('Tab');
+  await expect(importButton).toBeFocused();
 
   await page.keyboard.press('Tab');
   await expect(newIssueButton).toBeFocused();

@@ -1,0 +1,306 @@
+import request from 'supertest';
+import { describe, expect, it } from 'vitest';
+import { createApp } from '../src/app.js';
+
+type ImportCounts = {
+  issues: number;
+  comments: number;
+  editHistory: number;
+  activityEvents: number;
+};
+
+type ExportedComment = {
+  id: string;
+  issueId: string;
+  editHistory: Array<{ id: string; commentId: string }>;
+};
+
+type ExportedIssue = {
+  id: string;
+  status: string;
+  comments: ExportedComment[];
+  activityEvents: Array<{ id: string; issueId: string }>;
+};
+
+type TrackerExport = {
+  exportVersion: number;
+  issues: ExportedIssue[];
+};
+
+const cloneExport = (payload: TrackerExport): TrackerExport => JSON.parse(JSON.stringify(payload));
+
+function countExport(payload: TrackerExport): ImportCounts {
+  return {
+    issues: payload.issues.length,
+    comments: payload.issues.reduce((total, issue) => total + issue.comments.length, 0),
+    editHistory: payload.issues.reduce(
+      (total, issue) =>
+        total + issue.comments.reduce((commentTotal, comment) => commentTotal + comment.editHistory.length, 0),
+      0
+    ),
+    activityEvents: payload.issues.reduce((total, issue) => total + issue.activityEvents.length, 0)
+  };
+}
+
+async function createExportFixture(): Promise<TrackerExport> {
+  const app = createApp({ databasePath: ':memory:' });
+
+  const firstIssue = await request(app)
+    .post('/api/issues')
+    .send({
+      title: 'Import source issue',
+      description: 'Original issue body',
+      labels: ['import', 'backup'],
+      dueDate: '2000-01-01'
+    })
+    .expect(201);
+
+  const secondIssue = await request(app)
+    .post('/api/issues')
+    .send({
+      title: 'Second import source',
+      description: 'No comments on this issue',
+      priority: 'low'
+    })
+    .expect(201);
+
+  await request(app)
+    .put(`/api/issues/${firstIssue.body.id}`)
+    .send({
+      title: 'Import source issue updated',
+      status: 'review',
+      priority: 'high',
+      labels: ['import', 'verified'],
+      dueDate: '2999-12-31'
+    })
+    .expect(200);
+
+  await request(app)
+    .put(`/api/issues/${secondIssue.body.id}`)
+    .send({
+      status: 'in_progress',
+      priority: 'medium'
+    })
+    .expect(200);
+
+  const firstComment = await request(app)
+    .post(`/api/issues/${firstIssue.body.id}/comments`)
+    .send({ body: 'Import comment before edit' })
+    .expect(201);
+
+  await request(app)
+    .post(`/api/issues/${firstIssue.body.id}/comments`)
+    .send({ body: 'Second import comment' })
+    .expect(201);
+
+  await request(app)
+    .put(`/api/comments/${firstComment.body.id}`)
+    .send({ body: 'Import comment after first edit' })
+    .expect(200);
+
+  await request(app)
+    .put(`/api/comments/${firstComment.body.id}`)
+    .send({ body: 'Import comment after second edit' })
+    .expect(200);
+
+  const exported = await request(app).get('/api/export').expect(200);
+
+  return exported.body as TrackerExport;
+}
+
+describe('tracker import API', () => {
+  it('previews a valid export without mutating the target database', async () => {
+    const targetApp = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const counts = countExport(payload);
+
+    const preview = await request(targetApp).post('/api/import/preview').send(payload).expect(200);
+    const issuesAfterPreview = await request(targetApp).get('/api/issues').expect(200);
+
+    expect(preview.body).toMatchObject({
+      valid: true,
+      exportVersion: 1,
+      summary: {
+        input: counts,
+        toCreate: counts,
+        skip: {
+          issues: 0,
+          comments: 0,
+          editHistory: 0,
+          activityEvents: 0
+        },
+        reject: 0
+      },
+      errors: [],
+      warnings: []
+    });
+    expect(preview.body.decisions).toHaveLength(
+      counts.issues + counts.comments + counts.editHistory + counts.activityEvents
+    );
+    expect(issuesAfterPreview.body.pagination.total).toBe(0);
+  });
+
+  it('applies a valid export and preserves exported records', async () => {
+    const targetApp = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const counts = countExport(payload);
+
+    const applied = await request(targetApp).post('/api/import/apply').send(payload).expect(200);
+    const exportedAfterImport = await request(targetApp).get('/api/export').expect(200);
+
+    expect(applied.body).toMatchObject({
+      valid: true,
+      summary: {
+        input: counts,
+        toCreate: counts,
+        skip: {
+          issues: 0,
+          comments: 0,
+          editHistory: 0,
+          activityEvents: 0
+        },
+        reject: 0
+      }
+    });
+    expect(exportedAfterImport.body).toEqual(payload);
+  });
+
+  it('re-imports the same export as a deterministic no-op', async () => {
+    const targetApp = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const counts = countExport(payload);
+
+    await request(targetApp).post('/api/import/apply').send(payload).expect(200);
+    const beforeReimport = await request(targetApp).get('/api/export').expect(200);
+    const reapplied = await request(targetApp).post('/api/import/apply').send(payload).expect(200);
+    const afterReimport = await request(targetApp).get('/api/export').expect(200);
+
+    expect(reapplied.body).toMatchObject({
+      valid: true,
+      summary: {
+        input: counts,
+        toCreate: {
+          issues: 0,
+          comments: 0,
+          editHistory: 0,
+          activityEvents: 0
+        },
+        skip: counts,
+        reject: 0
+      }
+    });
+    expect(afterReimport.body).toEqual(beforeReimport.body);
+  });
+
+  it('returns a structured error for invalid JSON', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const response = await request(app)
+      .post('/api/import/preview')
+      .set('Content-Type', 'application/json')
+      .send('{')
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      valid: false,
+      exportVersion: null,
+      summary: {
+        reject: 1
+      },
+      errors: [
+        {
+          code: 'invalid_json',
+          path: '$',
+          message: 'Request body must be valid JSON.'
+        }
+      ]
+    });
+  });
+
+  it('rejects unsupported export versions', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const response = await request(app)
+      .post('/api/import/preview')
+      .send({
+        exportVersion: 2,
+        issues: []
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      valid: false,
+      exportVersion: 2,
+      errors: [
+        {
+          code: 'unsupported_version',
+          path: '$.exportVersion'
+        }
+      ]
+    });
+  });
+
+  it('rejects malformed payloads without mutating existing data', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+
+    await request(app).post('/api/issues').send({ title: 'Keep me intact' }).expect(201);
+    const beforeImport = await request(app).get('/api/export').expect(200);
+
+    const malformed = cloneExport(payload);
+    malformed.issues[0].status = 'blocked';
+
+    const response = await request(app).post('/api/import/apply').send(malformed).expect(400);
+    const afterImport = await request(app).get('/api/export').expect(200);
+
+    expect(response.body.valid).toBe(false);
+    expect(response.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'invalid_status',
+          path: '$.issues[0].status'
+        })
+      ])
+    );
+    expect(afterImport.body).toEqual(beforeImport.body);
+  });
+
+  it('rejects duplicate IDs inside the import payload', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const duplicated = cloneExport(payload);
+    duplicated.issues[1].id = duplicated.issues[0].id;
+
+    const response = await request(app).post('/api/import/preview').send(duplicated).expect(400);
+
+    expect(response.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'duplicate_id',
+          path: '$.issues[1].id'
+        })
+      ])
+    );
+  });
+
+  it('rejects dangling nested references', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const dangling = cloneExport(payload);
+    const issueIndex = dangling.issues.findIndex((issue) => issue.comments.length > 0);
+
+    expect(issueIndex).toBeGreaterThanOrEqual(0);
+    dangling.issues[issueIndex].comments[0].issueId = 'missing-issue';
+
+    const response = await request(app).post('/api/import/preview').send(dangling).expect(400);
+
+    expect(response.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'dangling_reference',
+          path: `$.issues[${issueIndex}].comments[0].issueId`
+        })
+      ])
+    );
+  });
+});

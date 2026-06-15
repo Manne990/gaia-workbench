@@ -58,6 +58,7 @@ If Gaia can successfully build, maintain, and evolve TinyTracker, it demonstrate
 * Search by description
 * Filter by status
 * Filter by priority
+* Filter by "blocked-only"
 * Include archived issues on demand
 * Save named dashboard filter views
 

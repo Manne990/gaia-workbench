@@ -91,6 +91,9 @@ export function IssueDetailPanel({
   onCancelEditComment,
   onSubmitCommentEdit
 }: IssueDetailPanelProps) {
+  const blockers = issueDependencies?.dependencies ?? [];
+  const dependents = issueDependencies?.dependents ?? [];
+
   return (
     <>
       {isIssueDetailLoading ? (
@@ -227,36 +230,79 @@ export function IssueDetailPanel({
                 </div>
               ) : null}
 
-              {dependencyLoadState === 'loaded' && issueDependencies?.dependencies.length === 0 ? (
-                <div className="state-message compact">No dependencies yet.</div>
-              ) : null}
+              {dependencyLoadState === 'loaded' ? (
+                <>
+                  <div className="dependency-graph">
+                    <section className="dependency-subsection" aria-label="Issue blockers">
+                      <div className="dependency-subheader">
+                        <h4>Blockers</h4>
+                        <span>{blockers.length}</span>
+                      </div>
+                      {blockers.length === 0 ? (
+                        <div className="state-message compact">No blockers.</div>
+                      ) : (
+                        <ul className="dependency-list">
+                          {blockers.map((dependency) => {
+                            const isBlocking = dependency.archivedAt === null && dependency.status !== 'done';
 
-              {issueDependencies && issueDependencies.dependencies.length > 0 ? (
-                <ul className="dependency-list" aria-label="Issue dependencies">
-                  {issueDependencies.dependencies.map((dependency) => {
-                    const isBlocking = dependency.archivedAt === null && dependency.status !== 'done';
+                            return (
+                              <li
+                                key={dependency.id}
+                                className={isBlocking ? 'dependency-item blocking' : 'dependency-item'}
+                              >
+                                <div>
+                                  <strong>{dependency.title}</strong>
+                                  <span>{statusLabels[dependency.status]}</span>
+                                  {dependency.archivedAt ? <span className="archived-pill">Archived</span> : null}
+                                  {isBlocking ? <span className="blocked-pill">Blocking</span> : null}
+                                </div>
+                                <button
+                                  type="button"
+                                  className="ghost-button"
+                                  onClick={() => onRemoveIssueDependency(dependency.id)}
+                                  disabled={isDependencySubmitting}
+                                  aria-label={`Remove dependency ${dependency.title}`}
+                                >
+                                  Remove
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </section>
 
-                    return (
-                      <li key={dependency.id} className={isBlocking ? 'dependency-item blocking' : 'dependency-item'}>
-                        <div>
-                          <strong>{dependency.title}</strong>
-                          <span>{statusLabels[dependency.status]}</span>
-                          {dependency.archivedAt ? <span className="archived-pill">Archived</span> : null}
-                          {isBlocking ? <span className="blocked-pill">Blocking</span> : null}
-                        </div>
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={() => onRemoveIssueDependency(dependency.id)}
-                          disabled={isDependencySubmitting}
-                          aria-label={`Remove dependency ${dependency.title}`}
-                        >
-                          Remove
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
+                    <section className="dependency-subsection" aria-label="Issue dependents">
+                      <div className="dependency-subheader">
+                        <h4>Dependents</h4>
+                        <span>{dependents.length}</span>
+                      </div>
+                      {dependents.length === 0 ? (
+                        <div className="state-message compact">No dependents.</div>
+                      ) : (
+                        <ul className="dependency-list">
+                          {dependents.map((dependent) => {
+                            const blocksCurrent = dependent.archivedAt === null && dependent.status !== 'done';
+
+                            return (
+                              <li
+                                key={dependent.id}
+                                className={blocksCurrent ? 'dependency-item blocking' : 'dependency-item'}
+                              >
+                                <div>
+                                  <strong>{dependent.title}</strong>
+                                  <span>{statusLabels[dependent.status]}</span>
+                                  {dependent.archivedAt ? <span className="archived-pill">Archived</span> : null}
+                                  {blocksCurrent ? <span className="blocked-pill">Blocking</span> : null}
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </section>
+                  </div>
+                </>
               ) : null}
 
               <form className="dependency-form" aria-label="Dependency form" onSubmit={onSubmitIssueDependency}>

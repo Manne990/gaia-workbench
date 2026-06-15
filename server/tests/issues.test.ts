@@ -655,6 +655,67 @@ describe('issues API', () => {
       });
   });
 
+  it('returns blockers and dependents for issue dependency detail and hydrates archived blockers', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const blocker = await request(app).post('/api/issues').send({ title: 'Archived-aware blocker' }).expect(201);
+    const blocked = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Blocked issue with compact view', status: 'in_progress' })
+      .expect(201);
+    const dependent = await request(app).post('/api/issues').send({ title: 'Dependent issue' }).expect(201);
+
+    await request(app)
+      .post(`/api/issues/${blocked.body.id}/dependencies`)
+      .send({ dependsOnIssueId: blocker.body.id })
+      .expect(201);
+    await request(app)
+      .post(`/api/issues/${dependent.body.id}/dependencies`)
+      .send({ dependsOnIssueId: blocked.body.id })
+      .expect(201);
+
+    const dependencyDetail = await request(app).get(`/api/issues/${blocked.body.id}/dependencies`).expect(200);
+
+    expect(dependencyDetail.body).toMatchObject({
+      issueId: blocked.body.id,
+      isBlocked: true,
+      dependencies: [
+        {
+          id: blocker.body.id,
+          title: 'Archived-aware blocker',
+          status: 'todo',
+          archivedAt: null
+        }
+      ],
+      dependents: [
+        {
+          id: dependent.body.id,
+          title: 'Dependent issue',
+          status: 'todo',
+          archivedAt: null
+        }
+      ]
+    });
+
+    await request(app).post(`/api/issues/${blocker.body.id}/archive`).expect(200);
+
+    const postArchiveDependencyDetail = await request(app)
+      .get(`/api/issues/${blocked.body.id}/dependencies`)
+      .expect(200);
+
+    expect(postArchiveDependencyDetail.body).toMatchObject({
+      issueId: blocked.body.id,
+      isBlocked: false,
+      dependencies: [
+        {
+          id: blocker.body.id,
+          title: 'Archived-aware blocker',
+          archivedAt: expect.any(String)
+        }
+      ]
+    });
+  });
+
   it('returns validation errors for invalid issue payloads', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

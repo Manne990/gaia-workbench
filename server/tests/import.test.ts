@@ -12,11 +12,14 @@ type ImportCounts = {
 type ExportedComment = {
   id: string;
   issueId: string;
+  body?: string;
   editHistory: Array<{ id: string; commentId: string }>;
 };
 
 type ExportedIssue = {
   id: string;
+  title?: string;
+  description?: string;
   status: string;
   archivedAt?: string | null;
   comments: ExportedComment[];
@@ -188,6 +191,44 @@ describe('tracker import API', () => {
       }
     });
     expect(exportedAfterImport.body).toEqual(payload);
+  });
+
+  it('preserves markdown-like and unsafe-looking body text as raw import data', async () => {
+    const sourceApp = createApp({ databasePath: ':memory:' });
+    const targetApp = createApp({ databasePath: ':memory:' });
+    const rawDescription = [
+      '**bold** _italic_ `code`',
+      '[safe](https://example.com) [bad](javascript:alert(1))',
+      '<script>alert(1)</script>'
+    ].join('\n');
+    const rawComment = 'Comment with ```code``` and <img src=x onerror=alert(1)> [bad](data:text/html,alert)';
+
+    const created = await request(sourceApp)
+      .post('/api/issues')
+      .send({
+        title: 'Raw markdown import source',
+        description: rawDescription
+      })
+      .expect(201);
+
+    await request(sourceApp)
+      .post(`/api/issues/${created.body.id}/comments`)
+      .send({ body: rawComment })
+      .expect(201);
+
+    const payload = await request(sourceApp).get('/api/export').expect(200);
+
+    await request(targetApp).post('/api/import/preview').send(payload.body).expect(200);
+    await request(targetApp).post('/api/import/apply').send(payload.body).expect(200);
+
+    const exportedAfterImport = await request(targetApp).get('/api/export').expect(200);
+    const importedIssue = exportedAfterImport.body.issues.find(
+      (issue: ExportedIssue) => issue.title === 'Raw markdown import source'
+    ) as ExportedIssue | undefined;
+
+    expect(exportedAfterImport.body).toEqual(payload.body);
+    expect(importedIssue?.description).toBe(rawDescription);
+    expect(importedIssue?.comments[0].body).toBe(rawComment);
   });
 
   it('applies archived issues and keeps them hidden from the default list', async () => {

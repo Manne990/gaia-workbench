@@ -9,6 +9,7 @@ import type {
   StatusFilter
 } from '../types';
 import { formatDate, formatDueDate } from '../utils/formatters';
+import { renderMarkdownLiteInline } from '../utils/markdown';
 
 type IssueListPanelProps = {
   loadState: LoadState;
@@ -210,7 +211,9 @@ export function IssueListPanel({
                     <td>
                       <strong>{issue.title}</strong>
                       {issue.archivedAt ? <span className="archived-pill">Archived</span> : null}
-                      {issue.description ? <span>{issue.description}</span> : null}
+                      {issue.description
+                        ? renderMarkdownLiteInline(issue.description, { className: 'issue-description-snippet' })
+                        : null}
                       {issue.labels.length > 0 ? (
                         <div className="label-row" aria-label={`Labels for ${issue.title}`}>
                           {issue.labels.map((label) => (

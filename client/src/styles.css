@@ -579,6 +579,65 @@ td > span:not(.pill) {
   line-height: 1.45;
 }
 
+.issue-description-snippet {
+  max-width: 52ch;
+  color: #64707c;
+  line-height: 1.45;
+}
+
+.markdown-lite p {
+  margin: 10px 0 0;
+}
+
+.markdown-lite p:first-child {
+  margin-top: 0;
+}
+
+.markdown-lite a,
+.markdown-lite-inline a {
+  color: #245d61;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-lite code,
+.markdown-lite-inline code {
+  padding: 2px 5px;
+  border: 1px solid #dbe2e8;
+  border-radius: 5px;
+  background: #f1f5f7;
+  color: #25313b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.92em;
+}
+
+.markdown-lite pre {
+  overflow-x: auto;
+  margin: 12px 0 0;
+  padding: 12px;
+  border: 1px solid #dbe2e8;
+  border-radius: 8px;
+  background: #f6f8fa;
+  color: #25313b;
+  line-height: 1.45;
+}
+
+.markdown-lite pre code {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  white-space: pre;
+}
+
+.markdown-lite-inline strong,
+.markdown-lite-inline em,
+.markdown-lite-inline code,
+.markdown-lite-inline a {
+  display: inline;
+}
+
 .overdue-row {
   background: #fff8f2;
 }

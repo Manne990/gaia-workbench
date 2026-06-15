@@ -836,6 +836,8 @@ describe('schema migrations', () => {
 
       try {
         expect(getTinyTrackerSchemaVersion(reopened)).toBe(0);
+        expect(getTableNames(reopened)).toEqual([TABLE_NAMES.issues]);
+        expect(getColumnNames(reopened, TABLE_NAMES.issues)).toEqual(['id', 'title', 'created_at', 'updated_at']);
       } finally {
         reopened.close();
       }

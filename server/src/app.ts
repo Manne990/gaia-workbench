@@ -531,6 +531,16 @@ export function createApp(config: AppConfig = {}) {
     }
   });
 
+  app.post('/api/issues/:id/duplicate', (req, res) => {
+    const issue = issueRepository.duplicate(req.params.id);
+
+    if (!issue) {
+      return res.status(404).json({ error: 'Issue not found' });
+    }
+
+    return res.status(201).json(issue);
+  });
+
   app.post('/api/issues/:id/close', (req, res) => {
     const issue = issueRepository.close(req.params.id);
 

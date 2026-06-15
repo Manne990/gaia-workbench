@@ -8,6 +8,7 @@ import {
   bulkUpdateIssueStatus,
   createSavedFilterView,
   deleteSavedFilterView,
+  duplicateIssue,
   fetchCommentHistory,
   fetchIssue,
   fetchIssueActivity,
@@ -1195,6 +1196,18 @@ export function App() {
     }
   }
 
+  async function handleDuplicateIssue(issue: Issue, trigger: HTMLElement) {
+    try {
+      const duplicatedIssue = await duplicateIssue(issue.id);
+
+      openIssue(duplicatedIssue, trigger);
+      returnToFirstPage();
+      restoreFocus(trigger, () => issueDetailHeadingRef.current);
+    } catch {
+      restoreFocus(trigger, () => issueDetailHeadingRef.current);
+    }
+  }
+
   function clearArchiveRecovery() {
     setRecentlyArchivedIssue(null);
   }
@@ -1625,6 +1638,7 @@ export function App() {
           commentsHeadingRef={commentsHeadingRef}
           editCommentTextareaRef={editCommentTextareaRef}
           onCloseIssueDetail={closeIssueDetail}
+          onDuplicateIssue={handleDuplicateIssue}
           onArchiveIssue={handleArchiveIssue}
           onUnarchiveIssue={handleUnarchiveIssue}
           onSubmitIssueDependency={submitIssueDependency}

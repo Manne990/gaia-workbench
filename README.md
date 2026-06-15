@@ -220,6 +220,28 @@ The default file-backed database is:
 data/tinytracker.sqlite
 ```
 
+### Schema Versioning
+
+TinyTracker stores its SQLite schema version in `PRAGMA user_version`. The
+current application schema is version `1`, which includes issues, comments,
+comment edit history, activity events, labels, due dates, archive state, and the
+current query indexes. This is separate from tracker JSON `exportVersion`.
+
+Startup runs the schema migration path through `createDatabase()`. Fresh
+databases and unversioned legacy databases (`user_version = 0`) are upgraded to
+the current schema without dropping tables or deleting rows. Reopening an
+already-current database verifies the expected tables, columns, and indexes and
+then leaves data unchanged. Databases with a newer unsupported `user_version`
+fail fast instead of attempting a downgrade.
+
+When adding a future schema change:
+
+* add an ordered migration in `server/src/db/schema.ts`
+* keep the migration idempotent with table, column, or index preconditions
+* bump `SCHEMA_VERSION` only for database schema changes
+* set the new `user_version` only after the migration succeeds
+* add tests for fresh init, repeated init, and upgrade from the previous schema
+
 For disposable local runs, use an in-memory database:
 
 ```bash

@@ -10,7 +10,7 @@ import type {
   PriorityFilter,
   StatusFilter
 } from '../types';
-import { defaultDashboardFilters } from '../utils/routing';
+import { buildDashboardQuery, defaultDashboardFilters } from '../utils/routing';
 
 const defaultPagination: IssueListPagination = {
   page: 1,
@@ -50,35 +50,22 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     const controller = new AbortController();
 
     async function loadIssues() {
-      const params = new URLSearchParams({
-        page: String(currentPage),
-        limit: String(pageSize)
-      });
-      const search = searchFilter.trim();
-
-      if (search) {
-        params.set('search', search);
-      }
-
-      if (statusFilter !== 'all') {
-        params.set('status', statusFilter);
-      }
-
-      if (priorityFilter !== 'all') {
-        params.set('priority', priorityFilter);
-      }
-
-      if (includeArchived) {
-        params.set('includeArchived', 'true');
-      }
-
-      if (blockedOnly) {
-        params.set('blockedOnly', 'true');
-      }
-
-      if (staleOnly) {
-        params.set('staleOnly', 'true');
-      }
+      const params = new URLSearchParams(
+        buildDashboardQuery(
+          {
+            search: searchFilter,
+            status: statusFilter,
+            priority: priorityFilter,
+            includeArchived,
+            blockedOnly,
+            staleOnly,
+            pageSize
+          },
+          { includePageSize: false }
+        )
+      );
+      params.set('page', String(currentPage));
+      params.set('limit', String(pageSize));
 
       try {
         setLoadState('loading');

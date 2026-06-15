@@ -182,6 +182,71 @@ function getIssueListPagination(query: { page?: unknown; limit?: unknown }) {
   return { page, limit };
 }
 
+function buildIssueListFilters(query: {
+  status?: unknown;
+  priority?: unknown;
+  search?: unknown;
+  includeArchived?: unknown;
+  blockedOnly?: unknown;
+  staleOnly?: unknown;
+}): IssueListFilters {
+  return {
+    status: getOptionalQueryString(query.status) as IssueListFilters['status'],
+    priority: getOptionalQueryString(query.priority) as IssueListFilters['priority'],
+    search: getOptionalQueryString(query.search),
+    includeArchived: parseOptionalBooleanQuery(query.includeArchived, false, 'Invalid includeArchived parameter'),
+    blockedOnly: parseOptionalBooleanQuery(query.blockedOnly, false, 'Invalid blockedOnly parameter'),
+    staleOnly: parseOptionalBooleanQuery(query.staleOnly, false, 'Invalid staleOnly parameter')
+  };
+}
+
+function escapeCsvCell(value: string): string {
+  const needsEscaping = /[",\r\n]/.test(value);
+
+  if (!needsEscaping) {
+    return value;
+  }
+
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+function buildIssueListCsv(issues: Issue[]): string {
+  const header = [
+    'id',
+    'title',
+    'description',
+    'status',
+    'priority',
+    'dueDate',
+    'isOverdue',
+    'isBlocked',
+    'archivedAt',
+    'dependsOnIssueIds',
+    'labels',
+    'createdAt',
+    'updatedAt'
+  ];
+  const rows = issues.map((issue) => [
+    issue.id,
+    issue.title,
+    issue.description,
+    issue.status,
+    issue.priority,
+    issue.dueDate ?? '',
+    String(issue.isOverdue),
+    String(issue.isBlocked),
+    issue.archivedAt ?? '',
+    issue.dependsOnIssueIds.join('|'),
+    issue.labels.join('|'),
+    issue.createdAt,
+    issue.updatedAt
+  ]);
+
+  const rowsCsv = rows.map((row) => row.map(escapeCsvCell).join(','));
+
+  return [header.join(','), ...rowsCsv].join('\r\n');
+}
+
 function parseOptionalBooleanQuery(value: unknown, defaultValue: boolean, errorMessage: string): boolean {
   const queryValue = getOptionalQueryString(value);
 
@@ -274,6 +339,24 @@ export function createApp(config: AppConfig = {}) {
     res.status(200).json(buildTrackerExport(issueRepository, commentRepository, activityRepository));
   });
 
+  app.get('/api/export.csv', (req, res) => {
+    try {
+      const filters = buildIssueListFilters(req.query);
+      const issues = issueRepository.listForExport(filters);
+
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="tinytracker-issues.csv"');
+      res.status(200).send(buildIssueListCsv(issues));
+      return;
+    } catch (error) {
+      if (isValidationError(error)) {
+        return res.status(400).json({ error: error.message });
+      }
+
+      throw error;
+    }
+  });
+
   app.get('/api/filter-views', (_req, res) => {
     res.status(200).json(savedFilterViewRepository.list());
   });
@@ -356,18 +439,7 @@ export function createApp(config: AppConfig = {}) {
 
   app.get('/api/issues', (req, res) => {
     try {
-      const filters: IssueListFilters = {
-        status: getOptionalQueryString(req.query.status) as IssueListFilters['status'],
-        priority: getOptionalQueryString(req.query.priority) as IssueListFilters['priority'],
-        search: getOptionalQueryString(req.query.search),
-        includeArchived: parseOptionalBooleanQuery(
-          req.query.includeArchived,
-          false,
-          'Invalid includeArchived parameter'
-        ),
-        blockedOnly: parseOptionalBooleanQuery(req.query.blockedOnly, false, 'Invalid blockedOnly parameter'),
-        staleOnly: parseOptionalBooleanQuery(req.query.staleOnly, false, 'Invalid staleOnly parameter')
-      };
+      const filters = buildIssueListFilters(req.query);
 
       return res.status(200).json(issueRepository.list(filters, getIssueListPagination(req.query)));
     } catch (error) {
@@ -380,18 +452,7 @@ export function createApp(config: AppConfig = {}) {
 
   app.get('/api/issues/audit-summary', (req, res) => {
     try {
-      const filters: IssueListFilters = {
-        status: getOptionalQueryString(req.query.status) as IssueListFilters['status'],
-        priority: getOptionalQueryString(req.query.priority) as IssueListFilters['priority'],
-        search: getOptionalQueryString(req.query.search),
-        includeArchived: parseOptionalBooleanQuery(
-          req.query.includeArchived,
-          false,
-          'Invalid includeArchived parameter'
-        ),
-        blockedOnly: parseOptionalBooleanQuery(req.query.blockedOnly, false, 'Invalid blockedOnly parameter'),
-        staleOnly: parseOptionalBooleanQuery(req.query.staleOnly, false, 'Invalid staleOnly parameter')
-      };
+      const filters = buildIssueListFilters(req.query);
 
       return res.status(200).json(issueRepository.getAuditSummary(filters));
     } catch (error) {

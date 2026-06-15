@@ -296,6 +296,12 @@ test('command palette opens with keyboard shortcut, restores focus, and runs com
   await expect(commandSearch).toHaveAttribute('aria-label', 'Search commands');
   await expect(commandList).toBeVisible();
 
+  await page.keyboard.press('Shift+Tab');
+  await expect.poll(() => commandPalette.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true);
+  await expect(commandSearch).not.toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(commandSearch).toBeFocused();
+
   await page.keyboard.press('Escape');
   await expect(commandPalette).toHaveCount(0);
   await expect(quickActionsButton).toBeFocused();

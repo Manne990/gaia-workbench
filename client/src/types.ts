@@ -55,6 +55,13 @@ export type IssueListResponse = {
   };
 };
 
+export type ServiceHealth = {
+  status: 'ok';
+  service: 'TinyTracker';
+};
+
+export type ServiceHealthState = 'checking' | 'online' | 'unavailable';
+
 export type Comment = {
   id: string;
   issueId: string;

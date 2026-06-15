@@ -1,15 +1,30 @@
 import type { ChangeEvent, RefObject } from 'react';
+import type { ServiceHealthState } from '../types';
 
 type DashboardHeaderProps = {
   totalIssues: number;
+  serviceHealthState: ServiceHealthState;
   newIssueButtonRef: RefObject<HTMLButtonElement | null>;
   importInputRef: RefObject<HTMLInputElement | null>;
   onCreateIssue: (trigger: HTMLElement) => void;
   onChooseImportFile: (event: ChangeEvent<HTMLInputElement>) => void;
 };
 
+function serviceHealthText(state: ServiceHealthState): string {
+  if (state === 'online') {
+    return 'Service: online';
+  }
+
+  if (state === 'unavailable') {
+    return 'Service: unavailable';
+  }
+
+  return 'Service: checking';
+}
+
 export function DashboardHeader({
   totalIssues,
+  serviceHealthState,
   newIssueButtonRef,
   importInputRef,
   onCreateIssue,
@@ -37,6 +52,15 @@ export function DashboardHeader({
         >
           New Issue
         </button>
+        <div
+          className={`service-status service-status-${serviceHealthState}`}
+          role="status"
+          aria-label="Service status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {serviceHealthText(serviceHealthState)}
+        </div>
         <div className="total-summary" aria-label="Issue totals">
           <span>Total Issues</span>
           <strong>{totalIssues}</strong>

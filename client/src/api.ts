@@ -105,6 +105,10 @@ async function readJsonOrThrow<T>(response: Response, fallbackMessage: string): 
     throw new Error(errorMessage);
   }
 
+  if (body === null) {
+    throw new Error(fallbackMessage);
+  }
+
   return body as T;
 }
 

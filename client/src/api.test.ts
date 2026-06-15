@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { archiveIssue, fetchCommentHistory, fetchIssue, fetchIssueActivity } from './api';
+import { archiveIssue, fetchCommentHistory, fetchIssue, fetchIssueActivity, fetchServiceHealth } from './api';
 
 function jsonResponse(body: unknown, init: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -40,5 +40,11 @@ describe('client API errors', () => {
 
     await expect(fetchIssue('missing-issue')).resolves.toBeNull();
     await expect(fetchIssue('temporarily-unavailable')).rejects.toThrow('Database unavailable');
+  });
+
+  it('rejects successful JSON endpoints when the response body cannot be parsed', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response('', { status: 200 }));
+
+    await expect(fetchServiceHealth()).rejects.toThrow('Service health request failed');
   });
 });

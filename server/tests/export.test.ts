@@ -512,6 +512,18 @@ describe('tracker export API', () => {
     expect(csvRowsById.get(atIssue.body.id)?.[1]).toBe("'@external-reference");
     expect(csvRowsById.get(atIssue.body.id)?.[2]).toBe("'-10");
 
+    const filteredCsvResponse = await request(app)
+      .get(`/api/export.csv?search=${encodeURIComponent('HYPERLINK')}`)
+      .expect(200)
+      .expect('Content-Type', /text\/csv/);
+    const filteredRows = parseCsvRows(filteredCsvResponse.text);
+
+    expect(filteredRows).toHaveLength(2);
+    expect(filteredRows[1][0]).toBe(formulaIssue.body.id);
+    expect(filteredRows[1][1]).toBe(`'=HYPERLINK("https://example.test","open")`);
+    expect(filteredRows[1][2]).toBe("'+SUM(1,2)");
+    expect(filteredRows[1][10]).toBe("'-risk|safe");
+
     const jsonExport = await request(app).get('/api/export').expect(200);
     const exportedFormulaIssue = (jsonExport.body as TrackerExport).issues.find(
       (issue) => issue.id === formulaIssue.body.id

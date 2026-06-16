@@ -378,6 +378,30 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   expect(csvLines[1]).toContain('Edit issue from UI');
   expect(csvLines[1]).toContain('done');
   expect(csvLines[1]).toContain('low');
+
+  await createIssueThroughApi(page, {
+    title: '=CSV dashboard formula',
+    description: '+CSV dashboard description',
+    status: 'done',
+    priority: 'low',
+    labels: ['-risk', 'safe']
+  });
+  await filters.getByLabel('Search').fill('=CSV dashboard formula');
+  const formulaCsvDownloadPromise = page.waitForEvent('download');
+  await page.getByRole('link', { name: 'Download CSV' }).click();
+  const formulaCsvDownload = await formulaCsvDownloadPromise;
+  const formulaCsvPath = await formulaCsvDownload.path();
+
+  expect(formulaCsvDownload.suggestedFilename()).toBe('tinytracker-issues.csv');
+  expect(formulaCsvPath).not.toBeNull();
+
+  const formulaCsv = readFileSync(formulaCsvPath ?? '', 'utf8');
+  const formulaCsvLines = formulaCsv.trim().split('\n');
+
+  expect(formulaCsvLines).toHaveLength(2);
+  expect(formulaCsvLines[1]).toContain("'=CSV dashboard formula");
+  expect(formulaCsvLines[1]).toContain("'+CSV dashboard description");
+  expect(formulaCsvLines[1]).toContain("'-risk|safe");
 });
 
 test('duplicates an issue from detail without copying history or dependencies', async ({ page }) => {

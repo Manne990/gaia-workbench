@@ -1,12 +1,21 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const cleanupScriptPath = path.resolve(process.cwd(), 'scripts/cleanVerificationArtifacts.mjs');
+const packageJsonPath = path.resolve(process.cwd(), 'package.json');
 
 describe('verification artifact cleanup', () => {
+  it('runs before the full ci script so stale outputs do not survive partial runs', () => {
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as { scripts: Record<string, string> };
+
+    expect(packageJson.scripts['clean:verification']).toBe('node scripts/cleanVerificationArtifacts.mjs');
+    expect(packageJson.scripts.preci).toBe('npm run clean:verification');
+    expect(packageJson.scripts.ci).toContain('npm run test:e2e');
+  });
+
   it('removes generated verification artifacts without deleting local data', () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), 'tinytracker-verification-clean-'));
 

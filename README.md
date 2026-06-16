@@ -203,8 +203,11 @@ Run the full local verification suite:
 npm run ci
 ```
 
-Local verification can leave ignored build and browser artifacts in `dist/`, `test-results/`, or `playwright-report/`.
-Remove them explicitly after collecting any needed failure evidence:
+`npm run ci` starts by removing ignored verification artifacts from previous
+runs, then executes the authoritative checks. Local verification can still
+leave fresh build and browser artifacts in `dist/`, `test-results/`, or
+`playwright-report/`. Remove them explicitly after collecting any needed
+failure evidence:
 
 ```bash
 npm run clean:verification
@@ -212,6 +215,7 @@ npm run clean:verification
 
 `npm run ci` performs:
 
+- Verification artifact cleanup
 - Formatting check
 - ESLint check
 - TypeScript checks

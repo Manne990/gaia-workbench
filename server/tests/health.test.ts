@@ -17,13 +17,17 @@ describe('health endpoints', () => {
     });
   });
 
-  it('serves compatibility health status', async () => {
+  it('keeps compatibility health status identical to the canonical API contract', async () => {
     const app = createApp();
 
-    const response = await request(app).get('/health').expect(200);
+    const canonicalResponse = await request(app).get('/api/health').expect(200);
+    const compatibilityResponse = await request(app).get('/health').expect(200);
 
-    expect(response.body.status).toBe('ok');
-    expect(response.body.service).toBe('TinyTracker');
+    expect(compatibilityResponse.body).toEqual(canonicalResponse.body);
+    expect(compatibilityResponse.body).toEqual({
+      status: 'ok',
+      service: 'TinyTracker'
+    });
   });
 
   it('keeps API health canonical when a client build is configured', async () => {

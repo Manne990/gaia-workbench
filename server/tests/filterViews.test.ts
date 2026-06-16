@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
 
 describe('saved filter views API', () => {
@@ -101,6 +101,71 @@ describe('saved filter views API', () => {
     expect(list.body.map((view: { name: string }) => view.name)).toEqual(
       expect.arrayContaining(['First view', 'Second view'])
     );
+  });
+
+  it('lists repeatedly updated saved views deterministically across update and rename ties', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const app = createApp({ databasePath: ':memory:' });
+
+      vi.setSystemTime(new Date('2026-06-17T00:10:00.000Z'));
+      const gamma = await request(app).post('/api/filter-views').send({ name: 'Gamma view' }).expect(201);
+
+      vi.setSystemTime(new Date('2026-06-17T00:10:01.000Z'));
+      const alpha = await request(app).post('/api/filter-views').send({ name: 'Alpha view' }).expect(201);
+
+      vi.setSystemTime(new Date('2026-06-17T00:10:02.000Z'));
+      const beta = await request(app).post('/api/filter-views').send({ name: 'Beta view' }).expect(201);
+
+      vi.setSystemTime(new Date('2026-06-17T00:10:03.000Z'));
+      const gammaUpdated = await request(app)
+        .patch(`/api/filter-views/${gamma.body.id}`)
+        .send({ search: 'archived' })
+        .expect(200);
+
+      vi.setSystemTime(new Date('2026-06-17T00:10:04.000Z'));
+      const alphaUpdated = await request(app)
+        .patch(`/api/filter-views/${alpha.body.id}`)
+        .send({ search: 'release' })
+        .expect(200);
+
+      vi.setSystemTime(new Date('2026-06-17T00:10:05.000Z'));
+      const alphaUpdatedAgain = await request(app)
+        .patch(`/api/filter-views/${alpha.body.id}`)
+        .send({ label: 'ops' })
+        .expect(200);
+      const betaRenamed = await request(app)
+        .patch(`/api/filter-views/${beta.body.id}`)
+        .send({ name: 'Aardvark view', blockedOnly: true })
+        .expect(200);
+
+      expect(alphaUpdated.body.createdAt).toBe(alpha.body.createdAt);
+      expect(alphaUpdatedAgain.body.createdAt).toBe(alpha.body.createdAt);
+      expect(betaRenamed.body.createdAt).toBe(beta.body.createdAt);
+      expect(gammaUpdated.body.createdAt).toBe(gamma.body.createdAt);
+
+      expect(alphaUpdated.body.updatedAt).toBe('2026-06-17T00:10:04.000Z');
+      expect(alphaUpdatedAgain.body.updatedAt).toBe('2026-06-17T00:10:05.000Z');
+      expect(betaRenamed.body.updatedAt).toBe('2026-06-17T00:10:05.000Z');
+      expect(gammaUpdated.body.updatedAt).toBe('2026-06-17T00:10:03.000Z');
+
+      const list = await request(app).get('/api/filter-views').expect(200);
+
+      expect(list.body.map((view: { id: string }) => view.id)).toEqual([beta.body.id, alpha.body.id, gamma.body.id]);
+      expect(
+        list.body.map((view: { name: string; updatedAt: string }) => ({
+          name: view.name,
+          updatedAt: view.updatedAt
+        }))
+      ).toEqual([
+        { name: 'Aardvark view', updatedAt: '2026-06-17T00:10:05.000Z' },
+        { name: 'Alpha view', updatedAt: '2026-06-17T00:10:05.000Z' },
+        { name: 'Gamma view', updatedAt: '2026-06-17T00:10:03.000Z' }
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('rejects duplicate names and invalid saved view payloads', async () => {

@@ -803,6 +803,82 @@ describe('tracker import API', () => {
     expect(exportedAfterImport.body).toEqual(payload);
   });
 
+  it('preserves archived blocked issue semantics through export and import', async () => {
+    const sourceApp = createApp({ databasePath: ':memory:' });
+    const targetApp = createApp({ databasePath: ':memory:' });
+
+    const blocker = await request(sourceApp)
+      .post('/api/issues')
+      .send({ title: 'Archived roundtrip blocker', status: 'todo' })
+      .expect(201);
+    const blocked = await request(sourceApp)
+      .post('/api/issues')
+      .send({ title: 'Archived roundtrip blocked issue', status: 'in_progress' })
+      .expect(201);
+
+    await request(sourceApp)
+      .post(`/api/issues/${blocked.body.id}/dependencies`)
+      .send({ dependsOnIssueId: blocker.body.id })
+      .expect(201);
+
+    const archived = await request(sourceApp).post(`/api/issues/${blocked.body.id}/archive`).expect(200);
+    const exported = await request(sourceApp).get('/api/export').expect(200);
+    const sourceBlocked = (exported.body as TrackerExport).issues.find((issue) => issue.id === blocked.body.id);
+
+    expect(sourceBlocked).toMatchObject({
+      id: blocked.body.id,
+      archivedAt: archived.body.archivedAt,
+      isBlocked: true,
+      dependsOnIssueIds: [blocker.body.id]
+    });
+
+    await request(targetApp).post('/api/import/preview').send(exported.body).expect(200);
+    await request(targetApp).post('/api/import/apply').send(exported.body).expect(200);
+
+    const defaultBlockedOnly = await request(targetApp).get('/api/issues?blockedOnly=true').expect(200);
+    const includeArchivedBlockedOnly = await request(targetApp)
+      .get('/api/issues?blockedOnly=true&includeArchived=true')
+      .expect(200);
+    const importedBlocked = await request(targetApp).get(`/api/issues/${blocked.body.id}`).expect(200);
+    const importedDependencies = await request(targetApp)
+      .get(`/api/issues/${blocked.body.id}/dependencies`)
+      .expect(200);
+    const exportedAfterImport = await request(targetApp).get('/api/export').expect(200);
+    const roundTrippedBlocked = (exportedAfterImport.body as TrackerExport).issues.find(
+      (issue) => issue.id === blocked.body.id
+    );
+
+    expect(defaultBlockedOnly.body.items.map((issue: { id: string }) => issue.id)).toEqual([]);
+    expect(defaultBlockedOnly.body.pagination.total).toBe(0);
+    expect(includeArchivedBlockedOnly.body.items.map((issue: { id: string }) => issue.id)).toEqual([blocked.body.id]);
+    expect(includeArchivedBlockedOnly.body.pagination.total).toBe(1);
+    expect(importedBlocked.body).toMatchObject({
+      id: blocked.body.id,
+      archivedAt: archived.body.archivedAt,
+      isBlocked: true,
+      dependsOnIssueIds: [blocker.body.id]
+    });
+    expect(importedDependencies.body).toMatchObject({
+      issueId: blocked.body.id,
+      isBlocked: true,
+      dependencies: [
+        {
+          id: blocker.body.id,
+          title: 'Archived roundtrip blocker',
+          status: 'todo',
+          archivedAt: null
+        }
+      ]
+    });
+    expect(roundTrippedBlocked).toMatchObject({
+      id: blocked.body.id,
+      archivedAt: archived.body.archivedAt,
+      isBlocked: true,
+      dependsOnIssueIds: [blocker.body.id]
+    });
+    expect(exportedAfterImport.body).toEqual(exported.body);
+  });
+
   it('orders dense same-timestamp imported activity by semantic event family', async () => {
     const targetApp = createApp({ databasePath: ':memory:' });
     const payload = cloneExport(await createExportFixture());

@@ -64,7 +64,7 @@ function getIssueDependencies(database: Database.Database, issueId: string): Iss
       FROM issue_dependencies dependency
       INNER JOIN issues blocker ON blocker.id = dependency.depends_on_issue_id
       WHERE dependency.issue_id = @issueId
-      ORDER BY dependency.created_at ASC, dependency.depends_on_issue_id ASC
+      ORDER BY dependency.created_at ASC, dependency.rowid ASC
     `
     )
     .all({ issueId }) as IssueReferenceRow[];
@@ -80,7 +80,7 @@ function getIssueDependents(database: Database.Database, issueId: string): Issue
       FROM issue_dependencies dependency
       INNER JOIN issues dependent ON dependent.id = dependency.issue_id
       WHERE dependency.depends_on_issue_id = @issueId
-      ORDER BY dependency.created_at ASC, dependency.issue_id ASC
+      ORDER BY dependency.created_at ASC, dependency.rowid ASC
     `
     )
     .all({ issueId }) as IssueReferenceRow[];
@@ -142,7 +142,7 @@ export function attachIssueDependencyState(database: Database.Database, issues: 
       FROM issue_dependencies dependency
       INNER JOIN issues blocker ON blocker.id = dependency.depends_on_issue_id
       WHERE dependency.issue_id IN (${placeholdersFor(issueIds)})
-      ORDER BY dependency.issue_id ASC, dependency.created_at ASC, dependency.depends_on_issue_id ASC
+      ORDER BY dependency.issue_id ASC, dependency.created_at ASC, dependency.rowid ASC
     `
     )
     .all(...issueIds) as DependencyRow[];

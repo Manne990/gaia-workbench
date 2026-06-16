@@ -629,6 +629,48 @@ test('command palette clear filters restores focus after dialog state changes', 
   await expect(issueListHeading).toBeFocused();
 });
 
+test('command palette opens and closes issue detail from keyboard commands', async ({ page }) => {
+  const issue = await createIssueThroughApi(page, {
+    title: 'Palette keyboard issue',
+    description: 'Command palette should route issue detail by keyboard.',
+    status: 'review',
+    priority: 'high'
+  });
+
+  await page.goto('/');
+
+  const commandPalette = page.getByRole('dialog', { name: 'Command palette' });
+  const commandSearch = page.getByLabel('Search commands');
+  const issueListHeading = page.getByRole('heading', { name: 'Issue List' });
+  const quickActionsButton = page.getByRole('button', { name: 'Quick Actions' });
+
+  await quickActionsButton.focus();
+  await expect(quickActionsButton).toBeFocused();
+  await page.keyboard.press(commandPaletteShortcutKey());
+  await expect(commandPalette).toBeVisible();
+  await expect(commandSearch).toBeFocused();
+  await commandSearch.fill('open first visible issue');
+  await page.keyboard.press('Enter');
+
+  const detail = page.getByRole('region', { name: 'Palette keyboard issue' });
+  const detailHeading = detail.getByRole('heading', { name: 'Palette keyboard issue' });
+
+  await expect(commandPalette).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`/issues/${issue.id}`));
+  await expect(detailHeading).toBeFocused();
+
+  await page.keyboard.press(commandPaletteShortcutKey());
+  await expect(commandPalette).toBeVisible();
+  await expect(commandSearch).toBeFocused();
+  await commandSearch.fill('close issue detail');
+  await page.keyboard.press('Enter');
+
+  await expect(commandPalette).toHaveCount(0);
+  await expect(detail).toHaveCount(0);
+  await expect(page).toHaveURL('/');
+  await expect(issueListHeading).toBeFocused();
+});
+
 test('imports tracker JSON through preview and apply', async ({ page }, testInfo) => {
   await page.goto('/');
 

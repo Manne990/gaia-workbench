@@ -1,6 +1,6 @@
 import './styles.css';
 import type { ChangeEvent, FormEvent } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   addIssueDependency,
   applyImport,
@@ -261,6 +261,15 @@ export function App() {
 
     return query ? `/api/export.csv?${query}` : '/api/export.csv';
   }, [dashboardFilters]);
+  const loadSavedViews = useCallback(async (signal?: AbortSignal) => {
+    try {
+      setSavedViews(await fetchSavedFilterViews(signal));
+    } catch {
+      if (!signal?.aborted) {
+        setSavedViewError('Unable to load saved views.');
+      }
+    }
+  }, []);
   const commandPaletteCommands = useMemo(
     () => [
       {
@@ -510,20 +519,10 @@ export function App() {
   useEffect(() => {
     const controller = new AbortController();
 
-    async function loadSavedViews() {
-      try {
-        setSavedViews(await fetchSavedFilterViews(controller.signal));
-      } catch {
-        if (!controller.signal.aborted) {
-          setSavedViewError('Unable to load saved views.');
-        }
-      }
-    }
-
-    void loadSavedViews();
+    void loadSavedViews(controller.signal);
 
     return () => controller.abort();
-  }, []);
+  }, [loadSavedViews]);
 
   useEffect(() => {
     function syncSelectedIssueFromLocation() {
@@ -894,6 +893,7 @@ export function App() {
       setImportPayload(null);
       setImportMessage(importAppliedMessage(plan));
       returnToFirstPage();
+      await loadSavedViews();
 
       const selectedIssueIdAtApply = selectedIssueIdRef.current;
       if (importPlanTouchesIssue(plan, selectedIssueIdAtApply)) {

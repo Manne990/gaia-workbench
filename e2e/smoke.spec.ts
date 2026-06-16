@@ -573,24 +573,62 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
     exportVersion: 1,
     issues: [
       {
+        id: 'e2e-import-blocker',
+        title: 'Imported blocker from JSON',
+        description: 'Blocks the imported replay issue.',
+        status: 'todo',
+        priority: 'medium',
+        labels: ['imported'],
+        dueDate: null,
+        isOverdue: false,
+        isBlocked: false,
+        dependsOnIssueIds: [],
+        archivedAt: null,
+        createdAt: '2999-01-01T00:00:00.000Z',
+        updatedAt: '2999-01-01T00:00:00.000Z',
+        comments: [],
+        activityEvents: [
+          {
+            id: 'e2e-import-blocker-activity',
+            issueId: 'e2e-import-blocker',
+            type: 'issue_created',
+            metadata: {
+              title: 'Imported blocker from JSON'
+            },
+            createdAt: '2999-01-01T00:00:00.000Z'
+          }
+        ]
+      },
+      {
         id: 'e2e-import-issue',
         title: 'Imported issue from JSON',
         description: 'Created through the JSON import flow.',
         status: 'review',
         priority: 'high',
-        labels: ['imported'],
-        dueDate: null,
+        labels: ['imported', 'replay'],
+        dueDate: '2999-01-31',
         isOverdue: false,
+        isBlocked: true,
+        dependsOnIssueIds: ['e2e-import-blocker'],
+        archivedAt: null,
         createdAt: '2999-01-01T00:00:00.000Z',
-        updatedAt: '2999-01-01T00:00:00.000Z',
+        updatedAt: '2999-01-01T00:04:00.000Z',
         comments: [
           {
             id: 'e2e-import-comment',
             issueId: 'e2e-import-issue',
-            body: 'Imported comment body',
+            body: 'Imported comment body after edit',
             createdAt: '2999-01-01T00:01:00.000Z',
-            updatedAt: '2999-01-01T00:01:00.000Z',
-            editHistory: []
+            updatedAt: '2999-01-01T00:04:00.000Z',
+            editHistory: [
+              {
+                id: 'e2e-import-comment-history',
+                commentId: 'e2e-import-comment',
+                previousBody: 'Imported comment body before edit',
+                newBody: 'Imported comment body after edit',
+                editedAt: '2999-01-01T00:04:00.000Z'
+              }
+            ]
           }
         ],
         activityEvents: [
@@ -602,8 +640,55 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
               title: 'Imported issue from JSON'
             },
             createdAt: '2999-01-01T00:00:00.000Z'
+          },
+          {
+            id: 'e2e-import-dependency-activity',
+            issueId: 'e2e-import-issue',
+            type: 'issue_dependency_added',
+            metadata: {
+              dependsOnIssueId: 'e2e-import-blocker',
+              title: 'Imported blocker from JSON'
+            },
+            createdAt: '2999-01-01T00:02:00.000Z'
+          },
+          {
+            id: 'e2e-import-comment-activity',
+            issueId: 'e2e-import-issue',
+            type: 'comment_added',
+            metadata: {
+              commentId: 'e2e-import-comment',
+              preview: 'Imported comment body before edit'
+            },
+            createdAt: '2999-01-01T00:03:00.000Z'
+          },
+          {
+            id: 'e2e-import-comment-edit-activity',
+            issueId: 'e2e-import-issue',
+            type: 'comment_edited',
+            metadata: {
+              commentId: 'e2e-import-comment',
+              previousPreview: 'Imported comment body before edit',
+              newPreview: 'Imported comment body after edit'
+            },
+            createdAt: '2999-01-01T00:04:00.000Z'
           }
         ]
+      }
+    ],
+    savedFilterViews: [
+      {
+        id: 'e2e-import-saved-view',
+        name: 'Imported replay view',
+        search: 'Imported issue from JSON',
+        status: 'review',
+        priority: 'high',
+        label: 'replay',
+        includeArchived: true,
+        blockedOnly: true,
+        staleOnly: false,
+        pageSize: 25,
+        createdAt: '2999-01-01T00:05:00.000Z',
+        updatedAt: '2999-01-01T00:05:00.000Z'
       }
     ]
   };
@@ -616,8 +701,9 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
 
   await expect(importPanel.getByRole('heading', { name: 'Import Preview' })).toBeVisible();
   await expect(importPanel.getByRole('radio', { name: 'Skip existing conflicts (default)' })).toBeChecked();
-  await expect(importPanel.getByText('Ready to create 1 issues, replace 0 changed issues, and skip 0.')).toBeVisible();
-  await expect(importPanel.getByRole('row', { name: /Issues\s+1\s+0\s+0\s+1\s+0\s+0/ })).toBeVisible();
+  await expect(importPanel.getByText('Ready to create 2 issues, replace 0 changed issues, and skip 0.')).toBeVisible();
+  await expect(importPanel.getByRole('row', { name: /Issues\s+2\s+0\s+0\s+2\s+0\s+0/ })).toBeVisible();
+  await expect(importPanel.getByRole('row', { name: /Saved Views\s+1\s+0\s+0\s+1\s+0\s+0/ })).toBeVisible();
   const reportDownloadPromise = page.waitForEvent('download');
 
   await importPanel.getByRole('button', { name: 'Download report' }).click();
@@ -643,11 +729,11 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
   expect(reportData.sourceFileName).toBe('tinytracker-import.json');
   expect(reportData.policy).toBe('skip-conflicts');
   expect(reportData.summary.toCreate).toEqual({
-    issues: 1,
+    issues: 2,
     comments: 1,
-    editHistory: 0,
-    activityEvents: 1,
-    savedFilterViews: 0
+    editHistory: 1,
+    activityEvents: 5,
+    savedFilterViews: 1
   });
   expect(Array.isArray(reportData.decisions)).toBe(true);
   expect(reportData.errors).toEqual([]);
@@ -656,19 +742,43 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
   await importPanel.getByRole('button', { name: 'Apply Import' }).click();
 
   await expect(
-    importPanel.getByText('Import applied: 1 issues created, 0 changed issues replaced, 0 skipped.')
+    importPanel.getByText('Import applied: 2 issues created, 0 changed issues replaced, 0 skipped.')
   ).toBeVisible();
 
   const importedRow = page.getByRole('row', { name: /Imported issue from JSON.*Review.*High/ });
   await expect(importedRow).toBeVisible();
+  await expect(importedRow.locator('.blocked-pill')).toHaveText('Blocked');
 
   await page.getByRole('button', { name: 'Open Imported issue from JSON' }).click();
 
   const detail = page.getByRole('region', { name: 'Imported issue from JSON' });
 
   await expect(detail.getByText('Created through the JSON import flow.')).toBeVisible();
-  await expect(detail.getByText('Imported comment body')).toBeVisible();
+  await expect(detail.getByLabel('Issue labels').getByText('replay', { exact: true })).toBeVisible();
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(
+    detail.getByLabel('Issue blockers').getByRole('listitem').filter({ hasText: 'Imported blocker from JSON' })
+  ).toContainText('Blocking');
+  await expect(detail.getByText('Imported comment body after edit', { exact: true })).toBeVisible();
+  await expect(detail.getByText('Previous: Imported comment body before edit')).toBeVisible();
   await expect(detail.getByLabel('Issue activity').getByText('Issue created')).toBeVisible();
+  await expect(detail.getByLabel('Issue activity').getByText('Dependency added')).toBeVisible();
+  await expect(detail.getByLabel('Issue activity').getByText('Comment edited')).toBeVisible();
+
+  const savedViewResponse = await page.request.get('/api/filter-views');
+  expect(savedViewResponse.ok()).toBe(true);
+  expect(await savedViewResponse.json()).toEqual([
+    expect.objectContaining({
+      name: 'Imported replay view'
+    })
+  ]);
+
+  const savedViews = await expandDashboardSettings(page);
+
+  await expect(savedViews.getByLabel('Saved views')).toContainText('Imported replay view');
+
+  const cleanupSavedViewResponse = await page.request.delete('/api/filter-views/e2e-import-saved-view');
+  expect(cleanupSavedViewResponse.ok()).toBe(true);
 });
 
 test('imports changed issue conflicts with an explicit replace policy', async ({ page }, testInfo) => {

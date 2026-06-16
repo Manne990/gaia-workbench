@@ -171,6 +171,11 @@ async function createExportFixture(): Promise<TrackerExport> {
     })
     .expect(200);
 
+  await request(app)
+    .post(`/api/issues/${firstIssue.body.id}/dependencies`)
+    .send({ dependsOnIssueId: secondIssue.body.id })
+    .expect(201);
+
   const firstComment = await request(app)
     .post(`/api/issues/${firstIssue.body.id}/comments`)
     .send({ body: 'Import comment before edit' })
@@ -291,6 +296,136 @@ describe('tracker import API', () => {
       }
     });
     expect(exportedAfterImport.body).toEqual(payload);
+  });
+
+  it('replays a mixed export across dependency comment activity and saved-view surfaces', async () => {
+    const targetApp = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const counts = countExport(payload);
+    const blockedIssue = payload.issues.find((issue) => (issue.dependsOnIssueIds ?? []).length > 0);
+    const savedView = payload.savedFilterViews[0];
+
+    if (!blockedIssue || !savedView) {
+      throw new Error('Expected import replay fixture to include a blocked issue and saved view');
+    }
+
+    const blockerIssue = payload.issues.find((issue) => issue.id === blockedIssue.dependsOnIssueIds?.[0]);
+    const editedComment = blockedIssue.comments.find((comment) => comment.editHistory.length > 0);
+    const dependencyActivity = blockedIssue.activityEvents.find((event) => event.type === 'issue_dependency_added');
+    const commentsWithoutHistory = blockedIssue.comments.map((comment) => ({
+      id: comment.id,
+      issueId: comment.issueId,
+      body: comment.body,
+      createdAt: comment.createdAt,
+      updatedAt: comment.updatedAt
+    }));
+
+    if (!blockerIssue || !editedComment || !dependencyActivity) {
+      throw new Error('Expected import replay fixture to include a blocker issue edited comment and dependency event');
+    }
+
+    const preview = await request(targetApp).post('/api/import/preview').send(payload).expect(200);
+    const issuesAfterPreview = await request(targetApp).get('/api/issues?includeArchived=true').expect(200);
+
+    expect(preview.body).toMatchObject({
+      valid: true,
+      summary: {
+        input: counts,
+        toCreate: counts,
+        skip: {
+          issues: 0,
+          comments: 0,
+          editHistory: 0,
+          activityEvents: 0,
+          savedFilterViews: 0
+        },
+        reject: 0
+      }
+    });
+    expect(preview.body.decisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity: 'issue',
+          sourceId: blockedIssue.id,
+          decision: 'import'
+        }),
+        expect.objectContaining({
+          entity: 'comment',
+          sourceId: editedComment.id,
+          decision: 'import'
+        }),
+        expect.objectContaining({
+          entity: 'commentEditHistory',
+          sourceId: editedComment.editHistory[0].id,
+          decision: 'import'
+        }),
+        expect.objectContaining({
+          entity: 'activityEvent',
+          sourceId: dependencyActivity.id,
+          decision: 'import'
+        }),
+        expect.objectContaining({
+          entity: 'savedFilterView',
+          sourceId: savedView.id,
+          decision: 'import'
+        })
+      ])
+    );
+    expect(issuesAfterPreview.body.pagination.total).toBe(0);
+
+    const applied = await request(targetApp).post('/api/import/apply').send(payload).expect(200);
+    const detail = await request(targetApp).get(`/api/issues/${blockedIssue.id}`).expect(200);
+    const blockedList = await request(targetApp).get('/api/issues?blockedOnly=true&includeArchived=true').expect(200);
+    const dependencies = await request(targetApp).get(`/api/issues/${blockedIssue.id}/dependencies`).expect(200);
+    const comments = await request(targetApp).get(`/api/issues/${blockedIssue.id}/comments`).expect(200);
+    const history = await request(targetApp).get(`/api/comments/${editedComment.id}/history`).expect(200);
+    const activity = await request(targetApp).get(`/api/issues/${blockedIssue.id}/activity`).expect(200);
+    const savedViews = await request(targetApp).get('/api/filter-views').expect(200);
+    const exportedAfterImport = await request(targetApp).get('/api/export').expect(200);
+    const reapplied = await request(targetApp).post('/api/import/apply').send(payload).expect(200);
+    const exportedAfterReimport = await request(targetApp).get('/api/export').expect(200);
+
+    expect(applied.body.summary.toCreate).toEqual(counts);
+    expect(detail.body).toMatchObject({
+      id: blockedIssue.id,
+      title: blockedIssue.title,
+      status: blockedIssue.status,
+      priority: blockedIssue.priority,
+      labels: blockedIssue.labels,
+      dueDate: blockedIssue.dueDate,
+      isBlocked: true,
+      dependsOnIssueIds: [blockerIssue.id]
+    });
+    expect(blockedList.body.items.map((issue: { id: string }) => issue.id)).toContain(blockedIssue.id);
+    expect(dependencies.body).toMatchObject({
+      issueId: blockedIssue.id,
+      isBlocked: true,
+      dependencies: [
+        {
+          id: blockerIssue.id,
+          title: blockerIssue.title,
+          status: blockerIssue.status,
+          archivedAt: blockerIssue.archivedAt ?? null
+        }
+      ]
+    });
+    expect(comments.body).toEqual(commentsWithoutHistory);
+    expect(history.body).toEqual(editedComment.editHistory);
+    expect(activity.body).toEqual(blockedIssue.activityEvents);
+    expect(savedViews.body).toEqual(payload.savedFilterViews);
+    expect(exportedAfterImport.body).toEqual(payload);
+    expect(reapplied.body.summary).toMatchObject({
+      toCreate: {
+        issues: 0,
+        comments: 0,
+        editHistory: 0,
+        activityEvents: 0,
+        savedFilterViews: 0
+      },
+      skip: counts,
+      reject: 0
+    });
+    expect(exportedAfterReimport.body).toEqual(exportedAfterImport.body);
   });
 
   it('preserves markdown-like and unsafe-looking body text as raw import data', async () => {
@@ -642,8 +777,12 @@ describe('tracker import API', () => {
     const app = createApp({ databasePath: ':memory:' });
     const payload = await createExportFixture();
     const changed = cloneExport(payload);
-    const changedIssue = changed.issues[0];
-    const dependencyTarget = changed.issues[1];
+    const changedIssue = changed.issues.find((issue) => issue.comments.length > 0);
+    const dependencyTarget = changed.issues.find((issue) => issue.id === changedIssue?.dependsOnIssueIds?.[0]);
+
+    if (!changedIssue || !dependencyTarget) {
+      throw new Error('Expected fixture to include a commented issue with a dependency target');
+    }
 
     await request(app).post('/api/import/apply').send(payload).expect(200);
 
@@ -667,8 +806,9 @@ describe('tracker import API', () => {
 
     const preview = await request(app)
       .post('/api/import/preview')
-      .send({ ...changed, conflictPolicy: 'replace-conflicts' })
-      .expect(200);
+      .send({ ...changed, conflictPolicy: 'replace-conflicts' });
+
+    expect(preview.status).toBe(200);
 
     expect(preview.body).toMatchObject({
       policy: 'replace-conflicts',

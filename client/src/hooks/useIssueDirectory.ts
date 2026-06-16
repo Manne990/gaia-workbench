@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { fetchIssues } from '../api';
 import { priorityLabels, statusLabels, statusOrder } from '../constants';
 import type {
   ActiveFilterSummary,
@@ -34,6 +35,7 @@ const defaultSummary: IssueListSummary = {
 export function useIssueDirectory(initialFilters: DashboardFilters = defaultDashboardFilters) {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loadState, setLoadState] = useState<LoadState>('loading');
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchFilter, setSearchFilter] = useState(initialFilters.search);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialFilters.status);
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>(initialFilters.priority);
@@ -71,26 +73,16 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
 
       try {
         setLoadState('loading');
-        const response = await fetch(`/api/issues?${params.toString()}`, {
-          signal: controller.signal
-        });
-
-        if (!response.ok) {
-          throw new Error('Issue request failed');
-        }
-
-        const body = (await response.json()) as {
-          items: Issue[];
-          pagination: IssueListPagination;
-          summary: IssueListSummary;
-        };
+        setLoadError(null);
+        const body = await fetchIssues(params, controller.signal);
 
         setIssues(body.items);
         setPagination(body.pagination);
         setSummary(body.summary);
         setLoadState('loaded');
-      } catch {
+      } catch (error) {
         if (!controller.signal.aborted) {
+          setLoadError(error instanceof Error ? error.message : 'Unable to load issues.');
           setLoadState('error');
         }
       }
@@ -255,6 +247,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
   return {
     issues,
     loadState,
+    loadError,
     searchFilter,
     setSearchFilter: setSearchFilterAndResetPage,
     statusFilter,

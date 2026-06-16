@@ -6,6 +6,7 @@ import {
   fetchCommentHistory,
   fetchIssue,
   fetchIssueActivity,
+  fetchIssues,
   fetchServiceHealth,
   previewImport
 } from './api';
@@ -104,6 +105,15 @@ describe('client API errors', () => {
 
     await expect(fetchIssue('missing-issue')).resolves.toBeNull();
     await expect(fetchIssue('temporarily-unavailable')).rejects.toThrow('Database unavailable');
+  });
+
+  it('preserves issue list query server error messages', async () => {
+    const controller = new AbortController();
+    const query = new URLSearchParams({ page: '0', limit: '20' });
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ error: 'Invalid page parameter' }, { status: 400 }));
+
+    await expect(fetchIssues(query, controller.signal)).rejects.toThrow('Invalid page parameter');
+    expect(fetch).toHaveBeenCalledWith('/api/issues?page=0&limit=20', { signal: controller.signal });
   });
 
   it('rejects successful JSON endpoints when the response body cannot be parsed', async () => {

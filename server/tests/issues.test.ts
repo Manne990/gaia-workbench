@@ -1614,6 +1614,16 @@ describe('issues API', () => {
     });
     expect(firstDependenciesAfterDuplicate.body.dependencies).toHaveLength(1);
 
+    await request(app).delete(`/api/issues/missing-issue/dependencies/${second.body.id}`).expect(404, {
+      error: 'Issue not found'
+    });
+    await request(app).delete(`/api/issues/${first.body.id}/dependencies/missing-issue`).expect(404, {
+      error: 'Issue dependency not found'
+    });
+    await request(app).delete(`/api/issues/${first.body.id}/dependencies/${third.body.id}`).expect(404, {
+      error: 'Issue dependency not found'
+    });
+
     await request(app)
       .post(`/api/issues/${second.body.id}/dependencies`)
       .send({ dependsOnIssueId: third.body.id })

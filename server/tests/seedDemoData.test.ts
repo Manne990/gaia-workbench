@@ -3,7 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { ActivityRepository, CommentRepository, createDatabase, IssueRepository } from '../src/db/index.js';
+import {
+  ActivityRepository,
+  CommentRepository,
+  createDatabase,
+  IssueDependencyRepository,
+  IssueRepository,
+  SavedFilterViewRepository
+} from '../src/db/index.js';
 import { seedDemoData } from '../src/seedDemoData.js';
 
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -154,6 +161,136 @@ describe('demo data seed command', () => {
         expect(commentRepository.getHistory(editedComment!.id)).toHaveLength(1);
         expect(activityTypes.filter((type) => type === 'comment_added')).toHaveLength(2);
         expect(activityTypes.filter((type) => type === 'comment_edited')).toHaveLength(2);
+      } finally {
+        database.close();
+      }
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves existing user data when demo seed runs repeatedly', () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'tinytracker-demo-seed-existing-user-data-'));
+    const databasePath = path.join(tempDir, 'tracker.sqlite');
+
+    try {
+      let database = createDatabase(databasePath);
+      let issueRepository = new IssueRepository(database);
+      let commentRepository = new CommentRepository(database);
+      let issueDependencyRepository = new IssueDependencyRepository(database);
+      let savedFilterViewRepository = new SavedFilterViewRepository(database);
+      const blocker = issueRepository.create({
+        title: 'User blocker before demo seed',
+        status: 'in_progress',
+        priority: 'high',
+        labels: ['user', 'blocker'],
+        dueDate: '2999-01-15'
+      });
+      const userIssue = issueRepository.create({
+        title: 'User issue before demo seed',
+        description: 'Keep this existing issue intact.',
+        status: 'todo',
+        priority: 'medium',
+        labels: ['user', 'seed'],
+        dueDate: '2999-02-01'
+      });
+      const userComment = commentRepository.create({
+        issueId: userIssue.id,
+        body: 'User comment created before demo seed.'
+      });
+      const userView = savedFilterViewRepository.create({
+        name: 'User seed safety view',
+        search: 'User issue',
+        status: 'todo',
+        priority: 'medium',
+        label: 'user',
+        includeArchived: false,
+        blockedOnly: true,
+        staleOnly: false,
+        pageSize: 50
+      });
+      issueDependencyRepository.add(userIssue.id, blocker.id);
+      database.close();
+
+      const firstRun = seedDemoData(databasePath);
+      const secondRun = seedDemoData(databasePath);
+
+      expect(firstRun).toMatchObject({
+        databasePath,
+        createdIssues: 4,
+        skippedIssues: 0,
+        updatedIssues: 1,
+        createdComments: 5,
+        skippedComments: 0,
+        editedComments: 1
+      });
+      expect(secondRun).toMatchObject({
+        databasePath,
+        createdIssues: 0,
+        skippedIssues: 4,
+        updatedIssues: 0,
+        createdComments: 0,
+        skippedComments: 5,
+        editedComments: 0
+      });
+
+      database = createDatabase(databasePath);
+      issueRepository = new IssueRepository(database);
+      commentRepository = new CommentRepository(database);
+      issueDependencyRepository = new IssueDependencyRepository(database);
+      savedFilterViewRepository = new SavedFilterViewRepository(database);
+
+      try {
+        expect(issueRepository.list({}, { page: 1, limit: 100 }).items).toHaveLength(6);
+        expect(issueRepository.getById(userIssue.id)).toMatchObject({
+          id: userIssue.id,
+          title: 'User issue before demo seed',
+          description: 'Keep this existing issue intact.',
+          status: 'todo',
+          priority: 'medium',
+          labels: ['user', 'seed'],
+          dueDate: '2999-02-01',
+          isBlocked: true,
+          dependsOnIssueIds: [blocker.id]
+        });
+        expect(issueRepository.getById(blocker.id)).toMatchObject({
+          id: blocker.id,
+          title: 'User blocker before demo seed',
+          labels: ['user', 'blocker'],
+          dueDate: '2999-01-15'
+        });
+        expect(commentRepository.listByIssueId(userIssue.id)).toMatchObject([
+          {
+            id: userComment.id,
+            issueId: userIssue.id,
+            body: 'User comment created before demo seed.'
+          }
+        ]);
+        expect(issueDependencyRepository.listByIssueId(userIssue.id)).toMatchObject({
+          issueId: userIssue.id,
+          isBlocked: true,
+          dependencies: [
+            {
+              id: blocker.id,
+              title: 'User blocker before demo seed',
+              status: 'in_progress',
+              archivedAt: null
+            }
+          ],
+          dependents: []
+        });
+        expect(savedFilterViewRepository.getById(userView.id)).toMatchObject({
+          id: userView.id,
+          name: 'User seed safety view',
+          search: 'User issue',
+          status: 'todo',
+          priority: 'medium',
+          label: 'user',
+          includeArchived: false,
+          blockedOnly: true,
+          staleOnly: false,
+          pageSize: 50
+        });
       } finally {
         database.close();
       }

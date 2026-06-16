@@ -203,6 +203,13 @@ Run the full local verification suite:
 npm run ci
 ```
 
+Local verification can leave ignored build and browser artifacts in `dist/`, `test-results/`, or `playwright-report/`.
+Remove them explicitly after collecting any needed failure evidence:
+
+```bash
+npm run clean:verification
+```
+
 `npm run ci` performs:
 
 - Formatting check
@@ -632,6 +639,18 @@ Or run only the browser smoke after dependencies are installed:
 
 ```bash
 npm run test:e2e
+```
+
+If the default smoke-test port is already in use, choose another port without changing the checked-in config:
+
+```bash
+E2E_PORT=3211 npm run test:e2e
+```
+
+After a local verification pass or after saving failure artifacts, reset generated verification outputs with:
+
+```bash
+npm run clean:verification
 ```
 
 ## Known Limitations

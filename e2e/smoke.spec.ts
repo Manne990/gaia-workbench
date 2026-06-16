@@ -837,6 +837,54 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
   expect(cleanupSavedViewResponse.ok()).toBe(true);
 });
 
+test('import preview cancel restores keyboard focus to the import trigger', async ({ page }, testInfo) => {
+  await page.goto('/');
+
+  const importPayload = {
+    exportVersion: 1,
+    issues: [
+      {
+        id: 'e2e-import-cancel-focus',
+        title: 'Import cancel focus issue',
+        description: 'Preview only.',
+        status: 'todo',
+        priority: 'medium',
+        labels: [],
+        dueDate: null,
+        isOverdue: false,
+        isBlocked: false,
+        dependsOnIssueIds: [],
+        archivedAt: null,
+        createdAt: '2999-01-01T00:00:00.000Z',
+        updatedAt: '2999-01-01T00:00:00.000Z',
+        comments: [],
+        activityEvents: []
+      }
+    ],
+    savedFilterViews: []
+  };
+  const importFilePath = testInfo.outputPath('tinytracker-import-cancel-focus.json');
+
+  writeFileSync(importFilePath, JSON.stringify(importPayload), 'utf8');
+
+  const importButton = page.getByRole('button', { name: 'Import JSON', exact: true });
+  await importButton.focus();
+  await expect(importButton).toBeFocused();
+
+  await importJsonFileInput(page).setInputFiles(importFilePath);
+
+  const importPanel = page.getByRole('region', { name: 'Import preview' });
+  const cancelImportButton = importPanel.getByRole('button', { name: 'Cancel Import' });
+
+  await expect(importPanel.getByRole('heading', { name: 'Import Preview' })).toBeVisible();
+  await cancelImportButton.focus();
+  await expect(cancelImportButton).toBeFocused();
+  await page.keyboard.press('Enter');
+
+  await expect(importPanel).toHaveCount(0);
+  await expect(importButton).toBeFocused();
+});
+
 test('imports changed issue conflicts with an explicit replace policy', async ({ page }, testInfo) => {
   const existingResponse = await page.request.post('/api/issues', {
     data: {

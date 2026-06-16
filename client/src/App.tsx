@@ -227,6 +227,7 @@ export function App() {
   const [bulkStatusError, setBulkStatusError] = useState<string | null>(null);
   const [isBulkStatusSubmitting, setIsBulkStatusSubmitting] = useState(false);
   const newIssueButtonRef = useRef<HTMLButtonElement>(null);
+  const importButtonRef = useRef<HTMLButtonElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const issueSearchInputRef = useRef<HTMLInputElement>(null);
   const commandPaletteInputRef = useRef<HTMLInputElement>(null);
@@ -840,6 +841,7 @@ export function App() {
     setIsImportPreviewing(false);
     setIsImportApplying(false);
     resetImportInput();
+    restoreFocus(importButtonRef.current, () => newIssueButtonRef.current ?? issueListHeadingRef.current);
   }
 
   async function handleChooseImportFile(event: ChangeEvent<HTMLInputElement>) {
@@ -1630,6 +1632,7 @@ export function App() {
           csvExportHref={csvExportHref}
           serviceHealthState={serviceHealthState}
           newIssueButtonRef={newIssueButtonRef}
+          importButtonRef={importButtonRef}
           importInputRef={importInputRef}
           onCreateIssue={startCreate}
           onChooseImportFile={handleChooseImportFile}

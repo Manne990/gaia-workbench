@@ -6,6 +6,7 @@ type DashboardHeaderProps = {
   serviceHealthState: ServiceHealthState;
   csvExportHref: string;
   newIssueButtonRef: RefObject<HTMLButtonElement | null>;
+  importButtonRef: RefObject<HTMLButtonElement | null>;
   importInputRef: RefObject<HTMLInputElement | null>;
   onCreateIssue: (trigger: HTMLElement) => void;
   onChooseImportFile: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -29,6 +30,7 @@ export function DashboardHeader({
   serviceHealthState,
   csvExportHref,
   newIssueButtonRef,
+  importButtonRef,
   importInputRef,
   onCreateIssue,
   onChooseImportFile,
@@ -52,7 +54,12 @@ export function DashboardHeader({
           hidden
           onChange={onChooseImportFile}
         />
-        <button type="button" className="secondary-button" onClick={() => importInputRef.current?.click()}>
+        <button
+          type="button"
+          className="secondary-button"
+          ref={importButtonRef}
+          onClick={() => importInputRef.current?.click()}
+        >
           Import JSON
         </button>
         <button

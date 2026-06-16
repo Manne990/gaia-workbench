@@ -803,7 +803,7 @@ describe('tracker import API', () => {
     expect(exportedAfterImport.body).toEqual(payload);
   });
 
-  it('preserves archived blocked issue semantics through export and import', async () => {
+  it('preserves archived blocked issue dependency context and comments through preview and import', async () => {
     const sourceApp = createApp({ databasePath: ':memory:' });
     const targetApp = createApp({ databasePath: ':memory:' });
 
@@ -821,9 +821,15 @@ describe('tracker import API', () => {
       .send({ dependsOnIssueId: blocker.body.id })
       .expect(201);
 
+    const comment = await request(sourceApp)
+      .post(`/api/issues/${blocked.body.id}/comments`)
+      .send({ body: 'Archived blocked issue comment remains attached to the imported detail.' })
+      .expect(201);
+
     const archived = await request(sourceApp).post(`/api/issues/${blocked.body.id}/archive`).expect(200);
     const exported = await request(sourceApp).get('/api/export').expect(200);
     const sourceBlocked = (exported.body as TrackerExport).issues.find((issue) => issue.id === blocked.body.id);
+    const sourceBlockedComment = sourceBlocked?.comments.find((entry) => entry.id === comment.body.id);
 
     expect(sourceBlocked).toMatchObject({
       id: blocked.body.id,
@@ -831,8 +837,13 @@ describe('tracker import API', () => {
       isBlocked: true,
       dependsOnIssueIds: [blocker.body.id]
     });
+    expect(sourceBlockedComment).toMatchObject({
+      id: comment.body.id,
+      issueId: blocked.body.id,
+      body: 'Archived blocked issue comment remains attached to the imported detail.'
+    });
 
-    await request(targetApp).post('/api/import/preview').send(exported.body).expect(200);
+    const preview = await request(targetApp).post('/api/import/preview').send(exported.body).expect(200);
     await request(targetApp).post('/api/import/apply').send(exported.body).expect(200);
 
     const defaultBlockedOnly = await request(targetApp).get('/api/issues?blockedOnly=true').expect(200);
@@ -843,11 +854,27 @@ describe('tracker import API', () => {
     const importedDependencies = await request(targetApp)
       .get(`/api/issues/${blocked.body.id}/dependencies`)
       .expect(200);
+    const importedComments = await request(targetApp).get(`/api/issues/${blocked.body.id}/comments`).expect(200);
     const exportedAfterImport = await request(targetApp).get('/api/export').expect(200);
     const roundTrippedBlocked = (exportedAfterImport.body as TrackerExport).issues.find(
       (issue) => issue.id === blocked.body.id
     );
 
+    expect(preview.body.valid).toBe(true);
+    expect(preview.body.decisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity: 'issue',
+          sourceId: blocked.body.id,
+          decision: 'import'
+        }),
+        expect.objectContaining({
+          entity: 'comment',
+          sourceId: comment.body.id,
+          decision: 'import'
+        })
+      ])
+    );
     expect(defaultBlockedOnly.body.items.map((issue: { id: string }) => issue.id)).toEqual([]);
     expect(defaultBlockedOnly.body.pagination.total).toBe(0);
     expect(includeArchivedBlockedOnly.body.items.map((issue: { id: string }) => issue.id)).toEqual([blocked.body.id]);
@@ -870,6 +897,13 @@ describe('tracker import API', () => {
         }
       ]
     });
+    expect(importedComments.body).toEqual([
+      expect.objectContaining({
+        id: comment.body.id,
+        issueId: blocked.body.id,
+        body: 'Archived blocked issue comment remains attached to the imported detail.'
+      })
+    ]);
     expect(roundTrippedBlocked).toMatchObject({
       id: blocked.body.id,
       archivedAt: archived.body.archivedAt,

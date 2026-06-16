@@ -1679,6 +1679,70 @@ describe('tracker import API', () => {
     );
   });
 
+  it('rejects imported isBlocked values that contradict active dependencies', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const inconsistent = cloneExport(payload);
+    const blockedIssueIndex = inconsistent.issues.findIndex((issue) => (issue.dependsOnIssueIds ?? []).length > 0);
+    const blockedIssue = inconsistent.issues[blockedIssueIndex];
+
+    if (!blockedIssue || !blockedIssue.dependsOnIssueIds?.[0]) {
+      throw new Error('Expected import fixture to include an issue with a dependency');
+    }
+
+    const blockerIssue = inconsistent.issues.find((issue) => issue.id === blockedIssue.dependsOnIssueIds?.[0]);
+
+    if (!blockerIssue) {
+      throw new Error('Expected import fixture dependency to reference another issue');
+    }
+
+    await request(app).post('/api/issues').send({ title: 'Keep inconsistent isBlocked validation intact' }).expect(201);
+    const beforeImport = await request(app).get('/api/export').expect(200);
+
+    expect(blockerIssue.status).not.toBe('done');
+    expect(blockerIssue.archivedAt).toBeNull();
+
+    blockedIssue.isBlocked = false;
+
+    const preview = await request(app).post('/api/import/preview').send(inconsistent).expect(400);
+    const applied = await request(app).post('/api/import/apply').send(inconsistent).expect(400);
+    const afterImport = await request(app).get('/api/export').expect(200);
+
+    expect(preview.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'inconsistent_dependency_state',
+          path: `$.issues[${blockedIssueIndex}].isBlocked`,
+          message: 'isBlocked must match the imported dependency graph.'
+        })
+      ])
+    );
+    expect(applied.body.errors).toEqual(preview.body.errors);
+    expect(afterImport.body).toEqual(beforeImport.body);
+
+    const nonBlocking = cloneExport(payload);
+    const nonBlockingBlockedIssue = nonBlocking.issues[blockedIssueIndex];
+
+    if (!nonBlockingBlockedIssue?.dependsOnIssueIds?.[0]) {
+      throw new Error('Expected non-blocking fixture copy to include an issue with a dependency');
+    }
+
+    const nonBlockingDependency = nonBlocking.issues.find(
+      (issue) => issue.id === nonBlockingBlockedIssue.dependsOnIssueIds?.[0]
+    );
+
+    if (!nonBlockingDependency) {
+      throw new Error('Expected non-blocking fixture copy to include dependency target issue');
+    }
+
+    nonBlockingDependency.status = 'done';
+    nonBlockingBlockedIssue.isBlocked = false;
+
+    const nonBlockingPreview = await request(app).post('/api/import/preview').send(nonBlocking).expect(200);
+
+    expect(nonBlockingPreview.body.valid).toBe(true);
+  });
+
   it('rejects dependency validation errors on apply without mutating existing tracker state', async () => {
     const app = createApp({ databasePath: ':memory:' });
     const payload = await createExportFixture();

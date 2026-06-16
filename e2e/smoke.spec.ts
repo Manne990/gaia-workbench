@@ -958,6 +958,72 @@ test('archive action offers undo recovery in active and include-archived modes',
   await expect(issueRow.locator('.archived-pill')).toHaveCount(0);
 });
 
+test('archiving selected detail preserves active filters page size and route state', async ({ page }) => {
+  const issue = await createIssueThroughApi(page, {
+    title: 'Selected detail archive issue',
+    description: 'Selected detail should stay coherent when archive visibility changes.',
+    status: 'review',
+    priority: 'high'
+  });
+
+  await createIssueThroughApi(page, {
+    title: 'Selected detail archive mismatch',
+    description: 'Should stay hidden by the active priority filter.',
+    status: 'review',
+    priority: 'low'
+  });
+
+  await page.goto(
+    `/issues/${issue.id}?search=${encodeURIComponent('Selected detail archive')}&status=review&priority=high&limit=10`
+  );
+
+  const filters = page.getByLabel('Issue filters');
+  const settings = await expandDashboardSettings(page);
+  const issueRow = page.getByRole('row', { name: /Selected detail archive issue.*Review.*High/ });
+  const mismatchRow = page.getByRole('row', { name: /Selected detail archive mismatch.*Review.*Low/ });
+  const detail = page.getByRole('region', { name: issue.title });
+
+  await expect(filters.getByLabel('Search')).toHaveValue('Selected detail archive');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(filters.getByLabel('Priority')).toHaveValue('high');
+  await expect(settings.getByLabel('Page size')).toHaveValue('10');
+  await expect(page.getByLabel('Active filters')).toContainText('Page size: 10');
+  await expect(issueRow).toBeVisible();
+  await expect(mismatchRow).toHaveCount(0);
+  await expect(detail.getByRole('heading', { name: issue.title })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${issue.id}`);
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Archive "Selected detail archive issue"?');
+    await dialog.accept();
+  });
+  const archiveResponse = waitForIssueActionResponse(page, issue.id, 'archive');
+  await detail.getByRole('button', { name: 'Archive', exact: true }).click();
+  await archiveResponse;
+
+  await expect(detail.getByText('Hidden from the active dashboard since')).toBeVisible();
+  await expect(detail.getByLabel('Issue activity').getByText('Issue archived')).toBeVisible();
+  await expect(issueRow).toHaveCount(0);
+  await expect(page.getByText('No issues match the active filters.')).toBeVisible();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${issue.id}`);
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Selected detail archive');
+  await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('review');
+  await expect.poll(() => new URL(page.url()).searchParams.get('priority')).toBe('high');
+  await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('10');
+  await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBeNull();
+
+  await filters.getByLabel('Include archived').check();
+
+  await expect(page.getByLabel('Active filters')).toContainText('Archived: Included');
+  await expect(issueRow).toBeVisible();
+  await expect(issueRow.locator('.archived-pill')).toHaveText('Archived');
+  await expect(mismatchRow).toHaveCount(0);
+  await expect(detail.getByText('Hidden from the active dashboard since')).toBeVisible();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${issue.id}`);
+  await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBe('true');
+  await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('10');
+});
+
 test('bulk visible selection changes issue status with confirmation and scoped activity', async ({ page }) => {
   const first = await createIssueThroughApi(page, {
     title: 'Bulk status visible first',

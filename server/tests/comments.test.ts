@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
 
 describe('comments API', () => {
@@ -200,6 +200,85 @@ describe('comments API', () => {
       editedAt: editedComment.body.updatedAt
     });
     expect(history.body[0].editedAt).toBe(events.find((event) => event.type === 'comment_edited')?.createdAt);
+  });
+
+  it('preserves insertion order for dense same-timestamp mixed activity writes', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-16T15:20:00.000Z'));
+
+    try {
+      const app = createApp({ databasePath: ':memory:' });
+      const blocker = await request(app).post('/api/issues').send({ title: 'Dense blocker' }).expect(201);
+      const target = await request(app)
+        .post('/api/issues')
+        .send({
+          title: 'Dense chronology target',
+          labels: ['dense']
+        })
+        .expect(201);
+
+      await request(app)
+        .put(`/api/issues/${target.body.id}`)
+        .send({
+          title: 'Dense chronology target renamed',
+          status: 'review',
+          priority: 'high',
+          labels: ['dense', 'timeline']
+        })
+        .expect(200);
+      await request(app)
+        .post(`/api/issues/${target.body.id}/dependencies`)
+        .send({ dependsOnIssueId: blocker.body.id })
+        .expect(201);
+      const comment = await request(app)
+        .post(`/api/issues/${target.body.id}/comments`)
+        .send({ body: 'Dense comment body' })
+        .expect(201);
+      await request(app).put(`/api/comments/${comment.body.id}`).send({ body: 'Dense comment edited' }).expect(200);
+      await request(app).delete(`/api/issues/${target.body.id}/dependencies/${blocker.body.id}`).expect(200);
+      await request(app).put(`/api/issues/${target.body.id}`).send({ status: 'done' }).expect(200);
+
+      const activity = await request(app).get(`/api/issues/${target.body.id}/activity`).expect(200);
+      const events = activity.body as Array<{
+        type: string;
+        createdAt: string;
+        metadata: Record<string, unknown>;
+      }>;
+
+      expect(events.map((event) => event.type)).toEqual([
+        'issue_created',
+        'issue_title_changed',
+        'issue_status_changed',
+        'issue_priority_changed',
+        'issue_labels_changed',
+        'issue_dependency_added',
+        'comment_added',
+        'comment_edited',
+        'issue_dependency_removed',
+        'issue_status_changed'
+      ]);
+      expect(events.map((event) => event.createdAt)).toEqual(
+        Array.from({ length: events.length }, () => '2026-06-16T15:20:00.000Z')
+      );
+      expect(events.map((event) => event.metadata)).toEqual([
+        { title: 'Dense chronology target' },
+        { from: 'Dense chronology target', to: 'Dense chronology target renamed' },
+        { from: 'todo', to: 'review' },
+        { from: 'medium', to: 'high' },
+        { from: ['dense'], to: ['dense', 'timeline'] },
+        { dependsOnIssueId: blocker.body.id, title: 'Dense blocker' },
+        { commentId: comment.body.id, preview: 'Dense comment body' },
+        {
+          commentId: comment.body.id,
+          previousPreview: 'Dense comment body',
+          newPreview: 'Dense comment edited'
+        },
+        { dependsOnIssueId: blocker.body.id, title: 'Dense blocker' },
+        { from: 'review', to: 'done' }
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('validates comment payloads', async () => {

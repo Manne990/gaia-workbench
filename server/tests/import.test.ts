@@ -1817,6 +1817,53 @@ describe('tracker import API', () => {
     );
   });
 
+  it('reports multiple independent import preview problem classes together', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const invalid = cloneExport(payload);
+
+    invalid.issues[0].status = 'blocked';
+    invalid.issues[0].dependsOnIssueIds = [{ id: invalid.issues[1].id } as unknown as string, invalid.issues[0].id];
+    invalid.savedFilterViews[0].pageSize = 0;
+
+    const response = await request(app).post('/api/import/preview').send(invalid).expect(400);
+
+    expect(response.body.valid).toBe(false);
+    expect(response.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'invalid_status',
+          path: '$.issues[0].status',
+          message: 'Invalid issue status.',
+          value: 'blocked'
+        }),
+        expect.objectContaining({
+          code: 'invalid_dependency',
+          path: '$.issues[0].dependsOnIssueIds[0]',
+          message: 'Dependency references must be issue id strings.',
+          value: { id: invalid.issues[1].id }
+        }),
+        expect.objectContaining({
+          code: 'invalid_dependency',
+          path: '$.issues[0].dependsOnIssueIds[1]',
+          message: 'An issue cannot depend on itself.',
+          value: invalid.issues[0].id
+        }),
+        expect.objectContaining({
+          code: 'invalid_value',
+          path: '$.savedFilterViews[0].pageSize',
+          message: 'Invalid saved view pageSize.',
+          value: 0
+        })
+      ])
+    );
+
+    const errorCodes = new Set((response.body.errors as Array<{ code: string }>).map((error) => error.code));
+    expect(errorCodes.has('invalid_status')).toBe(true);
+    expect(errorCodes.has('invalid_dependency')).toBe(true);
+    expect(errorCodes.has('invalid_value')).toBe(true);
+  });
+
   it('rejects dependency references to issues absent from the import payload and dependency cycles', async () => {
     const app = createApp({ databasePath: ':memory:' });
     const payload = await createExportFixture();

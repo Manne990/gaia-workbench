@@ -993,6 +993,30 @@ describe('issues API', () => {
       isOverdue: true
     });
 
+    const activity = await request(app).get(`/api/issues/${created.body.id}/activity`).expect(200);
+    const activityEvents = activity.body as Array<{ type: string; metadata: unknown; createdAt: string }>;
+
+    expect(activityEvents.map((event) => event.type)).toEqual([
+      'issue_created',
+      'issue_title_changed',
+      'issue_description_changed',
+      'issue_status_changed',
+      'issue_priority_changed',
+      'issue_due_date_changed',
+      'issue_labels_changed'
+    ]);
+    expect(activityEvents.slice(1).map((event) => event.createdAt)).toEqual(
+      Array.from({ length: 6 }, () => updated.body.updatedAt)
+    );
+    expect(activityEvents.slice(1).map((event) => event.metadata)).toEqual([
+      { from: 'Needs update', to: 'Updated issue' },
+      { from: 'Old description', to: 'New description' },
+      { from: 'todo', to: 'in_progress' },
+      { from: 'medium', to: 'high' },
+      { from: null, to: '2000-01-01' },
+      { from: [], to: ['docs', 'ui'] }
+    ]);
+
     const relabeled = await request(app)
       .put(`/api/issues/${created.body.id}`)
       .send({ labels: ['api'], dueDate: null })

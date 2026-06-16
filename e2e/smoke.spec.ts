@@ -303,6 +303,12 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   await expect(detail.locator('.detail-overdue')).toHaveCount(0);
   const activity = detail.getByLabel('Issue activity');
   await expect(activity.getByText('Issue created')).toBeVisible();
+  await expect(activity.getByText('Title changed')).toBeVisible();
+  await expect(activity.getByText('Create issue from UI -> Edit issue from UI')).toBeVisible();
+  await expect(activity.getByText('Description changed')).toBeVisible();
+  await expect(
+    activity.getByText('Created through the dashboard form. -> Updated through the dashboard form.')
+  ).toBeVisible();
   await expect(activity.getByText('Status changed')).toBeVisible();
   await expect(activity.getByText('Priority changed')).toBeVisible();
   await expect(detail.getByText('No comments yet.')).toBeVisible();

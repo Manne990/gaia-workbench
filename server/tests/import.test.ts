@@ -711,8 +711,15 @@ describe('tracker import API', () => {
     const app = createApp({ databasePath: ':memory:' });
     const payload = await createExportFixture();
     const changed = cloneExport(payload);
-    const changedIssue = changed.issues[0];
-    const dependencyTarget = changed.issues[1];
+    const changedIssue = changed.issues.find((issue) =>
+      issue.comments.some((comment) => comment.editHistory.length > 0)
+    );
+    const dependencyTarget = changed.issues.find((issue) => issue.id !== changedIssue?.id);
+
+    if (!changedIssue || !dependencyTarget) {
+      throw new Error('Expected fixture to include a commented issue and a dependency target');
+    }
+
     const changedComment = changedIssue.comments[0];
     const changedHistory = changedComment.editHistory[0];
     const changedActivity = changedIssue.activityEvents[0];

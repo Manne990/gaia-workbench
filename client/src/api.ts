@@ -104,10 +104,7 @@ export async function bulkUpdateIssueStatus(issueIds: string[], status: IssueSta
 
 async function readJsonOrThrow<T>(response: Response, fallbackMessage: string): Promise<T> {
   const body = (await response.json().catch(() => null)) as { error?: string } | T | null;
-  const errorMessage =
-    body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
-      ? body.error
-      : fallbackMessage;
+  const errorMessage = readResponseErrorMessage(body, fallbackMessage);
 
   if (!response.ok) {
     throw new Error(errorMessage);
@@ -118,6 +115,12 @@ async function readJsonOrThrow<T>(response: Response, fallbackMessage: string): 
   }
 
   return body as T;
+}
+
+function readResponseErrorMessage(body: unknown, fallbackMessage: string): string {
+  return body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
+    ? body.error
+    : fallbackMessage;
 }
 
 export async function fetchSavedFilterViews(signal?: AbortSignal): Promise<SavedFilterView[]> {
@@ -173,13 +176,17 @@ function withImportPolicy(payload: unknown, conflictPolicy: ImportConflictPolicy
 }
 
 async function readImportPlan(response: Response): Promise<ImportPlan> {
-  const body = (await response.json().catch(() => null)) as ImportPlan | null;
+  const body = (await response.json().catch(() => null)) as ImportPlan | { error?: string } | null;
 
-  if (!body || typeof body.valid !== 'boolean') {
-    throw new Error('Import request failed');
+  if (body && typeof body === 'object' && 'valid' in body && typeof body.valid === 'boolean') {
+    return body as ImportPlan;
   }
 
-  return body;
+  if (!response.ok) {
+    throw new Error(readResponseErrorMessage(body, 'Import request failed'));
+  }
+
+  throw new Error('Import request failed');
 }
 
 export async function previewImport(

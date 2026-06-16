@@ -97,6 +97,10 @@ function importAppliedMessage(plan: ImportPlan): string {
   return `Import applied: ${plan.summary.toCreate.issues} issues created, ${plan.summary.toReplace.issues} changed issues replaced, ${plan.summary.skip.issues} skipped.`;
 }
 
+function importRequestErrorMessage(error: unknown, fallbackMessage: string): string {
+  return error instanceof Error && error.message ? error.message : fallbackMessage;
+}
+
 function importPlanTouchesIssue(plan: ImportPlan, issueId: string | null): issueId is string {
   return Boolean(
     issueId &&
@@ -865,7 +869,11 @@ export function App() {
     } catch (error) {
       setImportPayload(null);
       setImportPlan(null);
-      setImportError(error instanceof SyntaxError ? 'File is not valid JSON.' : 'Import preview failed.');
+      setImportError(
+        error instanceof SyntaxError
+          ? 'File is not valid JSON.'
+          : importRequestErrorMessage(error, 'Import preview failed.')
+      );
     } finally {
       setIsImportPreviewing(false);
       resetImportInput();
@@ -899,8 +907,8 @@ export function App() {
       if (importPlanTouchesIssue(plan, selectedIssueIdAtApply)) {
         await refreshSelectedIssueDetail(selectedIssueIdAtApply);
       }
-    } catch {
-      setImportError('Import apply failed.');
+    } catch (error) {
+      setImportError(importRequestErrorMessage(error, 'Import apply failed.'));
     } finally {
       setIsImportApplying(false);
       resetImportInput();
@@ -924,8 +932,8 @@ export function App() {
       setImportPlan(plan);
       setImportError(plan.valid ? null : 'Import preview found validation errors.');
       setImportMessage(plan.valid ? importReadyMessage(plan) : null);
-    } catch {
-      setImportError('Import preview failed.');
+    } catch (error) {
+      setImportError(importRequestErrorMessage(error, 'Import preview failed.'));
     } finally {
       setIsImportPreviewing(false);
     }

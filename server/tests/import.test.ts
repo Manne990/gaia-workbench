@@ -80,6 +80,50 @@ function countExport(payload: TrackerExport): ImportCounts {
   };
 }
 
+function getCsvLines(csv: string): string[] {
+  return csv.trim().split('\r\n');
+}
+
+function parseCsvLine(line: string): string[] {
+  const values: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const nextChar = line[index + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      values.push(current);
+      current = '';
+      continue;
+    }
+
+    if (char === '\r') {
+      continue;
+    }
+
+    current += char;
+  }
+
+  values.push(current);
+  return values;
+}
+
+function parseCsvRows(csv: string): string[][] {
+  return getCsvLines(csv).map(parseCsvLine);
+}
+
 async function createExportFixture(): Promise<TrackerExport> {
   const app = createApp({ databasePath: ':memory:' });
 
@@ -276,6 +320,59 @@ describe('tracker import API', () => {
     expect(exportedAfterImport.body).toEqual(payload.body);
     expect(importedIssue?.description).toBe(rawDescription);
     expect(importedIssue?.comments[0].body).toBe(rawComment);
+  });
+
+  it('keeps imported raw text unchanged in JSON while neutralizing spreadsheet CSV cells', async () => {
+    const sourceApp = createApp({ databasePath: ':memory:' });
+    const targetApp = createApp({ databasePath: ':memory:' });
+    const rawTitle = '=HYPERLINK("https://example.test","open")';
+    const rawDescription = [
+      '+SUM(1,2)',
+      '**bold** [safe](https://example.com) [bad](javascript:alert(1))',
+      '<script>alert(1)</script>'
+    ].join('\n');
+    const rawComment = '@comment formula marker stays raw with <img src=x onerror=alert(1)> and `code`';
+
+    const created = await request(sourceApp)
+      .post('/api/issues')
+      .send({
+        title: rawTitle,
+        description: rawDescription,
+        labels: ['-risk', 'safe']
+      })
+      .expect(201);
+
+    await request(sourceApp).post(`/api/issues/${created.body.id}/comments`).send({ body: rawComment }).expect(201);
+
+    const payload = await request(sourceApp).get('/api/export').expect(200);
+
+    await request(targetApp).post('/api/import/preview').send(payload.body).expect(200);
+    await request(targetApp).post('/api/import/apply').send(payload.body).expect(200);
+
+    const exportedAfterImport = await request(targetApp).get('/api/export').expect(200);
+    const importedIssue = (exportedAfterImport.body as TrackerExport).issues.find(
+      (issue) => issue.id === created.body.id
+    );
+
+    expect(exportedAfterImport.body).toEqual(payload.body);
+    expect(importedIssue?.title).toBe(rawTitle);
+    expect(importedIssue?.description).toBe(rawDescription);
+    expect(importedIssue?.labels).toEqual(['-risk', 'safe']);
+    expect(importedIssue?.comments[0].body).toBe(rawComment);
+
+    const csvResponse = await request(targetApp)
+      .get('/api/export.csv?includeArchived=true')
+      .expect(200)
+      .expect('Content-Type', /text\/csv/);
+    const csvRowsById = new Map(
+      parseCsvRows(csvResponse.text)
+        .slice(1)
+        .map((row) => [row[0], row])
+    );
+
+    expect(csvRowsById.get(created.body.id)?.[1]).toBe(`'=HYPERLINK("https://example.test","open")`);
+    expect(csvRowsById.get(created.body.id)?.[2]).toBe(`'${rawDescription}`);
+    expect(csvRowsById.get(created.body.id)?.[10]).toBe("'-risk|safe");
   });
 
   it('roundtrips saved filter views with preserved ids timestamps and filters', async () => {

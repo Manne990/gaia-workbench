@@ -535,6 +535,11 @@ history, activity events, `archivedAt`, and `dependsOnIssueIds`. Active issues
 use `"archivedAt": null`; archived issues contain the archive timestamp. Export
 is read-only and does not mutate tracker state.
 
+`GET /api/export.csv` provides spreadsheet-facing issue rows. CSV export
+prefixes cells that start with spreadsheet formula markers (`=`, `+`, `-`, `@`,
+tab, or newline) with an apostrophe; JSON export preserves the same user-authored
+text unchanged.
+
 ### Import API
 
 TinyTracker imports its own `exportVersion: 1` JSON through a preview-and-apply

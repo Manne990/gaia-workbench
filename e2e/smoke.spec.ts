@@ -40,9 +40,18 @@ type IssueListResponse = {
   };
 };
 
+type ImportSummaryResponse = {
+  summary: {
+    toCreate: {
+      issues: number;
+    };
+  };
+};
+
 const largeIssueStatuses = ['todo', 'in_progress', 'review', 'done'] as const;
 const largeIssuePriorities = ['low', 'medium', 'high'] as const;
 const largeIssueCount = 500;
+const largeIssueImportBaseDate = Date.UTC(2026, 0, 1, 0, 0, 0);
 
 async function isFocused(locator: Locator): Promise<boolean> {
   return locator.evaluate((element) => element === document.activeElement).catch(() => false);
@@ -174,31 +183,39 @@ async function changeDashboardFiltersInSameTask(
 }
 
 async function createLargeIssueSet(page: Page, count: number): Promise<CreatedIssue[]> {
-  const issues: CreatedIssue[] = [];
-  const batchSize = 25;
+  const issues = Array.from({ length: count }, (_, index) => {
+    const paddedIndex = String(index).padStart(4, '0');
+    const title = `Large issue ${paddedIndex}`;
+    const timestamp = new Date(largeIssueImportBaseDate + index * 1000).toISOString();
 
-  for (let offset = 0; offset < count; offset += batchSize) {
-    const batch = Array.from({ length: Math.min(batchSize, count - offset) }, async (_, batchIndex) => {
-      const index = offset + batchIndex;
-      const title = `Large issue ${String(index).padStart(4, '0')}`;
-      const response = await page.request.post('/api/issues', {
-        data: {
-          title,
-          description: `Large-list guardrail item ${String(index).padStart(4, '0')}`,
-          status: largeIssueStatuses[index % largeIssueStatuses.length],
-          priority: largeIssuePriorities[index % largeIssuePriorities.length],
-          labels: ['bulk', `group-${index % 10}`],
-          dueDate: index % 5 === 0 ? '2999-12-31' : null
-        }
-      });
+    return {
+      id: `00000000-0000-4000-9000-${String(index).padStart(12, '0')}`,
+      title,
+      description: `Large-list guardrail item ${paddedIndex}`,
+      status: largeIssueStatuses[index % largeIssueStatuses.length],
+      priority: largeIssuePriorities[index % largeIssuePriorities.length],
+      labels: ['bulk', `group-${index % 10}`],
+      dueDate: index % 5 === 0 ? '2999-12-31' : null,
+      isOverdue: false,
+      isBlocked: false,
+      dependsOnIssueIds: [],
+      archivedAt: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      comments: [],
+      activityEvents: []
+    };
+  });
 
-      expect(response.ok()).toBe(true);
+  const response = await page.request.post('/api/import/apply', {
+    data: {
+      exportVersion: 1,
+      issues
+    }
+  });
 
-      return (await response.json()) as CreatedIssue;
-    });
-
-    issues.push(...(await Promise.all(batch)));
-  }
+  expect(response.ok()).toBe(true);
+  expect(((await response.json()) as ImportSummaryResponse).summary.toCreate.issues).toBe(count);
 
   return issues;
 }

@@ -317,6 +317,7 @@ export function IssueListPanel({
                 id="saved-view-select"
                 value={selectedSavedViewId}
                 onChange={(event) => onSavedViewSelect(event.target.value)}
+                disabled={isSavedViewBusy}
               >
                 <option value="">Choose a view</option>
                 {savedViews.map((view) => (
@@ -333,6 +334,7 @@ export function IssueListPanel({
                 id="saved-view-name"
                 value={savedViewName}
                 onChange={(event) => onSavedViewNameChange(event.target.value)}
+                disabled={isSavedViewBusy}
               />
             </label>
 

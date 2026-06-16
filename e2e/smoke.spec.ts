@@ -2673,6 +2673,97 @@ test('saved filter view apply preserves the local view after transient fetch fai
   await expect(page.getByRole('row', { name: /Saved view transient other.*Todo.*Low/ })).toHaveCount(0);
 });
 
+test('saved filter view controls stay locked during rename and delete requests', async ({ page }) => {
+  await page.goto('/');
+
+  const settings = await expandDashboardSettings(page);
+  const savedViews = settings.getByLabel('Saved filter views');
+  const savedViewSelect = savedViews.getByLabel('Saved views');
+  const savedViewName = savedViews.getByLabel('View name');
+
+  await savedViewName.fill('Busy first view');
+  await savedViews.getByRole('button', { name: 'Save View' }).click();
+  await expect(savedViewSelect).toContainText('Busy first view');
+
+  await savedViewName.fill('Busy second view');
+  await savedViews.getByRole('button', { name: 'Save View' }).click();
+  await expect(savedViewSelect).toContainText('Busy second view');
+
+  let resolvePatchIntercepted = () => {};
+  let resolveDeleteIntercepted = () => {};
+  let releasePatch: (() => void) | null = null;
+  let releaseDelete: (() => void) | null = null;
+  const patchIntercepted = new Promise<void>((resolve) => {
+    resolvePatchIntercepted = resolve;
+  });
+  const deleteIntercepted = new Promise<void>((resolve) => {
+    resolveDeleteIntercepted = resolve;
+  });
+
+  await page.route('**/api/filter-views/*', async (route) => {
+    const method = route.request().method();
+
+    if (method === 'PATCH') {
+      resolvePatchIntercepted();
+      await new Promise<void>((resolve) => {
+        releasePatch = resolve;
+      });
+    } else if (method === 'DELETE') {
+      resolveDeleteIntercepted();
+      await new Promise<void>((resolve) => {
+        releaseDelete = resolve;
+      });
+    }
+
+    await route.continue();
+  });
+
+  await savedViewSelect.selectOption({ label: 'Busy first view' });
+  await savedViewName.fill('Busy renamed view');
+
+  const renameResponse = page.waitForResponse((response) => {
+    return response.request().method() === 'PATCH' && new URL(response.url()).pathname.startsWith('/api/filter-views/');
+  });
+
+  await savedViews.getByRole('button', { name: 'Rename' }).click();
+  await patchIntercepted;
+  await expect(savedViewSelect).toBeDisabled();
+  await expect(savedViewName).toBeDisabled();
+
+  if (!releasePatch) {
+    throw new Error('Expected saved view rename request to be intercepted.');
+  }
+
+  releasePatch();
+  await renameResponse;
+  await expect(savedViewSelect).toBeEnabled();
+  await expect(savedViewName).toBeEnabled();
+  await expect(savedViewSelect).toContainText('Busy renamed view');
+  await expect(savedViewSelect).not.toHaveValue('');
+
+  const deleteResponse = page.waitForResponse((response) => {
+    return (
+      response.request().method() === 'DELETE' && new URL(response.url()).pathname.startsWith('/api/filter-views/')
+    );
+  });
+
+  await savedViews.getByRole('button', { name: 'Delete' }).click();
+  await deleteIntercepted;
+  await expect(savedViewSelect).toBeDisabled();
+  await expect(savedViewName).toBeDisabled();
+
+  if (!releaseDelete) {
+    throw new Error('Expected saved view delete request to be intercepted.');
+  }
+
+  releaseDelete();
+  await deleteResponse;
+  await expect(savedViewSelect).toBeEnabled();
+  await expect(savedViewName).toBeEnabled();
+  await expect(savedViewSelect).toHaveValue('');
+  await expect(savedViewName).toHaveValue('');
+});
+
 test('saved filter views recover from stale rename and delete selections', async ({ page }) => {
   await createIssueThroughApi(page, {
     title: 'Saved view stale recovery target',

@@ -1588,6 +1588,13 @@ describe('issues API', () => {
 
     await request(app).post(`/api/issues/${archived.body.id}/archive`).expect(200);
 
+    const firstActivityBeforeInvalidMutations = await request(app)
+      .get(`/api/issues/${first.body.id}/activity`)
+      .expect(200);
+    expect(firstActivityBeforeInvalidMutations.body.map((event: { type: string }) => event.type)).toEqual([
+      'issue_created'
+    ]);
+
     await request(app).post(`/api/issues/${first.body.id}/dependencies`).send({}).expect(400, {
       error: 'dependsOnIssueId is required'
     });
@@ -1616,6 +1623,9 @@ describe('issues API', () => {
         error: 'Cannot depend on archived issue'
       });
 
+    const firstActivityAfterRejectedAdds = await request(app).get(`/api/issues/${first.body.id}/activity`).expect(200);
+    expect(firstActivityAfterRejectedAdds.body.map((event: { type: string }) => event.type)).toEqual(['issue_created']);
+
     await request(app)
       .post(`/api/issues/${first.body.id}/dependencies`)
       .send({ dependsOnIssueId: second.body.id })
@@ -1626,6 +1636,12 @@ describe('issues API', () => {
       .expect(409, {
         error: 'Issue dependency already exists'
       });
+
+    const firstActivityAfterDuplicateAdd = await request(app).get(`/api/issues/${first.body.id}/activity`).expect(200);
+    expect(firstActivityAfterDuplicateAdd.body.map((event: { type: string }) => event.type)).toEqual([
+      'issue_created',
+      'issue_dependency_added'
+    ]);
 
     const firstDependenciesAfterDuplicate = await request(app)
       .get(`/api/issues/${first.body.id}/dependencies`)
@@ -1648,6 +1664,14 @@ describe('issues API', () => {
       error: 'Issue dependency not found'
     });
 
+    const firstActivityAfterRejectedRemovals = await request(app)
+      .get(`/api/issues/${first.body.id}/activity`)
+      .expect(200);
+    expect(firstActivityAfterRejectedRemovals.body.map((event: { type: string }) => event.type)).toEqual([
+      'issue_created',
+      'issue_dependency_added'
+    ]);
+
     await request(app)
       .post(`/api/issues/${second.body.id}/dependencies`)
       .send({ dependsOnIssueId: third.body.id })
@@ -1660,12 +1684,16 @@ describe('issues API', () => {
       });
 
     const thirdDependenciesAfterCycle = await request(app).get(`/api/issues/${third.body.id}/dependencies`).expect(200);
+    const thirdActivityAfterRejectedCycle = await request(app).get(`/api/issues/${third.body.id}/activity`).expect(200);
 
     expect(thirdDependenciesAfterCycle.body).toMatchObject({
       issueId: third.body.id,
       isBlocked: false,
       dependencies: []
     });
+    expect(thirdActivityAfterRejectedCycle.body.map((event: { type: string }) => event.type)).toEqual([
+      'issue_created'
+    ]);
   });
 
   it('returns standard JSON parse errors for issue and dependency mutations', async () => {

@@ -1816,10 +1816,23 @@ td > span:not(.pill) {
   background: #eef5f6;
 }
 
-.comment-history p {
+.comment-history-previous {
   margin-top: 5px;
   color: #4c5661;
   font-size: 0.9rem;
+}
+
+.comment-history-label {
+  display: block;
+  margin-bottom: 4px;
+  color: #30363d;
+  font-weight: 800;
+}
+
+.comment-history-body.markdown-lite pre {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 6px;
 }
 
 @media (max-width: 760px) {

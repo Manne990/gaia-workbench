@@ -56,6 +56,64 @@ describe('comments API', () => {
     });
   });
 
+  it('preserves multi-edit history and rejects blank or no-op comment edits without noise', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const issue = await request(app).post('/api/issues').send({ title: 'Comment history issue' }).expect(201);
+    const comment = await request(app)
+      .post(`/api/issues/${issue.body.id}/comments`)
+      .send({ body: 'Initial comment' })
+      .expect(201);
+
+    await request(app).put(`/api/comments/${comment.body.id}`).send({ body: 'First edit' }).expect(200);
+    const secondEdit = await request(app)
+      .put(`/api/comments/${comment.body.id}`)
+      .send({ body: 'Second edit' })
+      .expect(200);
+
+    const trimStableEdit = await request(app)
+      .put(`/api/comments/${comment.body.id}`)
+      .send({ body: '   Second edit   ' })
+      .expect(200);
+
+    expect(trimStableEdit.body).toEqual(secondEdit.body);
+
+    await request(app).put(`/api/comments/${comment.body.id}`).send({ body: '   ' }).expect(400, {
+      error: 'body is required'
+    });
+
+    const currentComment = await request(app).get(`/api/issues/${issue.body.id}/comments`).expect(200);
+    expect(currentComment.body).toEqual([secondEdit.body]);
+
+    const history = await request(app).get(`/api/comments/${comment.body.id}/history`).expect(200);
+    expect(history.body).toHaveLength(2);
+    expect(history.body).toMatchObject([
+      {
+        commentId: comment.body.id,
+        previousBody: 'Initial comment',
+        newBody: 'First edit'
+      },
+      {
+        commentId: comment.body.id,
+        previousBody: 'First edit',
+        newBody: 'Second edit'
+      }
+    ]);
+    expect(history.body.map((entry: { editedAt: string }) => Date.parse(entry.editedAt))).toEqual(
+      [...history.body.map((entry: { editedAt: string }) => Date.parse(entry.editedAt))].sort(
+        (left, right) => left - right
+      )
+    );
+
+    const activity = await request(app).get(`/api/issues/${issue.body.id}/activity`).expect(200);
+    expect(activity.body.map((event: { type: string }) => event.type)).toEqual([
+      'issue_created',
+      'comment_added',
+      'comment_edited',
+      'comment_edited'
+    ]);
+    expect(activity.body.filter((event: { type: string }) => event.type === 'comment_edited')).toHaveLength(2);
+  });
+
   it('exposes issue activity for issue changes and comments', async () => {
     const app = createApp({ databasePath: ':memory:' });
     const issue = await request(app)
@@ -294,6 +352,10 @@ describe('comments API', () => {
     });
 
     await request(app).put(`/api/comments/${comment.body.id}`).send({ body: '' }).expect(400, {
+      error: 'body is required'
+    });
+
+    await request(app).put(`/api/comments/${comment.body.id}`).send({ body: '   ' }).expect(400, {
       error: 'body is required'
     });
   });

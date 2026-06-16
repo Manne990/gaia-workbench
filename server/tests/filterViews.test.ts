@@ -147,6 +147,59 @@ describe('saved filter views API', () => {
     });
   });
 
+  it('rejects invalid saved view PATCH filters without mutating the saved view', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const created = await request(app)
+      .post('/api/filter-views')
+      .send({
+        name: 'Patch validation target',
+        search: 'release',
+        status: 'review',
+        priority: 'high',
+        label: 'api',
+        includeArchived: true,
+        blockedOnly: false,
+        staleOnly: true,
+        pageSize: 50
+      })
+      .expect(201);
+
+    const invalidPatches = [
+      {
+        body: { pageSize: 0 },
+        error: 'Invalid saved view pageSize'
+      },
+      {
+        body: { pageSize: 101 },
+        error: 'Invalid saved view pageSize'
+      },
+      {
+        body: { pageSize: '50' },
+        error: 'Invalid saved view pageSize'
+      },
+      {
+        body: { includeArchived: 'true' },
+        error: 'Invalid saved view includeArchived'
+      },
+      {
+        body: { blockedOnly: 'false' },
+        error: 'Invalid saved view blockedOnly'
+      },
+      {
+        body: { staleOnly: 1 },
+        error: 'Invalid saved view staleOnly'
+      }
+    ];
+
+    for (const invalidPatch of invalidPatches) {
+      await request(app).patch(`/api/filter-views/${created.body.id}`).send(invalidPatch.body).expect(400, {
+        error: invalidPatch.error
+      });
+
+      await request(app).get(`/api/filter-views/${created.body.id}`).expect(200, created.body);
+    }
+  });
+
   it('returns standard JSON parse errors for saved view mutations', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

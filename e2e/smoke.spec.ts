@@ -352,7 +352,13 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   await expect(page.getByLabel('Issue comments').getByText('Edited detail comment')).toBeVisible();
   await expect(activity.getByText('Comment edited')).toBeVisible();
   await expect(page.getByText('1 edit')).toBeVisible();
-  await expect(page.getByText('Previous: Initial detail comment')).toBeVisible();
+  const editedCommentHistory = commentsList
+    .getByRole('listitem')
+    .filter({ hasText: 'Edited detail comment' })
+    .locator('.comment-history');
+
+  await expect(editedCommentHistory.getByText('Previous:')).toBeVisible();
+  await expect(editedCommentHistory.getByText('Initial detail comment', { exact: true })).toBeVisible();
 
   const exportDownloadPromise = page.waitForEvent('download');
   await page.getByRole('link', { name: 'Download JSON' }).click();
@@ -830,7 +836,8 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
   await expect(commentItem.locator('.comment-body').locator('strong').getByText('safe comment bold')).toBeVisible();
   await expect(commentItem.getByText('<img src=x onerror=alert(1)>')).toBeVisible();
   await expect(commentItem.getByText('[bad](data:text/html,alert)')).toBeVisible();
-  await expect(commentHistory.getByText('Previous: Imported previous comment')).toBeVisible();
+  await expect(commentHistory.getByText('Previous:')).toBeVisible();
+  await expect(commentHistory.getByText('Imported previous comment')).toBeVisible();
   await expect(commentHistory.getByText('[bad history](javascript:alert(1))')).toBeVisible();
   await expect(commentHistory.getByText('<script>history()</script>')).toBeVisible();
   await expect(detail.locator('script')).toHaveCount(0);
@@ -1982,6 +1989,17 @@ test('markdown-lite renders safe formatting and keeps unsafe input inert', async
   ].join('\n');
   const rawComment =
     'Comment has **strong comment** and [bad](data:text/html,alert) plus <img src=x onerror=alert(1)>.';
+  const previousHistoryComment = [
+    'Previous comment keeps **history bold** and [History docs](https://example.com/history).',
+    'Second history line stays visible.',
+    '',
+    '```',
+    '<script>history code stays text</script>',
+    '```',
+    '',
+    'Unsafe history: <script>window.__tinytrackerHistoryXss = true</script> and [bad history](javascript:alert(1)).'
+  ].join('\n');
+  const editedHistoryComment = 'Edited history comment keeps **current bold**.';
   const issue = await createIssueThroughApi(page, {
     title: 'Markdown render issue',
     description: rawDescription
@@ -1993,6 +2011,30 @@ test('markdown-lite renders safe formatting and keeps unsafe input inert', async
   });
 
   expect(commentResponse.ok()).toBe(true);
+
+  const historyCommentResponse = await page.request.post(`/api/issues/${issue.id}/comments`, {
+    data: {
+      body: previousHistoryComment
+    }
+  });
+
+  expect(historyCommentResponse.ok()).toBe(true);
+
+  const historyComment = (await historyCommentResponse.json()) as { id: string };
+  const editHistoryCommentResponse = await page.request.put(`/api/comments/${historyComment.id}`, {
+    data: {
+      body: editedHistoryComment
+    }
+  });
+  const apiHistoryResponse = await page.request.get(`/api/comments/${historyComment.id}/history`);
+  const apiHistory = (await apiHistoryResponse.json()) as Array<{ previousBody: string; newBody: string }>;
+
+  expect(editHistoryCommentResponse.ok()).toBe(true);
+  expect(apiHistoryResponse.ok()).toBe(true);
+  expect(apiHistory[0]).toMatchObject({
+    previousBody: previousHistoryComment,
+    newBody: editedHistoryComment
+  });
 
   await page.goto(`/issues/${issue.id}`);
 
@@ -2027,6 +2069,49 @@ test('markdown-lite renders safe formatting and keeps unsafe input inert', async
   await expect(commentItem.getByText('<img src=x onerror=alert(1)>')).toBeVisible();
   await expect(commentItem.locator('a[href^="data:"]')).toHaveCount(0);
   await expect(commentItem.locator('img')).toHaveCount(0);
+
+  const historyCommentItem = detail.getByLabel('Issue comments').getByRole('listitem').filter({
+    hasText: 'Edited history comment keeps'
+  });
+  const commentHistory = historyCommentItem.locator('.comment-history');
+  const previousHistoryBody = commentHistory.locator('.comment-history-body');
+
+  await expect(historyCommentItem.locator('.comment-body').locator('strong').getByText('current bold')).toBeVisible();
+  await expect(commentHistory.getByText('Previous:')).toBeVisible();
+  await expect(previousHistoryBody.locator('strong').getByText('history bold')).toBeVisible();
+  await expect(previousHistoryBody.getByRole('link', { name: 'History docs' })).toHaveAttribute(
+    'href',
+    'https://example.com/history'
+  );
+  await expect(previousHistoryBody.getByText('Second history line stays visible.')).toBeVisible();
+  await expect(previousHistoryBody.locator('pre code')).toContainText('<script>history code stays text</script>');
+  await expect(previousHistoryBody.getByText('<script>window.__tinytrackerHistoryXss = true</script>')).toBeVisible();
+  await expect(previousHistoryBody.getByText('[bad history](javascript:alert(1)).')).toBeVisible();
+  await expect(historyCommentItem.locator('script')).toHaveCount(0);
+  await expect(historyCommentItem.locator('img')).toHaveCount(0);
+  await expect(historyCommentItem.locator('a[href^="javascript:"]')).toHaveCount(0);
+  expect(
+    await page.evaluate(() => (window as Window & { __tinytrackerHistoryXss?: boolean }).__tinytrackerHistoryXss)
+  ).toBeUndefined();
+
+  const exportDownloadPromise = page.waitForEvent('download');
+  await page.getByRole('link', { name: 'Download JSON' }).click();
+  const exportDownload = await exportDownloadPromise;
+  const exportPath = await exportDownload.path();
+
+  expect(exportDownload.suggestedFilename()).toBe('tinytracker-export.json');
+  expect(exportPath).not.toBeNull();
+
+  const exportedData = JSON.parse(readFileSync(exportPath ?? '', 'utf8')) as {
+    issues: ExportedIssue[];
+  };
+  const exportedIssue = exportedData.issues.find((candidate) => candidate.title === issue.title);
+  const exportedHistoryComment = exportedIssue?.comments.find((comment) => comment.body === editedHistoryComment);
+
+  expect(exportedHistoryComment?.editHistory[0]).toMatchObject({
+    previousBody: previousHistoryComment,
+    newBody: editedHistoryComment
+  });
 
   await page.getByRole('button', { name: 'Edit Markdown render issue' }).click();
 

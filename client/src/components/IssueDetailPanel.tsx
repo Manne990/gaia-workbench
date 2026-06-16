@@ -10,7 +10,7 @@ import type {
 } from '../types';
 import { activityDetail, activityTitle } from '../utils/activity';
 import { formatDate, formatDueDate } from '../utils/formatters';
-import { renderMarkdownLite, renderMarkdownLiteInline } from '../utils/markdown';
+import { renderMarkdownLite } from '../utils/markdown';
 import { isIssueStale, staleIssueDescription } from '../utils/stale';
 
 type IssueDetailPanelProps = {
@@ -550,10 +550,10 @@ export function IssueDetailPanel({
                               {history.map((entry) => (
                                 <li key={entry.id}>
                                   <span>{formatDate(entry.editedAt)}</span>
-                                  <p>
-                                    <span>Previous: </span>
-                                    {renderMarkdownLiteInline(entry.previousBody)}
-                                  </p>
+                                  <div className="comment-history-previous">
+                                    <span className="comment-history-label">Previous:</span>
+                                    {renderMarkdownLite(entry.previousBody, { className: 'comment-history-body' })}
+                                  </div>
                                 </li>
                               ))}
                             </ul>

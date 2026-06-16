@@ -464,9 +464,18 @@ function validateDependsOnIssueIds(
   return dependsOnIssueIds;
 }
 
-function validateIssueDependencyGraph(issues: ExportedIssue[], errors: ImportErrorDetail[]): void {
+function importedDependencyBlocks(issue: ExportedIssue): boolean {
+  return issue.archivedAt === null && issue.status !== 'done';
+}
+
+function validateIssueDependencyGraph(
+  issues: ExportedIssue[],
+  explicitIsBlockedByIssueId: Map<string, boolean>,
+  errors: ImportErrorDetail[]
+): void {
   const issueIds = new Set(issues.map((issue) => issue.id));
   const issueIndexById = new Map(issues.map((issue, index) => [issue.id, index]));
+  const issueById = new Map(issues.map((issue) => [issue.id, issue]));
   const graph = new Map(issues.map((issue) => [issue.id, issue.dependsOnIssueIds]));
 
   for (const issue of issues) {
@@ -483,6 +492,25 @@ function validateIssueDependencyGraph(issues: ExportedIssue[], errors: ImportErr
         );
       }
     });
+
+    const explicitIsBlocked = explicitIsBlockedByIssueId.get(issue.id);
+    if (explicitIsBlocked !== undefined) {
+      const graphIsBlocked = issue.dependsOnIssueIds.some((dependsOnIssueId) => {
+        const dependency = issueById.get(dependsOnIssueId);
+
+        return dependency ? importedDependencyBlocks(dependency) : false;
+      });
+
+      if (explicitIsBlocked !== graphIsBlocked) {
+        pushError(
+          errors,
+          'inconsistent_dependency_state',
+          `$.issues[${issueIndex}].isBlocked`,
+          'isBlocked must match the imported dependency graph.',
+          explicitIsBlocked
+        );
+      }
+    }
   }
 
   function reaches(startIssueId: string, targetIssueId: string, visited: Set<string>): boolean {
@@ -836,6 +864,7 @@ function validateTrackerExport(input: unknown): ValidationResult {
   const issues: ExportedIssue[] = [];
   const savedFilterViews: SavedFilterView[] = [];
   const savedFilterViewNames = new Map<string, number>();
+  const explicitIsBlockedByIssueId = new Map<string, boolean>();
 
   issuesInput.forEach((issueInput, issueIndex) => {
     const issuePath = `$.issues[${issueIndex}]`;
@@ -879,8 +908,8 @@ function validateTrackerExport(input: unknown): ValidationResult {
     const labels = validateLabels(issueObject.labels, `${issuePath}.labels`, errors);
     const dueDate = readStringOrNull(issueObject, 'dueDate', issuePath, errors);
     const isOverdue = readBoolean(issueObject, 'isOverdue', issuePath, errors);
-    const isBlocked =
-      issueObject.isBlocked === undefined ? false : readBoolean(issueObject, 'isBlocked', issuePath, errors);
+    const hasExplicitIsBlocked = Object.prototype.hasOwnProperty.call(issueObject, 'isBlocked');
+    const isBlocked = hasExplicitIsBlocked ? readBoolean(issueObject, 'isBlocked', issuePath, errors) : false;
     const dependsOnIssueIds =
       issueObject.dependsOnIssueIds === undefined
         ? []
@@ -892,6 +921,9 @@ function validateTrackerExport(input: unknown): ValidationResult {
 
     if (issueId) {
       validateUniqueId(issueId, 'issue', `${issuePath}.id`, seen, errors);
+      if (hasExplicitIsBlocked && typeof issueObject.isBlocked === 'boolean') {
+        explicitIsBlockedByIssueId.set(issueId, isBlocked);
+      }
     }
 
     if (!VALID_STATUSES.includes(status)) {
@@ -1257,7 +1289,7 @@ function validateTrackerExport(input: unknown): ValidationResult {
     });
   });
 
-  validateIssueDependencyGraph(issues, errors);
+  validateIssueDependencyGraph(issues, explicitIsBlockedByIssueId, errors);
 
   const exportData: TrackerExport | null =
     exportVersion === 1

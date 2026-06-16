@@ -351,6 +351,16 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
 
   await expect(page.getByLabel('Issue comments').getByText('Edited detail comment')).toBeVisible();
   await expect(activity.getByText('Comment edited')).toBeVisible();
+  await expect(activity.getByRole('listitem').locator('strong')).toHaveText([
+    'Issue created',
+    'Title changed',
+    'Description changed',
+    'Status changed',
+    'Priority changed',
+    'Labels changed',
+    'Comment added',
+    'Comment edited'
+  ]);
   await expect(page.getByText('1 edit')).toBeVisible();
   const editedCommentHistory = commentsList
     .getByRole('listitem')

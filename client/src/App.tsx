@@ -55,6 +55,7 @@ import type {
 import { restoreFocus } from './utils/focus';
 import { parseDueDateInput, parseLabelsInput } from './utils/parse';
 import { buildDashboardQuery, defaultDashboardFilters, getRouteStateFromLocation, writeRoute } from './utils/routing';
+import { issueMatchesDashboardFilters } from './utils/savedView';
 
 const DEFAULT_IMPORT_POLICY: ImportConflictPolicy = 'skip-conflicts';
 const DASHBOARD_DENSITY_STORAGE_KEY = 'tinytracker.dashboardDensity';
@@ -710,8 +711,7 @@ export function App() {
       const nextSelectedIssueId =
         selectedIssueId &&
         selectedIssue?.id === selectedIssueId &&
-        selectedIssue.archivedAt !== null &&
-        !view.includeArchived
+        !issueMatchesDashboardFilters(selectedIssue, nextFilters)
           ? null
           : selectedIssueId;
 

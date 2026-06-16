@@ -1663,6 +1663,40 @@ test('dependency add refreshes blocked-only list while preserving detail route',
   await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${blocked.id}`);
   await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
   await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Blocked-only live detail');
+
+  const removeDependencyResponsePromise = page.waitForResponse((response) => {
+    const responseUrl = new URL(response.url());
+
+    return (
+      response.request().method() === 'DELETE' &&
+      responseUrl.pathname === `/api/issues/${blocked.id}/dependencies/${blocker.id}`
+    );
+  });
+
+  await blockerItem.getByRole('button', { name: `Remove dependency ${blocker.title}` }).click();
+
+  const removeDependencyResponse = await removeDependencyResponsePromise;
+
+  expect(removeDependencyResponse.ok()).toBe(true);
+
+  const unblockedIssueResponse = await page.request.get(`/api/issues/${blocked.id}`);
+  const unblockedIssue = (await unblockedIssueResponse.json()) as ApiIssue;
+
+  expect(unblockedIssueResponse.ok()).toBe(true);
+  expect(unblockedIssue).toMatchObject({
+    isBlocked: false,
+    dependsOnIssueIds: []
+  });
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toHaveCount(0);
+  await expect(detail.getByLabel('Issue blockers')).toContainText('No blockers.');
+  await expect(blockedRow).toHaveCount(0);
+  await expect(page.getByText('No issues match the active filters.')).toBeVisible();
+  await expect(detail.getByLabel('Issue activity').getByText('Dependency removed')).toBeVisible();
+  await expect(filters.getByLabel('Search')).toHaveValue('Blocked-only live detail');
+  await expect(filters.getByLabel('Blocked only')).toBeChecked();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${blocked.id}`);
+  await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Blocked-only live detail');
 });
 
 test('dependency duplicate and cycle rejections keep UI graph state unchanged', async ({ page }) => {

@@ -901,6 +901,68 @@ describe('tracker import API', () => {
     expect(reapplied.body.summary.changed.issues).toBe(0);
   });
 
+  it('removes replaced dependencies and unblocks blocked-only lists under replace policy', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const changed = cloneExport(payload);
+    const changedIssue = changed.issues.find((issue) => (issue.dependsOnIssueIds ?? []).length > 0);
+
+    if (!changedIssue) {
+      throw new Error('Expected fixture to include a blocked issue with a dependency target');
+    }
+
+    const originalDependsOnIssueIds = [...(changedIssue.dependsOnIssueIds ?? [])];
+
+    await request(app).post('/api/import/apply').send(payload).expect(200);
+
+    const beforeDetail = await request(app).get(`/api/issues/${changedIssue.id}`).expect(200);
+    const beforeBlockedList = await request(app).get('/api/issues?blockedOnly=true').expect(200);
+
+    expect(beforeDetail.body).toMatchObject({
+      id: changedIssue.id,
+      dependsOnIssueIds: originalDependsOnIssueIds,
+      isBlocked: true
+    });
+    expect(beforeBlockedList.body.items.map((issue: { id: string }) => issue.id)).toContain(changedIssue.id);
+
+    changedIssue.title = 'Replaced import issue without blockers';
+    changedIssue.description = 'Dependency removed through replace-conflicts import.';
+    changedIssue.updatedAt = '2999-12-30T00:02:00.000Z';
+    changedIssue.dependsOnIssueIds = [];
+    changedIssue.isBlocked = false;
+
+    const preview = await request(app)
+      .post('/api/import/preview')
+      .send({ ...changed, conflictPolicy: 'replace-conflicts' })
+      .expect(200);
+
+    expect(preview.body.summary.changed.issues).toBe(1);
+    expect(preview.body.summary.toReplace.issues).toBe(1);
+
+    const applied = await request(app)
+      .post('/api/import/apply')
+      .send({ ...changed, conflictPolicy: 'replace-conflicts' })
+      .expect(200);
+    const detail = await request(app).get(`/api/issues/${changedIssue.id}`).expect(200);
+    const dependencies = await request(app).get(`/api/issues/${changedIssue.id}/dependencies`).expect(200);
+    const blockedList = await request(app).get('/api/issues?blockedOnly=true').expect(200);
+
+    expect(applied.body.summary.toReplace.issues).toBe(1);
+    expect(detail.body).toMatchObject({
+      id: changedIssue.id,
+      title: 'Replaced import issue without blockers',
+      description: 'Dependency removed through replace-conflicts import.',
+      dependsOnIssueIds: [],
+      isBlocked: false
+    });
+    expect(dependencies.body).toMatchObject({
+      issueId: changedIssue.id,
+      isBlocked: false,
+      dependencies: []
+    });
+    expect(blockedList.body.items.map((issue: { id: string }) => issue.id)).not.toContain(changedIssue.id);
+  });
+
   it('preserves conflict policy invariants across mutable and immutable import surfaces', async () => {
     const app = createApp({ databasePath: ':memory:' });
     const payload = await createExportFixture();

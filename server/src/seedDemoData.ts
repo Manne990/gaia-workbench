@@ -106,6 +106,21 @@ function isMainModule(): boolean {
   return process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 }
 
+function collectExistingCommentBodies(commentRepository: CommentRepository, issueId: string): Set<string> {
+  const bodies = new Set<string>();
+
+  for (const comment of commentRepository.listByIssueId(issueId)) {
+    bodies.add(comment.body);
+
+    for (const historyEntry of commentRepository.getHistory(comment.id)) {
+      bodies.add(historyEntry.previousBody);
+      bodies.add(historyEntry.newBody);
+    }
+  }
+
+  return bodies;
+}
+
 export function seedDemoData(databasePath = resolveDemoSeedDatabasePath()): DemoSeedResult {
   ensureDatabaseDirectory(databasePath);
 
@@ -155,7 +170,7 @@ export function seedDemoData(databasePath = resolveDemoSeedDatabasePath()): Demo
         }
       }
 
-      const existingCommentBodies = new Set(commentRepository.listByIssueId(issue.id).map((comment) => comment.body));
+      const existingCommentBodies = collectExistingCommentBodies(commentRepository, issue.id);
 
       for (const comment of demoIssue.comments) {
         if (existingCommentBodies.has(comment.body)) {

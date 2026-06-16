@@ -310,9 +310,9 @@ DATABASE_PATH=/tmp/tinytracker-demo.sqlite npm run seed:demo
 The demo seed is non-destructive. It creates a small set of issues and comments
 covering statuses, priorities, labels, due dates, overdue state, comment edit
 history, and activity events. Re-running the command skips existing demo issues
-by title and existing demo comments by final body. It does not reset or reconcile
-changed demo rows, and it can add a skipped comment again if the original demo
-comment body was edited after seeding.
+by title and existing demo comments by final body or edit history. It does not
+reset or reconcile changed demo rows, and it does not restore demo comment text
+that a user edited after seeding.
 
 The started application serves:
 

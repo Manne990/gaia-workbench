@@ -96,6 +96,72 @@ describe('demo data seed command', () => {
     }
   });
 
+  it('skips demo comments that were already seeded and later edited by a user', () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'tinytracker-demo-seed-edited-comment-'));
+    const databasePath = path.join(tempDir, 'tracker.sqlite');
+    const originalBody = 'Check the filtered-empty state before changing the dashboard copy.';
+    const userEditedBody = 'User kept this note but rewrote it for their local dashboard pass.';
+
+    try {
+      seedDemoData(databasePath);
+
+      let database = createDatabase(databasePath);
+      let issueRepository = new IssueRepository(database);
+      let commentRepository = new CommentRepository(database);
+
+      try {
+        const onboarding = issueRepository
+          .list({}, { page: 1, limit: 100 })
+          .items.find((issue) => issue.title === 'Demo: Triage onboarding feedback');
+        const editedComment = commentRepository
+          .listByIssueId(onboarding!.id)
+          .find((comment) => comment.body === originalBody);
+
+        expect(editedComment).toBeDefined();
+        commentRepository.update(editedComment!.id, { body: userEditedBody });
+      } finally {
+        database.close();
+      }
+
+      const rerun = seedDemoData(databasePath);
+
+      expect(rerun).toMatchObject({
+        databasePath,
+        createdIssues: 0,
+        skippedIssues: 4,
+        updatedIssues: 0,
+        createdComments: 0,
+        skippedComments: 5,
+        editedComments: 0
+      });
+
+      database = createDatabase(databasePath);
+      issueRepository = new IssueRepository(database);
+      commentRepository = new CommentRepository(database);
+      const activityRepository = new ActivityRepository(database);
+
+      try {
+        const onboarding = issueRepository
+          .list({}, { page: 1, limit: 100 })
+          .items.find((issue) => issue.title === 'Demo: Triage onboarding feedback');
+        const comments = commentRepository.listByIssueId(onboarding!.id);
+        const editedComment = comments.find((comment) => comment.body === userEditedBody);
+        const activityTypes = activityRepository.listByIssueId(onboarding!.id).map((event) => event.type);
+
+        expect(comments).toHaveLength(2);
+        expect(comments.map((comment) => comment.body)).not.toContain(originalBody);
+        expect(editedComment).toBeDefined();
+        expect(commentRepository.getHistory(editedComment!.id)).toHaveLength(1);
+        expect(activityTypes.filter((type) => type === 'comment_added')).toHaveLength(2);
+        expect(activityTypes.filter((type) => type === 'comment_edited')).toHaveLength(2);
+      } finally {
+        database.close();
+      }
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('uses DATABASE_PATH when invoked through the npm seed script', () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), 'tinytracker-demo-seed-cli-'));
     const databasePath = path.join(tempDir, 'tracker.sqlite');

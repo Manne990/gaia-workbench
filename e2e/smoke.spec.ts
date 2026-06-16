@@ -2444,6 +2444,27 @@ test('dashboard filters hydrate from URL and compose with issue detail routes', 
   await expect.poll(() => new URL(page.url()).searchParams.get('priority')).toBe('high');
   await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('api');
 
+  const editTargetButton = page.getByRole('button', { name: `Edit ${targetIssue.title}` });
+  await editTargetButton.click();
+  const issueForm = page.getByRole('form', { name: 'Issue form' });
+  await expect(issueForm.getByLabel('Title')).toBeFocused();
+  await issueForm.getByLabel('Title').fill('URL filter draft should cancel');
+  await issueForm.getByRole('button', { name: 'Cancel' }).click();
+  await expect(issueForm).toHaveCount(0);
+  await expect(editTargetButton).toBeFocused();
+  await expect(page.getByRole('region', { name: targetIssue.title })).toBeVisible();
+  await expect(page.getByRole('row', { name: /URL filter target.*Review.*High/ })).toBeVisible();
+  await expect(page.getByText('URL filter draft should cancel')).toHaveCount(0);
+  await expect(filters.getByLabel('Search')).toHaveValue('URL filter');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(filters.getByLabel('Priority')).toHaveValue('high');
+  await expect(filters.getByLabel('Label')).toHaveValue('api');
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${targetIssue.id}`);
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('URL filter');
+  await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('review');
+  await expect.poll(() => new URL(page.url()).searchParams.get('priority')).toBe('high');
+  await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('api');
+
   await page.goBack();
   await expect(page.getByRole('region', { name: targetIssue.title })).toHaveCount(0);
   await expect(filters.getByLabel('Search')).toHaveValue('URL filter');

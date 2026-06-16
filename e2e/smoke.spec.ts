@@ -2163,6 +2163,65 @@ test('saved filter views persist restore and compose with detail routes', async 
   expect(savedViewListBody).toEqual([]);
 });
 
+test('saved filter view apply resets stale pagination and preserves page size', async ({ page }) => {
+  const fillerIssues = Array.from({ length: 14 }, (_, index) =>
+    createIssueThroughApi(page, {
+      title: `Saved page filler ${String(index + 1).padStart(2, '0')}`,
+      description: 'Broad saved-view pagination reset filler.',
+      status: 'todo',
+      priority: 'low',
+      labels: ['bulk']
+    })
+  );
+  const targetIssue = await createIssueThroughApi(page, {
+    title: 'Saved page target',
+    description: 'Single row restored by saved view from a later page.',
+    status: 'review',
+    priority: 'high',
+    labels: ['target']
+  });
+
+  await Promise.all(fillerIssues);
+  await page.goto('/');
+
+  const filters = page.getByLabel('Issue filters');
+  const settings = await expandDashboardSettings(page);
+  const savedViews = settings.getByLabel('Saved filter views');
+  const pagination = page.getByLabel('Issue pagination');
+
+  await settings.getByLabel('Page size').selectOption('10');
+  await filters.getByLabel('Search').fill(targetIssue.title);
+  await filters.getByLabel('Label').fill('target');
+  await savedViews.getByLabel('View name').fill('Target pagination view');
+  await savedViews.getByRole('button', { name: 'Save View' }).click();
+
+  await expect(savedViews.getByLabel('Saved views')).toContainText('Target pagination view');
+  await expect(page.getByRole('row', { name: /Saved page target.*Review.*High/ })).toBeVisible();
+
+  await filters.getByLabel('Search').fill('Saved page');
+  await filters.getByLabel('Label').fill('');
+  await expect(page.getByText('Showing 1-10 of 15 matches')).toBeVisible();
+  await expect(pagination).toContainText('Page 1 of 2');
+
+  await pagination.getByRole('button', { name: 'Next' }).click();
+  await expect(pagination).toContainText('Page 2 of 2');
+  await expect(page.getByText('Showing 11-15 of 15 matches')).toBeVisible();
+
+  await savedViews.getByLabel('Saved views').selectOption({ label: 'Target pagination view' });
+  await savedViews.getByRole('button', { name: 'Apply View' }).click();
+
+  await expect(filters.getByLabel('Search')).toHaveValue(targetIssue.title);
+  await expect(filters.getByLabel('Label')).toHaveValue('target');
+  await expect(settings.getByLabel('Page size')).toHaveValue('10');
+  await expect(pagination).toContainText('Page 1 of 1');
+  await expect(page.getByText('No issues on this page.')).toHaveCount(0);
+  await expect(page.getByRole('row', { name: /Saved page target.*Review.*High/ })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe(targetIssue.title);
+  await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('target');
+  await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('10');
+  await expect.poll(() => new URL(page.url()).searchParams.get('page')).toBeNull();
+});
+
 test('saved filter view apply preserves the local view after transient fetch failures', async ({ page }) => {
   await createIssueThroughApi(page, {
     title: 'Saved view transient target',

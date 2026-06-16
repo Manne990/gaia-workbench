@@ -770,7 +770,7 @@ describe('tracker import API', () => {
       id: newActivityId,
       issueId: changedIssue.id,
       type: 'comment_added',
-      metadata: { body: 'New comment imported during replace' },
+      metadata: { commentId: newCommentId, preview: 'New comment imported during replace' },
       createdAt: '2999-12-30T00:05:00.000Z'
     });
     changedView.name = 'Import roundtrip view replaced';
@@ -924,6 +924,9 @@ describe('tracker import API', () => {
     const includeArchivedList = await request(app).get('/api/issues?includeArchived=true').expect(200);
     const dependencies = await request(app).get(`/api/issues/${changedIssue.id}/dependencies`).expect(200);
     const exportedAfterReplace = await request(app).get('/api/export').expect(200);
+    const exportedImportedActivity = exportedAfterReplace.body.issues
+      .find((issue: { id: string }) => issue.id === changedIssue.id)
+      ?.activityEvents.find((event: { id: string }) => event.id === newActivityId);
     const expectedAfterReplace = cloneExport(changed);
 
     expectedAfterReplace.issues[0].comments[0] = payload.issues[0].comments[0];
@@ -948,6 +951,10 @@ describe('tracker import API', () => {
       issueId: changedIssue.id,
       isBlocked: true,
       dependencies: [expect.objectContaining({ id: dependencyTarget.id })]
+    });
+    expect(exportedImportedActivity).toMatchObject({
+      type: 'comment_added',
+      metadata: { commentId: newCommentId, preview: 'New comment imported during replace' }
     });
     expect(exportedAfterReplace.body).toEqual(expectedAfterReplace);
   });

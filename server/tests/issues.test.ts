@@ -318,6 +318,181 @@ describe('issues API', () => {
     );
   });
 
+  it('keeps saved-view large blocked filters paginated with archived inclusion', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    type ListedIssue = {
+      id: string;
+      title: string;
+      status: string;
+      priority: string;
+      labels: string[];
+      archivedAt: string | null;
+      isBlocked: boolean;
+    };
+    type SavedView = {
+      status: string;
+      priority: string;
+      label: string;
+      includeArchived: boolean;
+      blockedOnly: boolean;
+      pageSize: number;
+    };
+    const savedViewLabel = 'large-saved-guard';
+    const blockerIds: string[] = [];
+    const matchingBlockedIds = new Set<string>();
+    const archivedBlockedIds = new Set<string>();
+
+    for (let index = 0; index < 6; index += 1) {
+      const blocker = await request(app)
+        .post('/api/issues')
+        .send({
+          title: `Large saved blocker ${String(index).padStart(2, '0')}`,
+          status: 'todo',
+          priority: 'medium'
+        })
+        .expect(201);
+
+      blockerIds.push(blocker.body.id);
+    }
+
+    for (let index = 0; index < 30; index += 1) {
+      const issue = await request(app)
+        .post('/api/issues')
+        .send({
+          title: `Large saved blocked ${String(index).padStart(2, '0')}`,
+          description: `Blocked saved-view fixture ${index}`,
+          status: 'review',
+          priority: 'high',
+          labels: [savedViewLabel, `wave-${index % 5}`]
+        })
+        .expect(201);
+
+      matchingBlockedIds.add(issue.body.id);
+
+      await request(app)
+        .post(`/api/issues/${issue.body.id}/dependencies`)
+        .send({ dependsOnIssueId: blockerIds[index % blockerIds.length] })
+        .expect(201);
+
+      if (index % 3 === 0) {
+        await request(app).post(`/api/issues/${issue.body.id}/archive`).expect(200);
+        archivedBlockedIds.add(issue.body.id);
+      }
+    }
+
+    for (let index = 0; index < 40; index += 1) {
+      const filler = await request(app)
+        .post('/api/issues')
+        .send({
+          title: `Large saved unblocked filler ${String(index).padStart(2, '0')}`,
+          status: index % 2 === 0 ? 'review' : 'todo',
+          priority: index % 2 === 0 ? 'high' : 'medium',
+          labels: [savedViewLabel, 'unblocked-filler']
+        })
+        .expect(201);
+
+      if (index % 8 === 0) {
+        await request(app).post(`/api/issues/${filler.body.id}/archive`).expect(200);
+      }
+    }
+
+    const savedViewResponse = await request(app)
+      .post('/api/filter-views')
+      .send({
+        name: 'Large blocked archived view',
+        status: 'review',
+        priority: 'high',
+        label: savedViewLabel,
+        includeArchived: true,
+        blockedOnly: true,
+        pageSize: 7
+      })
+      .expect(201);
+    const savedView = savedViewResponse.body as SavedView;
+    const savedViewParams = new URLSearchParams({
+      status: savedView.status,
+      priority: savedView.priority,
+      label: savedView.label,
+      includeArchived: String(savedView.includeArchived),
+      blockedOnly: String(savedView.blockedOnly),
+      limit: String(savedView.pageSize)
+    });
+    const firstPage = await request(app).get(`/api/issues?${savedViewParams.toString()}&page=1`).expect(200);
+    const secondPage = await request(app).get(`/api/issues?${savedViewParams.toString()}&page=2`).expect(200);
+    const firstPageItems = firstPage.body.items as ListedIssue[];
+    const secondPageItems = secondPage.body.items as ListedIssue[];
+    const firstPageIds = firstPageItems.map((issue) => issue.id);
+    const secondPageIds = secondPageItems.map((issue) => issue.id);
+
+    expect(savedView).toMatchObject({
+      status: 'review',
+      priority: 'high',
+      label: savedViewLabel,
+      includeArchived: true,
+      blockedOnly: true,
+      pageSize: 7
+    });
+    expect(firstPageItems).toHaveLength(7);
+    expect(secondPageItems).toHaveLength(7);
+    expect(new Set([...firstPageIds, ...secondPageIds]).size).toBe(14);
+    for (const issue of [...firstPageItems, ...secondPageItems]) {
+      expect(matchingBlockedIds.has(issue.id)).toBe(true);
+      expect(issue).toMatchObject({
+        status: 'review',
+        priority: 'high',
+        isBlocked: true
+      });
+      expect(issue.labels).toContain(savedViewLabel);
+    }
+    expect(firstPage.body.pagination).toMatchObject({
+      page: 1,
+      limit: 7,
+      total: 30,
+      totalPages: 5,
+      hasMore: true,
+      hasPrevious: false
+    });
+    expect(secondPage.body.pagination).toMatchObject({
+      page: 2,
+      limit: 7,
+      total: 30,
+      totalPages: 5,
+      hasMore: true,
+      hasPrevious: true
+    });
+
+    const allSavedViewParams = new URLSearchParams(savedViewParams);
+    allSavedViewParams.set('limit', '100');
+    const allSavedMatches = await request(app).get(`/api/issues?${allSavedViewParams.toString()}`).expect(200);
+    const allSavedItems = allSavedMatches.body.items as ListedIssue[];
+
+    expect(allSavedItems).toHaveLength(30);
+    expect(allSavedMatches.body.pagination.total).toBe(30);
+    expect(allSavedItems.map((issue) => issue.id).sort()).toEqual([...matchingBlockedIds].sort());
+    expect(
+      allSavedItems
+        .filter((issue) => issue.archivedAt !== null)
+        .map((issue) => issue.id)
+        .sort()
+    ).toEqual([...archivedBlockedIds].sort());
+
+    const activeOnlyParams = new URLSearchParams(savedViewParams);
+    activeOnlyParams.delete('includeArchived');
+    const activeOnlyMatches = await request(app).get(`/api/issues?${activeOnlyParams.toString()}`).expect(200);
+    const activeOnlyItems = activeOnlyMatches.body.items as ListedIssue[];
+
+    expect(activeOnlyItems).toHaveLength(7);
+    expect(activeOnlyItems.every((issue) => issue.archivedAt === null)).toBe(true);
+    expect(activeOnlyMatches.body.pagination).toMatchObject({
+      page: 1,
+      limit: 7,
+      total: 20,
+      totalPages: 3,
+      hasMore: true,
+      hasPrevious: false
+    });
+  });
+
   it('returns an audit summary matching list filter semantics', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

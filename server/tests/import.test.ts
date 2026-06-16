@@ -721,6 +721,93 @@ describe('tracker import API', () => {
     expect(exportedAfterImport.body).toEqual(payload);
   });
 
+  it('orders dense same-timestamp imported activity by semantic event family', async () => {
+    const targetApp = createApp({ databasePath: ':memory:' });
+    const payload = cloneExport(await createExportFixture());
+    const sourceIssue = payload.issues.find(
+      (issue) => issue.dependsOnIssueIds && issue.dependsOnIssueIds.length > 0 && issue.comments.length > 0
+    );
+
+    if (!sourceIssue || !sourceIssue.dependsOnIssueIds || sourceIssue.dependsOnIssueIds.length === 0) {
+      throw new Error('Expected import fixture to include an issue with a dependency and comments');
+    }
+
+    const commented = sourceIssue.comments.find((comment) => comment.editHistory.length > 0);
+    const editHistory = commented?.editHistory[0];
+    const denseTimestamp = '2999-12-31T12:00:00.000Z';
+
+    if (!commented || !editHistory) {
+      throw new Error('Expected import fixture to include an edited comment');
+    }
+
+    const denseActivityEvents = [
+      {
+        id: 'z-dense-activity-created',
+        issueId: sourceIssue.id,
+        type: 'issue_created',
+        metadata: { title: sourceIssue.title ?? 'Imported issue' },
+        createdAt: denseTimestamp
+      },
+      {
+        id: 'y-dense-activity-dependency',
+        issueId: sourceIssue.id,
+        type: 'issue_dependency_added',
+        metadata: {
+          dependsOnIssueId: sourceIssue.dependsOnIssueIds[0],
+          title: 'Second import source'
+        },
+        createdAt: denseTimestamp
+      },
+      {
+        id: 'b-dense-activity-comment-added',
+        issueId: sourceIssue.id,
+        type: 'comment_added',
+        metadata: {
+          commentId: commented.id,
+          preview: commented.body ?? ''
+        },
+        createdAt: denseTimestamp
+      },
+      {
+        id: 'a-dense-activity-comment-edited',
+        issueId: sourceIssue.id,
+        type: 'comment_edited',
+        metadata: {
+          commentId: commented.id,
+          previousPreview: editHistory.previousBody ?? '',
+          newPreview: editHistory.newBody ?? ''
+        },
+        createdAt: denseTimestamp
+      }
+    ];
+
+    sourceIssue.activityEvents = [
+      denseActivityEvents[3],
+      denseActivityEvents[1],
+      denseActivityEvents[2],
+      denseActivityEvents[0]
+    ];
+
+    await request(targetApp).post('/api/import/apply').send(payload).expect(200);
+
+    const activity = await request(targetApp).get(`/api/issues/${sourceIssue.id}/activity`).expect(200);
+    const exportedAfterImport = await request(targetApp).get('/api/export').expect(200);
+    const exportedIssue = (exportedAfterImport.body as TrackerExport).issues.find(
+      (issue) => issue.id === sourceIssue.id
+    );
+    const expectedActivityIds = denseActivityEvents.map((event) => event.id);
+
+    expect(activity.body.map((event: { id: string }) => event.id)).toEqual(expectedActivityIds);
+    expect(activity.body.map((event: { type: string }) => event.type)).toEqual([
+      'issue_created',
+      'issue_dependency_added',
+      'comment_added',
+      'comment_edited'
+    ]);
+    expect(activity.body.every((event: { createdAt: string }) => event.createdAt === denseTimestamp)).toBe(true);
+    expect(exportedIssue?.activityEvents.map((event) => event.id)).toEqual(expectedActivityIds);
+  });
+
   it('treats missing archivedAt in legacy exports as active issues', async () => {
     const targetApp = createApp({ databasePath: ':memory:' });
     const payload = await createExportFixture();

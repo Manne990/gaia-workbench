@@ -2812,6 +2812,72 @@ test('saved filter views persist restore and compose with detail routes', async 
   expect(savedViewListBody).toEqual([]);
 });
 
+test('applying an active-only saved view clears a stale archived detail selection', async ({ page }) => {
+  const archivedTarget = await createIssueThroughApi(page, {
+    title: 'Saved view archived detail target',
+    description: 'Opened from an archived-including saved view.',
+    status: 'review',
+    priority: 'high',
+    labels: ['archived-view']
+  });
+  await createIssueThroughApi(page, {
+    title: 'Saved view active detail row',
+    description: 'Visible in the active-only saved view.',
+    status: 'todo',
+    priority: 'medium',
+    labels: ['active-view']
+  });
+
+  const archiveResponse = await page.request.post(`/api/issues/${archivedTarget.id}/archive`);
+  expect(archiveResponse.ok()).toBe(true);
+
+  await page.goto('/');
+
+  const filters = page.getByLabel('Issue filters');
+  const settings = await expandDashboardSettings(page);
+  const savedViews = settings.getByLabel('Saved filter views');
+
+  await filters.getByLabel('Search').fill('Saved view archived detail');
+  await filters.getByLabel('Label').fill('archived-view');
+  await filters.getByLabel('Status').selectOption('review');
+  await filters.getByLabel('Priority').selectOption('high');
+  await filters.getByLabel('Include archived').check();
+  await savedViews.getByLabel('View name').fill('Archived detail view');
+  await savedViews.getByRole('button', { name: 'Save View' }).click();
+
+  await filters.getByRole('button', { name: 'Clear Filters' }).click();
+  await filters.getByLabel('Search').fill('Saved view active detail');
+  await filters.getByLabel('Label').fill('active-view');
+  await filters.getByLabel('Status').selectOption('todo');
+  await filters.getByLabel('Priority').selectOption('medium');
+  await savedViews.getByLabel('View name').fill('Active detail view');
+  await savedViews.getByRole('button', { name: 'Save View' }).click();
+
+  await savedViews.getByLabel('Saved views').selectOption({ label: 'Archived detail view' });
+  await savedViews.getByRole('button', { name: 'Apply View' }).click();
+  await expect(page.getByRole('row', { name: /Saved view archived detail target.*Review.*High/ })).toBeVisible();
+  await page.getByRole('button', { name: `Open ${archivedTarget.title}` }).click();
+  await expect(page.getByRole('region', { name: archivedTarget.title })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${archivedTarget.id}`);
+  await expect(filters.getByLabel('Include archived')).toBeChecked();
+
+  await savedViews.getByLabel('Saved views').selectOption({ label: 'Active detail view' });
+  await savedViews.getByRole('button', { name: 'Apply View' }).click();
+
+  await expect(page.getByRole('region', { name: archivedTarget.title })).toHaveCount(0);
+  await expect(page.getByRole('row', { name: /Saved view active detail row.*Todo.*Medium/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Saved view archived detail target.*Review.*High/ })).toHaveCount(0);
+  await expect(filters.getByLabel('Search')).toHaveValue('Saved view active detail');
+  await expect(filters.getByLabel('Label')).toHaveValue('active-view');
+  await expect(filters.getByLabel('Status')).toHaveValue('todo');
+  await expect(filters.getByLabel('Priority')).toHaveValue('medium');
+  await expect(filters.getByLabel('Include archived')).not.toBeChecked();
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/');
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Saved view active detail');
+  await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('active-view');
+  await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBeNull();
+});
+
 test('saved filter view apply resets stale pagination and preserves page size', async ({ page }) => {
   const fillerIssues = Array.from({ length: 14 }, (_, index) =>
     createIssueThroughApi(page, {

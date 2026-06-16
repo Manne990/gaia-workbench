@@ -707,11 +707,26 @@ export function App() {
         staleOnly: view.staleOnly,
         pageSize: view.pageSize
       };
+      const nextSelectedIssueId =
+        selectedIssueId &&
+        selectedIssue?.id === selectedIssueId &&
+        selectedIssue.archivedAt !== null &&
+        !view.includeArchived
+          ? null
+          : selectedIssueId;
 
       upsertSavedView(view);
       dashboardFiltersRef.current = nextFilters;
       setDashboardFilters(nextFilters);
-      writeRouteState(selectedIssueId, nextFilters, 'push');
+      setSelectedIssueId(nextSelectedIssueId);
+
+      if (!nextSelectedIssueId) {
+        setSelectedIssue(null);
+        setSelectedIssueLoadState('idle');
+        detailReturnFocusRef.current = null;
+      }
+
+      writeRouteState(nextSelectedIssueId, nextFilters, 'push');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Saved view apply failed.';
 

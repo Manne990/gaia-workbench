@@ -1318,6 +1318,73 @@ test('dependency links show and clear blocked issue visibility', async ({ page }
   await expect(dependentsSection.getByText(dependent.title)).toBeVisible();
 });
 
+test('dependency add refreshes blocked-only list while preserving detail route', async ({ page }) => {
+  const blocker = await createIssueThroughApi(page, {
+    title: 'Blocked-only live blocker',
+    description: 'Blocks the selected issue after the detail form changes.',
+    status: 'todo',
+    priority: 'high'
+  });
+  const blocked = await createIssueThroughApi(page, {
+    title: 'Blocked-only live detail issue',
+    description: 'Starts outside blocked-only results and should join them live.',
+    status: 'in_progress',
+    priority: 'medium'
+  });
+
+  await page.goto(`/issues/${blocked.id}?blockedOnly=true&search=Blocked-only%20live%20detail`);
+
+  const filters = page.getByLabel('Issue filters');
+  const detail = page.getByRole('region', { name: blocked.title });
+  const dependencyForm = detail.getByRole('form', { name: 'Dependency form' });
+  const blockedRow = page.getByRole('row', { name: /Blocked-only live detail issue.*In Progress.*Medium/ });
+
+  await expect(filters.getByLabel('Search')).toHaveValue('Blocked-only live detail');
+  await expect(filters.getByLabel('Blocked only')).toBeChecked();
+  await expect(page.getByLabel('Active filters')).toContainText('Search: Blocked-only live detail');
+  await expect(page.getByLabel('Active filters')).toContainText('Blocked: Only');
+  await expect(blockedRow).toHaveCount(0);
+  await expect(detail.getByRole('heading', { name: blocked.title })).toBeVisible();
+  await expect(detail.getByLabel('Issue blockers')).toContainText('No blockers.');
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${blocked.id}`);
+  await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Blocked-only live detail');
+
+  const dependencyResponsePromise = page.waitForResponse((response) => {
+    const responseUrl = new URL(response.url());
+
+    return response.request().method() === 'POST' && responseUrl.pathname === `/api/issues/${blocked.id}/dependencies`;
+  });
+
+  await dependencyForm.getByLabel('Add blocker issue ID').fill(blocker.id);
+  await dependencyForm.getByRole('button', { name: 'Add Dependency' }).click();
+
+  const dependencyResponse = await dependencyResponsePromise;
+
+  expect(dependencyResponse.ok()).toBe(true);
+
+  const blockerItem = detail.getByLabel('Issue blockers').getByRole('listitem').filter({ hasText: blocker.title });
+  const selectedIssueResponse = await page.request.get(`/api/issues/${blocked.id}`);
+  const selectedIssue = (await selectedIssueResponse.json()) as ApiIssue;
+
+  expect(selectedIssueResponse.ok()).toBe(true);
+  expect(selectedIssue).toMatchObject({
+    isBlocked: true,
+    dependsOnIssueIds: [blocker.id]
+  });
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(blockerItem.getByText(blocker.title)).toBeVisible();
+  await expect(blockerItem.locator('.blocked-pill')).toHaveText('Blocking');
+  await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
+  await expect(page.getByText('No issues match the active filters.')).toHaveCount(0);
+  await expect(filters.getByLabel('Search')).toHaveValue('Blocked-only live detail');
+  await expect(filters.getByLabel('Blocked only')).toBeChecked();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${blocked.id}`);
+  await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Blocked-only live detail');
+});
+
 test('dependency duplicate and cycle rejections keep UI graph state unchanged', async ({ page }) => {
   const first = await createIssueThroughApi(page, {
     title: 'Duplicate cycle first issue',

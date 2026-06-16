@@ -1,4 +1,5 @@
 import type { ImportConflictPolicy, ImportCounts, ImportErrorDetail, ImportPlan } from '../types';
+import { formatImportErrorValue } from '../utils/importErrors';
 
 type ImportPanelProps = {
   fileName: string | null;
@@ -66,12 +67,17 @@ function ImportErrors({ errors }: { errors: ImportErrorDetail[] }) {
     <div className="import-errors">
       <h3>Validation errors</h3>
       <ul>
-        {errors.slice(0, 6).map((error) => (
-          <li key={`${error.path}-${error.code}-${error.message}`}>
-            <strong>{error.path}</strong>
-            <span>{error.message}</span>
-          </li>
-        ))}
+        {errors.slice(0, 6).map((error) => {
+          const formattedValue = formatImportErrorValue(error.value);
+
+          return (
+            <li key={`${error.path}-${error.code}-${error.message}`}>
+              <strong>{error.path}</strong>
+              <span>{error.message}</span>
+              {formattedValue ? <span>Received {formattedValue}</span> : null}
+            </li>
+          );
+        })}
       </ul>
       {errors.length > 6 ? <p>{errors.length - 6} more errors</p> : null}
     </div>

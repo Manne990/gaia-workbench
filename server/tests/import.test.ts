@@ -1775,12 +1775,18 @@ describe('tracker import API', () => {
     );
   });
 
-  it('rejects invalid dependency IDs and self-dependencies in import preview', async () => {
+  it('rejects malformed dependency references, self-dependencies, and duplicates in import preview', async () => {
     const app = createApp({ databasePath: ':memory:' });
     const payload = await createExportFixture();
     const invalid = cloneExport(payload);
 
-    invalid.issues[0].dependsOnIssueIds = ['', invalid.issues[0].id, invalid.issues[1].id, invalid.issues[1].id];
+    invalid.issues[0].dependsOnIssueIds = [
+      { id: invalid.issues[1].id } as unknown as string,
+      '',
+      invalid.issues[0].id,
+      invalid.issues[1].id,
+      invalid.issues[1].id
+    ];
 
     const response = await request(app).post('/api/import/preview').send(invalid).expect(400);
 
@@ -1788,16 +1794,24 @@ describe('tracker import API', () => {
       expect.arrayContaining([
         expect.objectContaining({
           code: 'invalid_dependency',
-          path: '$.issues[0].dependsOnIssueIds[0]'
+          path: '$.issues[0].dependsOnIssueIds[0]',
+          message: 'Dependency references must be issue id strings.',
+          value: { id: invalid.issues[1].id }
         }),
         expect.objectContaining({
           code: 'invalid_dependency',
           path: '$.issues[0].dependsOnIssueIds[1]',
+          message: 'Dependency issue ids must be non-empty strings.',
+          value: ''
+        }),
+        expect.objectContaining({
+          code: 'invalid_dependency',
+          path: '$.issues[0].dependsOnIssueIds[2]',
           message: 'An issue cannot depend on itself.'
         }),
         expect.objectContaining({
           code: 'duplicate_dependency',
-          path: '$.issues[0].dependsOnIssueIds[3]'
+          path: '$.issues[0].dependsOnIssueIds[4]'
         })
       ])
     );
@@ -1816,7 +1830,9 @@ describe('tracker import API', () => {
       expect.arrayContaining([
         expect.objectContaining({
           code: 'dangling_reference',
-          path: '$.issues[0].dependsOnIssueIds[0]'
+          path: '$.issues[0].dependsOnIssueIds[0]',
+          message: 'Dependency issue id must reference another issue in the import payload.',
+          value: 'missing-issue'
         })
       ])
     );

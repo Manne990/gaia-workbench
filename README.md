@@ -371,6 +371,7 @@ Supported query parameters:
 - `search`: title or description search
 - `status`: `todo`, `in_progress`, `review`, or `done`
 - `priority`: `low`, `medium`, or `high`
+- `label`: exact issue label match
 - `includeArchived`: `true` to include archived issues; default is active issues only
 - `blockedOnly`: `true` to show only issues blocked by active unfinished dependencies
 - `staleOnly`: `true` to show only issues with no updates in 30 or more days
@@ -397,8 +398,8 @@ dependency, comment, or action behavior.
 `GET /api/issues/audit-summary` returns a read-only aggregate for external
 verification tools. The filter parameters match `GET /api/issues`:
 
-- `search`, `status`, `priority`, `includeArchived`, `blockedOnly`, and
-  `staleOnly`.
+- `search`, `status`, `priority`, `label`, `includeArchived`, `blockedOnly`,
+  and `staleOnly`.
 
 Response shape:
 
@@ -453,6 +454,7 @@ Create and update payloads use this filter shape:
   "search": "api",
   "status": "review",
   "priority": "high",
+  "label": "backend",
   "includeArchived": true,
   "blockedOnly": true,
   "staleOnly": true,
@@ -462,13 +464,14 @@ Create and update payloads use this filter shape:
 
 `name` is trimmed, required, limited to 120 characters, and unique
 case-insensitively. `status` may be `all`, `todo`, `in_progress`, `review`, or
-`done`; `priority` may be `all`, `low`, `medium`, or `high`; `pageSize` must be
-between `1` and `100`; `blockedOnly` and `staleOnly` are booleans and default to
-`false`.
+`done`; `priority` may be `all`, `low`, `medium`, or `high`; `label` is
+trimmed, may be empty, and must be 32 characters or fewer; `pageSize` must be
+between `1` and `100`; `blockedOnly` and `staleOnly` are booleans and default
+to `false`.
 
 Applying a saved view updates the dashboard URL query using `search`, `status`,
-`priority`, `includeArchived`, `blockedOnly`, `staleOnly`, and non-default
-`limit`. Saved views
+`priority`, `label`, `includeArchived`, `blockedOnly`, `staleOnly`, and
+non-default `limit`. Saved views
 persist page size but reset pagination to page `1` when applied so old saved
 views do not open empty pages after data changes.
 

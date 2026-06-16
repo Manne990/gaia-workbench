@@ -160,6 +160,34 @@ describe('saved filter views API', () => {
         expect(response.body).not.toHaveProperty('valid');
         expect(response.body).not.toHaveProperty('errors');
       });
+
+    const created = await request(app).post('/api/filter-views').send({ name: 'Malformed body target' }).expect(201);
+
+    await request(app)
+      .patch(`/api/filter-views/${created.body.id}`)
+      .set('Content-Type', 'application/json')
+      .send('{')
+      .expect(400)
+      .expect((response) => {
+        expect(response.body).toEqual({ error: 'Request body must be valid JSON.' });
+        expect(response.body).not.toHaveProperty('valid');
+        expect(response.body).not.toHaveProperty('errors');
+      });
+
+    await request(app).get(`/api/filter-views/${created.body.id}`).expect(200, created.body);
+
+    await request(app)
+      .delete(`/api/filter-views/${created.body.id}`)
+      .set('Content-Type', 'application/json')
+      .send('{')
+      .expect(400)
+      .expect((response) => {
+        expect(response.body).toEqual({ error: 'Request body must be valid JSON.' });
+        expect(response.body).not.toHaveProperty('valid');
+        expect(response.body).not.toHaveProperty('errors');
+      });
+
+    await request(app).get(`/api/filter-views/${created.body.id}`).expect(200, created.body);
   });
 
   it('returns 404 for missing saved filter views', async () => {

@@ -629,6 +629,41 @@ test('command palette clear filters restores focus after dialog state changes', 
   await expect(issueListHeading).toBeFocused();
 });
 
+test('command palette preserves the current query across a focus bounce and clears it after a command runs', async ({
+  page
+}) => {
+  await page.goto('/');
+
+  const quickActionsButton = page.getByRole('button', { name: 'Quick Actions' });
+  const commandPalette = page.getByRole('dialog', { name: 'Command palette' });
+  const commandSearch = page.getByLabel('Search commands');
+  const issueForm = page.getByRole('form', { name: 'Issue form' });
+
+  await quickActionsButton.click();
+  await expect(commandPalette).toBeVisible();
+  await expect(commandSearch).toBeFocused();
+  await commandSearch.fill('new issue');
+  await page.keyboard.press('Escape');
+
+  await expect(commandPalette).toHaveCount(0);
+  await expect(quickActionsButton).toBeFocused();
+
+  await quickActionsButton.click();
+  await expect(commandPalette).toBeVisible();
+  await expect(commandSearch).toHaveValue('new issue');
+  await expect(commandSearch).toBeFocused();
+  await page.keyboard.press('Enter');
+
+  await expect(commandPalette).toHaveCount(0);
+  await expect(issueForm).toBeVisible();
+  await issueForm.getByRole('button', { name: 'Cancel' }).click();
+  await expect(issueForm).toHaveCount(0);
+
+  await quickActionsButton.click();
+  await expect(commandPalette).toBeVisible();
+  await expect(commandSearch).toHaveValue('');
+});
+
 test('command palette opens and closes issue detail from keyboard commands', async ({ page }) => {
   const issue = await createIssueThroughApi(page, {
     title: 'Palette keyboard issue',
@@ -661,7 +696,6 @@ test('command palette opens and closes issue detail from keyboard commands', asy
 
   await page.keyboard.press(commandPaletteShortcutKey());
   await expect(commandPalette).toBeVisible();
-  await expect(commandSearch).toBeFocused();
   await commandSearch.fill('close issue detail');
   await page.keyboard.press('Enter');
 

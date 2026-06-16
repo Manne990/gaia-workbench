@@ -351,16 +351,18 @@ export function App() {
       return;
     }
 
-    setCommandPaletteQuery('');
     commandPaletteFocusReturnRef.current = trigger ?? (document.activeElement as HTMLElement | null);
     setIsCommandPaletteOpen(true);
   }
 
-  function closeCommandPalette(options: { restoreFocus?: boolean } = {}) {
-    const { restoreFocus = true } = options;
+  function closeCommandPalette(options: { restoreFocus?: boolean; clearQuery?: boolean } = {}) {
+    const { restoreFocus = true, clearQuery = false } = options;
 
     setIsCommandPaletteOpen(false);
-    setCommandPaletteQuery('');
+
+    if (clearQuery) {
+      setCommandPaletteQuery('');
+    }
 
     if (restoreFocus) {
       restoreFocusRef(commandPaletteFocusReturnRef.current);
@@ -375,13 +377,13 @@ export function App() {
 
   function runCommandPaletteAction(commandId: string) {
     if (commandId === 'new-issue') {
-      closeCommandPalette({ restoreFocus: false });
+      closeCommandPalette({ restoreFocus: false, clearQuery: true });
       startCreate();
       return;
     }
 
     if (commandId === 'focus-issue-search') {
-      closeCommandPalette({ restoreFocus: false });
+      closeCommandPalette({ restoreFocus: false, clearQuery: true });
       issueSearchInputRef.current?.focus();
       return;
     }
@@ -394,24 +396,24 @@ export function App() {
         return;
       }
 
-      closeCommandPalette({ restoreFocus: false });
+      closeCommandPalette({ restoreFocus: false, clearQuery: true });
       openIssue(firstIssue);
       return;
     }
 
     if (commandId === 'clear-active-filters') {
-      closeCommandPalette({ restoreFocus: false });
+      closeCommandPalette({ restoreFocus: false, clearQuery: true });
       handleClearFilters({ restoreFocus: true });
       return;
     }
 
     if (commandId === 'close-issue-detail' && selectedIssueId) {
-      closeCommandPalette({ restoreFocus: false });
+      closeCommandPalette({ restoreFocus: false, clearQuery: true });
       closeIssueDetail();
       return;
     }
 
-    closeCommandPalette();
+    closeCommandPalette({ clearQuery: true });
   }
 
   useEffect(() => {
@@ -471,14 +473,10 @@ export function App() {
       event.preventDefault();
 
       if (isCommandPaletteOpen) {
-        setIsCommandPaletteOpen(false);
-        setCommandPaletteQuery('');
-        restoreFocusRef(commandPaletteFocusReturnRef.current);
-        commandPaletteFocusReturnRef.current = null;
+        closeCommandPalette();
         return;
       }
 
-      setCommandPaletteQuery('');
       commandPaletteFocusReturnRef.current = target ?? (document.activeElement as HTMLElement | null);
       setIsCommandPaletteOpen(true);
     }

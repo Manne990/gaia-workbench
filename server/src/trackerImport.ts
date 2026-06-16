@@ -442,8 +442,25 @@ function validateDependsOnIssueIds(
   value.forEach((dependsOnIssueId, index) => {
     const dependencyPath = `${path}[${index}]`;
 
-    if (typeof dependsOnIssueId !== 'string' || dependsOnIssueId.trim().length === 0) {
-      pushError(errors, 'invalid_dependency', dependencyPath, 'Dependency issue ids must be non-empty strings.', value);
+    if (typeof dependsOnIssueId !== 'string') {
+      pushError(
+        errors,
+        'invalid_dependency',
+        dependencyPath,
+        'Dependency references must be issue id strings.',
+        dependsOnIssueId
+      );
+      return;
+    }
+
+    if (dependsOnIssueId.trim().length === 0) {
+      pushError(
+        errors,
+        'invalid_dependency',
+        dependencyPath,
+        'Dependency issue ids must be non-empty strings.',
+        dependsOnIssueId
+      );
       return;
     }
 

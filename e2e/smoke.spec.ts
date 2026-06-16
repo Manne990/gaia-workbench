@@ -1553,6 +1553,46 @@ test('dashboard density toggle compacts rows without hiding issue information', 
   await expect(issueRow).toBeVisible();
 });
 
+test('keyboard focus survives density changes and issue detail navigation', async ({ page }) => {
+  const issue = await createIssueThroughApi(page, {
+    title: 'Keyboard density focus issue',
+    description: 'Focus should survive density changes before detail navigation.',
+    status: 'review',
+    priority: 'high'
+  });
+
+  await page.goto('/');
+
+  const densityControls = page.getByLabel('Dashboard density');
+  const compactButton = densityControls.getByRole('button', { name: 'Compact' });
+  const issueRow = page.getByRole('row', { name: /Keyboard density focus issue.*Review.*High/ });
+  const openIssueButton = issueRow.getByRole('button', { name: 'Open Keyboard density focus issue' });
+
+  await expect(issueRow).toBeVisible();
+  await pressTabUntilFocused(page, compactButton, 80);
+  await page.keyboard.press('Enter');
+  await expect(compactButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(compactButton).toBeFocused();
+
+  await pressTabUntilFocused(page, openIssueButton, 120);
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(new RegExp(`/issues/${issue.id}`));
+
+  const detail = page.getByRole('region', { name: 'Keyboard density focus issue' });
+  const detailHeading = detail.getByRole('heading', { name: 'Keyboard density focus issue' });
+  await expect(detailHeading).toBeFocused();
+
+  const closeDetailButton = detail.getByRole('button', {
+    name: 'Close issue detail for Keyboard density focus issue'
+  });
+  await pressTabUntilFocused(page, closeDetailButton, 40);
+  await page.keyboard.press('Enter');
+
+  await expect(detail).toHaveCount(0);
+  await expect(openIssueButton).toBeFocused();
+  await expect(compactButton).toHaveAttribute('aria-pressed', 'true');
+});
+
 test('secondary dashboard controls are discoverable and accessible on mobile', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto('/');

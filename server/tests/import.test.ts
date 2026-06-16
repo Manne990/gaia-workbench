@@ -808,6 +808,65 @@ describe('tracker import API', () => {
     expect(exportedIssue?.activityEvents.map((event) => event.id)).toEqual(expectedActivityIds);
   });
 
+  it('preserves import order for same-timestamp same-type activity', async () => {
+    const targetApp = createApp({ databasePath: ':memory:' });
+    const payload = cloneExport(await createExportFixture());
+    const sourceIssue = payload.issues.find((issue) => issue.comments.length >= 2);
+    const denseTimestamp = '2999-12-31T12:00:00.000Z';
+
+    if (!sourceIssue) {
+      throw new Error('Expected import fixture to include an issue with at least two comments');
+    }
+
+    const firstComment = sourceIssue.comments[0];
+    const secondComment = sourceIssue.comments[1];
+
+    if (!firstComment || !secondComment) {
+      throw new Error('Expected import fixture to include two comments');
+    }
+
+    const sameTypeActivityEvents = [
+      {
+        id: 'a-dense-activity-comment-added',
+        issueId: sourceIssue.id,
+        type: 'comment_added',
+        metadata: {
+          commentId: firstComment.id,
+          preview: firstComment.body ?? ''
+        },
+        createdAt: denseTimestamp
+      },
+      {
+        id: 'z-dense-activity-comment-added',
+        issueId: sourceIssue.id,
+        type: 'comment_added',
+        metadata: {
+          commentId: secondComment.id,
+          preview: secondComment.body ?? ''
+        },
+        createdAt: denseTimestamp
+      }
+    ];
+
+    const importOrder = [sameTypeActivityEvents[1], sameTypeActivityEvents[0]];
+
+    sourceIssue.activityEvents = importOrder;
+
+    await request(targetApp).post('/api/import/apply').send(payload).expect(200);
+
+    const activity = await request(targetApp).get(`/api/issues/${sourceIssue.id}/activity`).expect(200);
+    const exportedAfterImport = await request(targetApp).get('/api/export').expect(200);
+    const exportedIssue = (exportedAfterImport.body as TrackerExport).issues.find(
+      (issue) => issue.id === sourceIssue.id
+    );
+    const expectedActivityIds = importOrder.map((event) => event.id);
+
+    expect(activity.body.map((event: { id: string }) => event.id)).toEqual(expectedActivityIds);
+    expect(activity.body.map((event: { type: string }) => event.type)).toEqual(['comment_added', 'comment_added']);
+    expect(activity.body.every((event: { createdAt: string }) => event.createdAt === denseTimestamp)).toBe(true);
+    expect(exportedIssue?.activityEvents.map((event) => event.id)).toEqual(expectedActivityIds);
+  });
+
   it('treats missing archivedAt in legacy exports as active issues', async () => {
     const targetApp = createApp({ databasePath: ':memory:' });
     const payload = await createExportFixture();

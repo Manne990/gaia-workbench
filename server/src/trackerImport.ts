@@ -1571,8 +1571,12 @@ export function applyTrackerImport(database: Database.Database, input: unknown):
     .filter((history) => historyIdsToImport.has(history.id));
   const activityEvents = validation.exportData.issues
     .flatMap((issue) => issue.activityEvents)
-    .filter((event) => activityIdsToImport.has(event.id))
-    .sort(compareActivityEventsForImport);
+    .map((event, sourceIndex) => ({ event, sourceIndex }))
+    .filter(({ event }) => activityIdsToImport.has(event.id))
+    .sort(
+      (left, right) => compareActivityEventsForImport(left.event, right.event) || left.sourceIndex - right.sourceIndex
+    )
+    .map(({ event }) => event);
   const savedFilterViews = validation.exportData.savedFilterViews.filter((view) =>
     savedFilterViewIdsToImport.has(view.id)
   );

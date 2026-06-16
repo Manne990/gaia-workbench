@@ -133,4 +133,13 @@ describe('client API errors', () => {
     await expect(previewImport({ exportVersion: 2, issues: [] })).resolves.toEqual(previewPlan);
     await expect(applyImport({ exportVersion: 2, issues: [] })).resolves.toEqual(applyPlan);
   });
+
+  it('preserves non-plan import server error messages', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse({ error: 'Import preview service unavailable' }, { status: 503 }))
+      .mockResolvedValueOnce(jsonResponse({ error: 'Import apply service unavailable' }, { status: 500 }));
+
+    await expect(previewImport({ exportVersion: 1, issues: [] })).rejects.toThrow('Import preview service unavailable');
+    await expect(applyImport({ exportVersion: 1, issues: [] })).rejects.toThrow('Import apply service unavailable');
+  });
 });

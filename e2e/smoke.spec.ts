@@ -1815,6 +1815,53 @@ test('dashboard issue open updates the URL and unknown issue links can return to
   await expect(page).toHaveURL('/');
 });
 
+test('switching issue detail clears issue-specific comment drafts', async ({ page }) => {
+  const firstIssue = await createIssueThroughApi(page, {
+    title: 'Draft source issue',
+    description: 'Receives an abandoned draft.'
+  });
+  const secondIssue = await createIssueThroughApi(page, {
+    title: 'Draft target issue',
+    description: 'Must not inherit another issue draft.'
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: `Open ${firstIssue.title}` }).click();
+
+  const firstDetail = page.getByRole('region', { name: firstIssue.title });
+  await expect(firstDetail.getByRole('heading', { name: firstIssue.title })).toBeVisible();
+
+  const firstCommentForm = firstDetail.getByRole('form', { name: 'Comment form' });
+  await firstCommentForm.getByLabel('New comment').fill('Draft meant for the first issue');
+  await expect(firstCommentForm.getByLabel('New comment')).toHaveValue('Draft meant for the first issue');
+
+  await page.getByRole('button', { name: `Open ${secondIssue.title}` }).click();
+
+  const secondDetail = page.getByRole('region', { name: secondIssue.title });
+  await expect(secondDetail.getByRole('heading', { name: secondIssue.title })).toBeVisible();
+
+  const secondCommentForm = secondDetail.getByRole('form', { name: 'Comment form' });
+  await expect(secondCommentForm.getByLabel('New comment')).toHaveValue('');
+
+  await secondCommentForm.getByLabel('New comment').fill('Comment for the second issue');
+  await secondCommentForm.getByRole('button', { name: 'Add Comment' }).click();
+  await expect(secondDetail.getByLabel('Issue comments').getByText('Comment for the second issue')).toBeVisible();
+
+  const [firstCommentsResponse, secondCommentsResponse] = await Promise.all([
+    page.request.get(`/api/issues/${firstIssue.id}/comments`),
+    page.request.get(`/api/issues/${secondIssue.id}/comments`)
+  ]);
+
+  expect(firstCommentsResponse.ok()).toBe(true);
+  expect(secondCommentsResponse.ok()).toBe(true);
+
+  const firstComments = (await firstCommentsResponse.json()) as Array<{ body: string }>;
+  const secondComments = (await secondCommentsResponse.json()) as Array<{ body: string }>;
+
+  expect(firstComments.map((comment) => comment.body)).not.toContain('Draft meant for the first issue');
+  expect(secondComments.map((comment) => comment.body)).toEqual(['Comment for the second issue']);
+});
+
 test('dashboard filters hydrate from URL and compose with issue detail routes', async ({ page }) => {
   const targetIssue = await createIssueThroughApi(page, {
     title: 'URL filter target',

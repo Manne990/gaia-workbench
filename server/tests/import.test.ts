@@ -928,9 +928,15 @@ describe('tracker import API', () => {
       .find((issue: { id: string }) => issue.id === changedIssue.id)
       ?.activityEvents.find((event: { id: string }) => event.id === newActivityId);
     const expectedAfterReplace = cloneExport(changed);
+    const expectedChangedIssue = expectedAfterReplace.issues.find((issue) => issue.id === changedIssue.id);
+    const originalChangedIssue = payload.issues.find((issue) => issue.id === changedIssue.id);
 
-    expectedAfterReplace.issues[0].comments[0] = payload.issues[0].comments[0];
-    expectedAfterReplace.issues[0].activityEvents[0] = payload.issues[0].activityEvents[0];
+    if (!expectedChangedIssue || !originalChangedIssue) {
+      throw new Error('Expected replace fixture to include the changed issue');
+    }
+
+    expectedChangedIssue.comments[0] = originalChangedIssue.comments[0];
+    expectedChangedIssue.activityEvents[0] = originalChangedIssue.activityEvents[0];
 
     expect(applied.body.summary.toReplace).toMatchObject({ issues: 1, savedFilterViews: 1 });
     expect(applied.body.summary.toCreate).toMatchObject({

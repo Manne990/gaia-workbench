@@ -979,6 +979,15 @@ export function App() {
   }, [selectedIssueId]);
 
   useEffect(() => {
+    setCommentBody('');
+    setCommentError(null);
+    setEditingCommentId(null);
+    setEditCommentBody('');
+    setEditCommentError(null);
+    commentEditReturnFocusRef.current = null;
+  }, [selectedIssueId]);
+
+  useEffect(() => {
     if (!selectedIssueId || !selectedIssue || selectedIssue.id !== selectedIssueId) {
       setComments([]);
       setCommentHistory({});

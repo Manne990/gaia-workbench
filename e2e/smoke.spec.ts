@@ -1354,6 +1354,76 @@ test('archiving selected detail preserves active filters page size and route sta
   await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('10');
 });
 
+test('create dependency archive and recovery flow preserves blocker context', async ({ page }) => {
+  const blocker = await createIssueThroughApi(page, {
+    title: 'Combined flow blocker',
+    description: 'Blocks the issue created through the dashboard flow.',
+    status: 'todo',
+    priority: 'high'
+  });
+
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'New Issue' }).click();
+
+  const issueForm = page.getByRole('form', { name: 'Issue form' });
+
+  await issueForm.getByLabel('Title').fill('Combined flow issue');
+  await issueForm.getByLabel('Description').fill('Created through the combined archive dependency recovery flow.');
+  await issueForm.getByLabel('Status').selectOption('in_progress');
+  await issueForm.getByLabel('Priority').selectOption('high');
+  await issueForm.getByRole('button', { name: 'Create Issue' }).click();
+
+  const issueRow = page.getByRole('row', { name: /Combined flow issue.*In Progress.*High/ });
+
+  await expect(issueRow).toBeVisible();
+
+  await issueRow.getByRole('button', { name: 'Open Combined flow issue' }).click();
+
+  const detail = page.getByRole('region', { name: 'Combined flow issue' });
+  const dependencyForm = detail.getByRole('form', { name: 'Dependency form' });
+  const blockersSection = detail.getByLabel('Issue blockers');
+  const blockerItem = blockersSection.getByRole('listitem').filter({ hasText: blocker.title });
+  const issueId = new URL(page.url()).pathname.split('/').at(-1);
+
+  if (!issueId) {
+    throw new Error('Expected opened detail route to include the selected issue id.');
+  }
+
+  await dependencyForm.getByLabel('Add blocker issue ID').fill(blocker.id);
+  await dependencyForm.getByRole('button', { name: 'Add Dependency' }).click();
+
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(blockerItem.getByText(blocker.title)).toBeVisible();
+  await expect(blockerItem.locator('.blocked-pill')).toHaveText('Blocking');
+  await expect(detail.getByLabel('Issue activity').getByText('Dependency added')).toBeVisible();
+  await expect(issueRow.locator('.blocked-pill')).toHaveText('Blocked');
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Archive "Combined flow issue"?');
+    await dialog.accept();
+  });
+  const archiveResponse = waitForIssueActionResponse(page, issueId, 'archive');
+  await detail.getByRole('button', { name: 'Archive', exact: true }).click();
+  await archiveResponse;
+
+  await expect(detail.getByText('Hidden from the active dashboard since')).toBeVisible();
+  await expect(detail.getByLabel('Issue activity').getByText('Issue archived')).toBeVisible();
+  await expect(issueRow).toHaveCount(0);
+
+  const unarchiveResponse = waitForIssueActionResponse(page, issueId, 'unarchive');
+  await detail.getByRole('button', { name: 'Unarchive' }).click();
+  await unarchiveResponse;
+
+  await expect(detail.getByText('Hidden from the active dashboard since')).toHaveCount(0);
+  await expect(detail.getByLabel('Issue activity').getByText('Issue restored')).toBeVisible();
+  await expect(blockerItem.getByText(blocker.title)).toBeVisible();
+  await expect(blockerItem.locator('.blocked-pill')).toHaveText('Blocking');
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(issueRow).toBeVisible();
+  await expect(issueRow.locator('.blocked-pill')).toHaveText('Blocked');
+});
+
 test('bulk visible selection changes issue status with confirmation and scoped activity', async ({ page }) => {
   const first = await createIssueThroughApi(page, {
     title: 'Bulk status visible first',

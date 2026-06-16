@@ -10,6 +10,7 @@ const sourceFiles = [
   'client/src/**/*.ts',
   'client/src/**/*.tsx',
   'e2e/**/*.ts',
+  'scripts/**/*.mjs',
   'client/vite.config.ts',
   'playwright.config.ts',
   'vitest.config.ts'

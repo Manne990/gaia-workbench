@@ -928,15 +928,33 @@ describe('tracker import API', () => {
       .find((issue: { id: string }) => issue.id === changedIssue.id)
       ?.activityEvents.find((event: { id: string }) => event.id === newActivityId);
     const expectedAfterReplace = cloneExport(changed);
-    const expectedChangedIssue = expectedAfterReplace.issues.find((issue) => issue.id === changedIssue.id);
-    const originalChangedIssue = payload.issues.find((issue) => issue.id === changedIssue.id);
+    const expectedReplacedIssue = expectedAfterReplace.issues.find((issue) => issue.id === changedIssue.id);
+    const originalReplacedIssue = payload.issues.find((issue) => issue.id === changedIssue.id);
+    const expectedExistingCommentIndex = expectedReplacedIssue?.comments.findIndex(
+      (comment) => comment.id === changedComment.id
+    );
+    const expectedExistingActivityIndex = expectedReplacedIssue?.activityEvents.findIndex(
+      (event) => event.id === changedActivity.id
+    );
+    const originalExistingComment = originalReplacedIssue?.comments.find((comment) => comment.id === changedComment.id);
+    const originalExistingActivity = originalReplacedIssue?.activityEvents.find(
+      (event) => event.id === changedActivity.id
+    );
 
-    if (!expectedChangedIssue || !originalChangedIssue) {
-      throw new Error('Expected replace fixture to include the changed issue');
+    if (
+      !expectedReplacedIssue ||
+      !originalExistingComment ||
+      !originalExistingActivity ||
+      expectedExistingCommentIndex === undefined ||
+      expectedExistingCommentIndex < 0 ||
+      expectedExistingActivityIndex === undefined ||
+      expectedExistingActivityIndex < 0
+    ) {
+      throw new Error('Expected replace-conflicts fixture to include existing comment and activity records');
     }
 
-    expectedChangedIssue.comments[0] = originalChangedIssue.comments[0];
-    expectedChangedIssue.activityEvents[0] = originalChangedIssue.activityEvents[0];
+    expectedReplacedIssue.comments[expectedExistingCommentIndex] = originalExistingComment;
+    expectedReplacedIssue.activityEvents[expectedExistingActivityIndex] = originalExistingActivity;
 
     expect(applied.body.summary.toReplace).toMatchObject({ issues: 1, savedFilterViews: 1 });
     expect(applied.body.summary.toCreate).toMatchObject({

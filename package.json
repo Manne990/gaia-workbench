@@ -19,6 +19,7 @@
     "seed:demo": "npm run build:server && node dist/server/seedDemoData.js",
     "test:e2e": "playwright test",
     "clean:verification": "node scripts/cleanVerificationArtifacts.mjs",
+    "preci": "npm run clean:verification",
     "ci": "npm run lint && npm run typecheck && npm run test && npm run build && npm run test:e2e"
   },
   "dependencies": {

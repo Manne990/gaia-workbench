@@ -323,20 +323,35 @@ describe('issues API', () => {
 
     const activeOverdueTodo = await request(app)
       .post('/api/issues')
-      .send({ title: 'Active overdue todo', dueDate: '2000-01-01' })
+      .send({ title: 'Active overdue todo', dueDate: '2000-01-01', labels: ['ops'] })
       .expect(201);
     const activeBlocked = await request(app)
       .post('/api/issues')
-      .send({ title: 'Active blocked issue', status: 'in_progress', priority: 'high', dueDate: '2000-01-01' })
+      .send({
+        title: 'Active blocked issue',
+        status: 'in_progress',
+        priority: 'high',
+        dueDate: '2000-01-01',
+        labels: ['ops']
+      })
+      .expect(201);
+    const activeDone = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Active done but past due', status: 'done', dueDate: '2000-01-01', labels: ['ops'] })
       .expect(201);
     await request(app)
       .post('/api/issues')
-      .send({ title: 'Active done but past due', status: 'done', dueDate: '2000-01-01' })
+      .send({ title: 'Active future todo', dueDate: '2999-12-31', labels: ['docs'] })
       .expect(201);
-    await request(app).post('/api/issues').send({ title: 'Active future todo', dueDate: '2999-12-31' }).expect(201);
     const archivedOverdue = await request(app)
       .post('/api/issues')
-      .send({ title: 'Archived overdue todo', dueDate: '2000-01-01', status: 'todo', priority: 'low' })
+      .send({
+        title: 'Archived overdue todo',
+        dueDate: '2000-01-01',
+        status: 'todo',
+        priority: 'low',
+        labels: ['ops']
+      })
       .expect(201);
 
     await request(app).post(`/api/issues/${archivedOverdue.body.id}/archive`).expect(200);
@@ -397,6 +412,36 @@ describe('issues API', () => {
       byPriority: {
         low: 0,
         medium: 0,
+        high: 1
+      },
+      dependencyEdges: {
+        total: 1,
+        blocked: 1
+      }
+    });
+
+    const labelList = await request(app).get('/api/issues?label=ops').expect(200);
+    const labelSummary = await request(app).get('/api/issues/audit-summary?label=ops').expect(200);
+
+    expect(labelList.body.items.map((issue: { id: string }) => issue.id)).toEqual(
+      expect.arrayContaining([activeOverdueTodo.body.id, activeBlocked.body.id, activeDone.body.id])
+    );
+    expect(labelList.body.pagination.total).toBe(3);
+    expect(labelSummary.body).toMatchObject({
+      totalIssues: 3,
+      totalArchivedIssues: 1,
+      totalBlockedIssues: 1,
+      totalOverdueIssues: 2,
+      totalStaleIssues: 0,
+      byStatus: {
+        todo: 1,
+        in_progress: 1,
+        review: 0,
+        done: 1
+      },
+      byPriority: {
+        low: 0,
+        medium: 2,
         high: 1
       },
       dependencyEdges: {

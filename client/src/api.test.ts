@@ -61,6 +61,15 @@ describe('client API errors', () => {
     vi.unstubAllGlobals();
   });
 
+  it('requests the canonical service health endpoint', async () => {
+    const controller = new AbortController();
+    const health = { status: 'ok', service: 'TinyTracker' };
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(health, { status: 200 }));
+
+    await expect(fetchServiceHealth(controller.signal)).resolves.toEqual(health);
+    expect(fetch).toHaveBeenCalledWith('/api/health', { signal: controller.signal });
+  });
+
   it('preserves server error messages for issue actions', async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ error: 'Issue not found' }, { status: 404 }));
 

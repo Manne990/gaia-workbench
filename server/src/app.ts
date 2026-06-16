@@ -46,6 +46,10 @@ const DEFAULT_ISSUE_PAGE = 1;
 const DEFAULT_ISSUE_LIMIT = 25;
 const MAX_ISSUE_LIMIT = 100;
 const SPREADSHEET_FORMULA_PREFIX_PATTERN = /^[=+\-@\t\r\n]/;
+const serviceHealth = {
+  status: 'ok',
+  service: 'TinyTracker'
+} as const;
 
 const emptyImportPlan = (error: ImportPlan['errors'][number]): ImportPlan => ({
   valid: false,
@@ -368,11 +372,11 @@ export function createApp(config: AppConfig = {}) {
   app.use(jsonParseErrorHandler);
 
   app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', service: 'TinyTracker' });
+    res.json(serviceHealth);
   });
 
   app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', service: 'TinyTracker' });
+    res.json(serviceHealth);
   });
 
   app.get('/api/export', (_req, res) => {

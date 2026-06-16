@@ -432,6 +432,88 @@ describe('tracker import API', () => {
     expect(exportedAfterReimport.body).toEqual(exportedAfterImport.body);
   });
 
+  it('preserves multiple dependency order across import and export', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const firstDependencyId = 'dependency-z';
+    const secondDependencyId = 'dependency-a';
+    const blockedIssueId = 'blocked-multiple-dependencies';
+    const payload: TrackerExport = {
+      exportVersion: 1,
+      issues: [
+        {
+          id: firstDependencyId,
+          title: 'First dependency in exported order',
+          description: '',
+          status: 'todo',
+          priority: 'medium',
+          labels: [],
+          dueDate: null,
+          isOverdue: false,
+          isBlocked: false,
+          dependsOnIssueIds: [],
+          archivedAt: null,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          comments: [],
+          activityEvents: []
+        },
+        {
+          id: secondDependencyId,
+          title: 'Second dependency in exported order',
+          description: '',
+          status: 'todo',
+          priority: 'medium',
+          labels: [],
+          dueDate: null,
+          isOverdue: false,
+          isBlocked: false,
+          dependsOnIssueIds: [],
+          archivedAt: null,
+          createdAt: '2026-01-01T00:00:01.000Z',
+          updatedAt: '2026-01-01T00:00:01.000Z',
+          comments: [],
+          activityEvents: []
+        },
+        {
+          id: blockedIssueId,
+          title: 'Blocked by multiple dependencies',
+          description: '',
+          status: 'in_progress',
+          priority: 'high',
+          labels: [],
+          dueDate: null,
+          isOverdue: false,
+          isBlocked: true,
+          dependsOnIssueIds: [firstDependencyId, secondDependencyId],
+          archivedAt: null,
+          createdAt: '2026-01-01T00:00:02.000Z',
+          updatedAt: '2026-01-01T00:00:03.000Z',
+          comments: [],
+          activityEvents: []
+        }
+      ],
+      savedFilterViews: []
+    };
+
+    await request(app).post('/api/import/preview').send(payload).expect(200);
+    await request(app).post('/api/import/apply').send(payload).expect(200);
+
+    const importedBlocked = await request(app).get(`/api/issues/${blockedIssueId}`).expect(200);
+    const importedDependencies = await request(app).get(`/api/issues/${blockedIssueId}/dependencies`).expect(200);
+    const exportedAfterImport = await request(app).get('/api/export').expect(200);
+    const exportedBlocked = (exportedAfterImport.body as TrackerExport).issues.find(
+      (issue) => issue.id === blockedIssueId
+    );
+
+    expect(importedBlocked.body.dependsOnIssueIds).toEqual([firstDependencyId, secondDependencyId]);
+    expect(importedDependencies.body.dependencies.map((dependency: { id: string }) => dependency.id)).toEqual([
+      firstDependencyId,
+      secondDependencyId
+    ]);
+    expect(exportedBlocked?.dependsOnIssueIds).toEqual([firstDependencyId, secondDependencyId]);
+    expect(exportedAfterImport.body).toEqual(payload);
+  });
+
   it('preserves markdown-like and unsafe-looking body text as raw import data', async () => {
     const sourceApp = createApp({ databasePath: ':memory:' });
     const targetApp = createApp({ databasePath: ':memory:' });

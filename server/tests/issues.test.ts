@@ -187,6 +187,52 @@ describe('issues API', () => {
     });
   });
 
+  it('treats search as case-insensitive while keeping archived matches opt-in', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const active = await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'Mixed Case Active Search',
+        description: 'Visible without archived inclusion',
+        status: 'review',
+        priority: 'medium'
+      })
+      .expect(201);
+
+    const archived = await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'archived fallback item',
+        description: 'Contains MiXeD CaSe search text only in the archived issue body',
+        status: 'done',
+        priority: 'low'
+      })
+      .expect(201);
+
+    await request(app).post(`/api/issues/${archived.body.id}/archive`).expect(200);
+
+    const activeOnly = await request(app).get('/api/issues?search=mIxEd%20cAsE').expect(200);
+
+    expect(activeOnly.body.items.map((issue: { id: string }) => issue.id)).toEqual([active.body.id]);
+    expect(activeOnly.body.pagination.total).toBe(1);
+
+    const includeArchived = await request(app).get('/api/issues?search=MIXED%20CASE&includeArchived=true').expect(200);
+
+    expect(includeArchived.body.items.map((issue: { id: string }) => issue.id)).toEqual(
+      expect.arrayContaining([active.body.id, archived.body.id])
+    );
+    expect(includeArchived.body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: archived.body.id,
+          archivedAt: expect.any(String)
+        })
+      ])
+    );
+    expect(includeArchived.body.pagination.total).toBe(2);
+  });
+
   it('keeps large filtered lists paginated consistently after status changes', async () => {
     const app = createApp({ databasePath: ':memory:' });
     const statuses = ['todo', 'in_progress', 'review', 'done'] as const;

@@ -479,7 +479,7 @@ export function createApp(config: AppConfig = {}) {
         return res.status(400).json(error.plan);
       }
 
-      throw error;
+      return res.status(500).json({ error: 'Import apply failed' });
     }
   });
 

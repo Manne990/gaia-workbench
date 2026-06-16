@@ -17,6 +17,7 @@ import { isIssueStale } from '../utils/stale';
 
 type IssueListPanelProps = {
   loadState: LoadState;
+  loadError: string | null;
   issues: Issue[];
   filteredIssues: Issue[];
   pagination: IssueListPagination;
@@ -79,6 +80,7 @@ type IssueListPanelProps = {
 
 export function IssueListPanel({
   loadState,
+  loadError,
   issues,
   filteredIssues,
   pagination,
@@ -457,7 +459,7 @@ export function IssueListPanel({
 
       {loadState === 'error' ? (
         <div className="state-message error" role="alert">
-          Unable to load issues.
+          {loadError ?? 'Unable to load issues.'}
         </div>
       ) : null}
 

@@ -5,6 +5,7 @@ import type {
   ImportPlan,
   ImportConflictPolicy,
   Issue,
+  IssueListResponse,
   IssueStatus,
   IssueDependencyState,
   ServiceHealth,
@@ -32,6 +33,13 @@ export async function fetchIssue(issueId: string, signal?: AbortSignal): Promise
   }
 
   return readJsonOrThrow<Issue>(response, 'Issue detail request failed');
+}
+
+export async function fetchIssues(query: URLSearchParams, signal?: AbortSignal): Promise<IssueListResponse> {
+  const queryString = query.toString();
+  const response = await fetch(`/api/issues${queryString ? `?${queryString}` : ''}`, { signal });
+
+  return readJsonOrThrow<IssueListResponse>(response, 'Unable to load issues.');
 }
 
 export async function fetchIssueActivity(issueId: string, signal?: AbortSignal): Promise<ActivityEvent[]> {

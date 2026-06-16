@@ -143,6 +143,7 @@ export function App() {
   const {
     issues,
     loadState,
+    loadError,
     searchFilter,
     setSearchFilter,
     statusFilter,
@@ -1671,6 +1672,7 @@ export function App() {
 
         <IssueListPanel
           loadState={loadState}
+          loadError={loadError}
           issues={issues}
           filteredIssues={filteredIssues}
           pagination={pagination}

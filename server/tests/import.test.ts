@@ -1,6 +1,10 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
+import { createDatabase } from '../src/db/index.js';
 
 type ImportCounts = {
   issues: number;
@@ -584,6 +588,56 @@ describe('tracker import API', () => {
     expect(applied.body.errors).toEqual(preview.body.errors);
     expect(afterPreview.body).toEqual([]);
     expect(afterApply.body).toEqual([]);
+  });
+
+  it('returns recoverable JSON and rolls back earlier writes when saved filter view import fails late', async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'tinytracker-import-rollback-'));
+    const databasePath = path.join(tempDir, 'tracker.sqlite');
+
+    try {
+      const setupDatabase = createDatabase(databasePath);
+
+      try {
+        setupDatabase.exec(`
+          CREATE TRIGGER fail_saved_filter_view_import
+          BEFORE INSERT ON saved_filter_views
+          BEGIN
+            SELECT RAISE(FAIL, 'simulated saved filter view import failure');
+          END;
+        `);
+      } finally {
+        setupDatabase.close();
+      }
+
+      const app = createApp({ databasePath });
+      const payload = await createExportFixture();
+      const baseline = await request(app)
+        .post('/api/issues')
+        .send({ title: 'Keep late import rollback intact' })
+        .expect(201);
+
+      await request(app)
+        .post(`/api/issues/${baseline.body.id}/comments`)
+        .send({ body: 'Existing comment survives failed import apply' })
+        .expect(201);
+
+      const beforeImport = await request(app).get('/api/export').expect(200);
+      const response = await request(app)
+        .post('/api/import/apply')
+        .send(payload)
+        .expect('Content-Type', /json/)
+        .expect(500);
+      const afterImport = await request(app).get('/api/export').expect(200);
+
+      expect(response.body).toEqual({ error: 'Import apply failed' });
+      expect(countExport(afterImport.body)).toEqual(countExport(beforeImport.body));
+      expect(afterImport.body).toEqual(beforeImport.body);
+
+      await request(app).get(`/api/issues/${payload.issues[0].id}`).expect(404);
+      await request(app).get(`/api/issues/${baseline.body.id}`).expect(200);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('skips saved filter view replace when the new name belongs to a different view', async () => {

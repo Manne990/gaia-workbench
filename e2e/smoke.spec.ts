@@ -2000,12 +2000,23 @@ test('dependency dependents show blocking only when the selected issue can block
 });
 
 test('dashboard density toggle compacts rows without hiding issue information', async ({ page }) => {
-  await createIssueThroughApi(page, {
+  const blocker = await createIssueThroughApi(page, {
+    title: 'Density blocker issue',
+    description: 'Keeps the primary row in a blocked state.',
+    status: 'in_progress',
+    priority: 'medium'
+  });
+  const blocked = await createIssueThroughApi(page, {
     title: 'Density toggle issue',
     description: 'Operational row text remains visible in every density.',
     status: 'review',
     priority: 'high'
   });
+  const dependencyResponse = await page.request.post(`/api/issues/${blocked.id}/dependencies`, {
+    data: { dependsOnIssueId: blocker.id }
+  });
+
+  expect(dependencyResponse.ok()).toBe(true);
 
   await page.goto('/');
 
@@ -2019,6 +2030,7 @@ test('dashboard density toggle compacts rows without hiding issue information', 
   await expect(issueRow).toBeVisible();
   await expect(issueRow).toContainText('Operational row text remains visible in every density.');
   await expect(issueRow).toContainText('No due date');
+  await expect(issueRow.locator('.blocked-pill')).toHaveText('Blocked');
   await expect(issueRow.getByRole('button', { name: 'Open Density toggle issue' })).toBeVisible();
   await expect(issueRow.getByRole('button', { name: 'Edit Density toggle issue' })).toBeVisible();
   await expect(issueRow.getByRole('button', { name: 'Archive Density toggle issue' })).toBeVisible();
@@ -2032,6 +2044,7 @@ test('dashboard density toggle compacts rows without hiding issue information', 
   await expect(issueRow).toContainText('Review');
   await expect(issueRow).toContainText('High');
   await expect(issueRow).toContainText('No due date');
+  await expect(issueRow.locator('.blocked-pill')).toHaveText('Blocked');
   await expect(issueRow.getByRole('button', { name: 'Open Density toggle issue' })).toBeVisible();
   await expect(issueRow.getByRole('button', { name: 'Edit Density toggle issue' })).toBeVisible();
   await expect(issueRow.getByRole('button', { name: 'Archive Density toggle issue' })).toBeVisible();
@@ -2045,12 +2058,14 @@ test('dashboard density toggle compacts rows without hiding issue information', 
   await expect(compactButton).toHaveAttribute('aria-pressed', 'true');
   await expect(issueRow).toBeVisible();
   await expect(issueRow).toContainText('Operational row text remains visible in every density.');
+  await expect(issueRow.locator('.blocked-pill')).toHaveText('Blocked');
 
   await comfortableButton.click();
   await expect(comfortableButton).toHaveAttribute('aria-pressed', 'true');
   await page.reload();
   await expect(comfortableButton).toHaveAttribute('aria-pressed', 'true');
   await expect(issueRow).toBeVisible();
+  await expect(issueRow.locator('.blocked-pill')).toHaveText('Blocked');
 });
 
 test('keyboard focus survives density changes and issue detail navigation', async ({ page }) => {

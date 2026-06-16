@@ -111,6 +111,21 @@ const VALID_ACTIVITY_TYPES: ActivityEventType[] = [
   'comment_added',
   'comment_edited'
 ];
+const ACTIVITY_IMPORT_TYPE_ORDER: Record<ActivityEventType, number> = {
+  issue_created: 0,
+  issue_title_changed: 1,
+  issue_description_changed: 2,
+  issue_status_changed: 3,
+  issue_priority_changed: 4,
+  issue_due_date_changed: 5,
+  issue_labels_changed: 6,
+  issue_dependency_added: 7,
+  comment_added: 8,
+  comment_edited: 9,
+  issue_dependency_removed: 10,
+  issue_archived: 11,
+  issue_unarchived: 12
+};
 
 const emptyCounts = (): ImportCounts => ({
   issues: 0,
@@ -1513,6 +1528,13 @@ function byCreatedAtThenId<T extends { createdAt: string; id: string }>(left: T,
   return left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id);
 }
 
+function compareActivityEventsForImport(left: ActivityEvent, right: ActivityEvent): number {
+  return (
+    left.createdAt.localeCompare(right.createdAt) ||
+    ACTIVITY_IMPORT_TYPE_ORDER[left.type] - ACTIVITY_IMPORT_TYPE_ORDER[right.type]
+  );
+}
+
 export function applyTrackerImport(database: Database.Database, input: unknown): ImportPlan {
   const validation = validateTrackerExport(input);
   const plan = buildImportPlan(database, input);
@@ -1549,7 +1571,8 @@ export function applyTrackerImport(database: Database.Database, input: unknown):
     .filter((history) => historyIdsToImport.has(history.id));
   const activityEvents = validation.exportData.issues
     .flatMap((issue) => issue.activityEvents)
-    .filter((event) => activityIdsToImport.has(event.id));
+    .filter((event) => activityIdsToImport.has(event.id))
+    .sort(compareActivityEventsForImport);
   const savedFilterViews = validation.exportData.savedFilterViews.filter((view) =>
     savedFilterViewIdsToImport.has(view.id)
   );

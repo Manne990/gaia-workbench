@@ -569,6 +569,15 @@ test('command palette clear filters restores focus after dialog state changes', 
 test('imports tracker JSON through preview and apply', async ({ page }, testInfo) => {
   await page.goto('/');
 
+  const importedDescription = [
+    'Created through the JSON import flow with **safe import bold** and [Docs](https://example.com/import).',
+    'Malformed markdown stays inert: [missing target]( and **unterminated strong',
+    'Unsafe imported text: <script>window.__tinytrackerImportXss = true</script> and [bad](javascript:alert(1)).'
+  ].join('\n');
+  const importedCommentBefore =
+    'Imported previous comment keeps [bad history](javascript:alert(1)) and <script>history()</script>.';
+  const importedCommentAfter =
+    'Imported comment body after edit with **safe comment bold** and <img src=x onerror=alert(1)> [bad](data:text/html,alert).';
   const importPayload = {
     exportVersion: 1,
     issues: [
@@ -602,7 +611,7 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
       {
         id: 'e2e-import-issue',
         title: 'Imported issue from JSON',
-        description: 'Created through the JSON import flow.',
+        description: importedDescription,
         status: 'review',
         priority: 'high',
         labels: ['imported', 'replay'],
@@ -617,15 +626,15 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
           {
             id: 'e2e-import-comment',
             issueId: 'e2e-import-issue',
-            body: 'Imported comment body after edit',
+            body: importedCommentAfter,
             createdAt: '2999-01-01T00:01:00.000Z',
             updatedAt: '2999-01-01T00:04:00.000Z',
             editHistory: [
               {
                 id: 'e2e-import-comment-history',
                 commentId: 'e2e-import-comment',
-                previousBody: 'Imported comment body before edit',
-                newBody: 'Imported comment body after edit',
+                previousBody: importedCommentBefore,
+                newBody: importedCommentAfter,
                 editedAt: '2999-01-01T00:04:00.000Z'
               }
             ]
@@ -657,7 +666,7 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
             type: 'comment_added',
             metadata: {
               commentId: 'e2e-import-comment',
-              preview: 'Imported comment body before edit'
+              preview: importedCommentBefore
             },
             createdAt: '2999-01-01T00:03:00.000Z'
           },
@@ -667,8 +676,8 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
             type: 'comment_edited',
             metadata: {
               commentId: 'e2e-import-comment',
-              previousPreview: 'Imported comment body before edit',
-              newPreview: 'Imported comment body after edit'
+              previousPreview: importedCommentBefore,
+              newPreview: importedCommentAfter
             },
             createdAt: '2999-01-01T00:04:00.000Z'
           }
@@ -752,15 +761,38 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
   await page.getByRole('button', { name: 'Open Imported issue from JSON' }).click();
 
   const detail = page.getByRole('region', { name: 'Imported issue from JSON' });
+  const description = detail.locator('.detail-description');
 
-  await expect(detail.getByText('Created through the JSON import flow.')).toBeVisible();
+  await expect(description.getByText('Created through the JSON import flow')).toBeVisible();
+  await expect(description.locator('strong').getByText('safe import bold')).toBeVisible();
+  await expect(description.getByRole('link', { name: 'Docs' })).toHaveAttribute('href', 'https://example.com/import');
+  await expect(description.getByText('[missing target](')).toBeVisible();
+  await expect(description.getByText('**unterminated strong')).toBeVisible();
+  await expect(description.getByText('<script>window.__tinytrackerImportXss = true</script>')).toBeVisible();
+  await expect(description.getByText('[bad](javascript:alert(1)).')).toBeVisible();
   await expect(detail.getByLabel('Issue labels').getByText('replay', { exact: true })).toBeVisible();
   await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
   await expect(
     detail.getByLabel('Issue blockers').getByRole('listitem').filter({ hasText: 'Imported blocker from JSON' })
   ).toContainText('Blocking');
-  await expect(detail.getByText('Imported comment body after edit', { exact: true })).toBeVisible();
-  await expect(detail.getByText('Previous: Imported comment body before edit')).toBeVisible();
+  const commentItem = detail.getByLabel('Issue comments').getByRole('listitem').filter({
+    hasText: 'Imported comment body after edit'
+  });
+  const commentHistory = commentItem.locator('.comment-history');
+
+  await expect(commentItem.locator('.comment-body').locator('strong').getByText('safe comment bold')).toBeVisible();
+  await expect(commentItem.getByText('<img src=x onerror=alert(1)>')).toBeVisible();
+  await expect(commentItem.getByText('[bad](data:text/html,alert)')).toBeVisible();
+  await expect(commentHistory.getByText('Previous: Imported previous comment')).toBeVisible();
+  await expect(commentHistory.getByText('[bad history](javascript:alert(1))')).toBeVisible();
+  await expect(commentHistory.getByText('<script>history()</script>')).toBeVisible();
+  await expect(detail.locator('script')).toHaveCount(0);
+  await expect(detail.locator('img')).toHaveCount(0);
+  await expect(detail.locator('a[href^="javascript:"]')).toHaveCount(0);
+  await expect(detail.locator('a[href^="data:"]')).toHaveCount(0);
+  expect(
+    await page.evaluate(() => (window as Window & { __tinytrackerImportXss?: boolean }).__tinytrackerImportXss)
+  ).toBeUndefined();
   await expect(detail.getByLabel('Issue activity').getByText('Issue created')).toBeVisible();
   await expect(detail.getByLabel('Issue activity').getByText('Dependency added')).toBeVisible();
   await expect(detail.getByLabel('Issue activity').getByText('Comment edited')).toBeVisible();

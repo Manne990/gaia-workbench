@@ -1,10 +1,14 @@
 import type { ChangeEvent, RefObject } from 'react';
-import { useState } from 'react';
+import { useReducer } from 'react';
 import { applyImport, previewImport } from '../api';
 import type { ImportConflictPolicy, ImportPlan } from '../types';
 import { restoreFocus } from '../utils/focus';
-
-const DEFAULT_IMPORT_POLICY: ImportConflictPolicy = 'skip-conflicts';
+import {
+  DEFAULT_IMPORT_POLICY,
+  importWorkflowReducer,
+  initialImportWorkflowState,
+  selectImportWorkflowView
+} from './importWorkflowState';
 
 function importReadyMessage(plan: ImportPlan): string {
   return `Ready to create ${plan.summary.toCreate.issues} issues, replace ${plan.summary.toReplace.issues} changed issues, and skip ${plan.summary.skip.issues}.`;
@@ -51,19 +55,18 @@ export function useImportWorkflow({
   loadSavedViews,
   returnToFirstPage
 }: UseImportWorkflowOptions) {
-  const [importPayload, setImportPayload] = useState<unknown | null>(null);
-  const [importFileName, setImportFileName] = useState<string | null>(null);
-  const [importPlan, setImportPlan] = useState<ImportPlan | null>(null);
-  const [importPolicy, setImportPolicy] = useState<ImportConflictPolicy>(DEFAULT_IMPORT_POLICY);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [importMessage, setImportMessage] = useState<string | null>(null);
-  const [isImportPreviewing, setIsImportPreviewing] = useState(false);
-  const [isImportApplying, setIsImportApplying] = useState(false);
-
-  const isImportPanelVisible = Boolean(
-    importFileName || importPlan || importError || isImportPreviewing || importMessage
-  );
-  const canApplyImport = Boolean(importPayload && importPlan?.valid && !isImportApplying);
+  const [importState, dispatchImportState] = useReducer(importWorkflowReducer, initialImportWorkflowState);
+  const {
+    payload: importPayload,
+    fileName: importFileName,
+    plan: importPlan,
+    policy: importPolicy,
+    error: importError,
+    message: importMessage,
+    isPreviewing: isImportPreviewing,
+    isApplying: isImportApplying
+  } = importState;
+  const { isPanelVisible: isImportPanelVisible, canApply: canApplyImport } = selectImportWorkflowView(importState);
 
   function resetImportInput() {
     if (importInputRef.current) {
@@ -114,14 +117,7 @@ export function useImportWorkflow({
   }
 
   function clearImportState() {
-    setImportPayload(null);
-    setImportFileName(null);
-    setImportPlan(null);
-    setImportPolicy(DEFAULT_IMPORT_POLICY);
-    setImportError(null);
-    setImportMessage(null);
-    setIsImportPreviewing(false);
-    setIsImportApplying(false);
+    dispatchImportState({ type: 'reset' });
     resetImportInput();
     restoreFocus(importButtonRef.current, () => newIssueButtonRef.current ?? issueListHeadingRef.current);
   }
@@ -133,33 +129,29 @@ export function useImportWorkflow({
       return;
     }
 
-    setImportPayload(null);
-    setImportFileName(file.name);
-    setImportPlan(null);
-    setImportPolicy(DEFAULT_IMPORT_POLICY);
-    setImportError(null);
-    setImportMessage(null);
-    setIsImportPreviewing(true);
+    dispatchImportState({ type: 'file-preview-started', fileName: file.name });
 
     try {
       const text = await file.text();
       const payload = JSON.parse(text) as unknown;
       const plan = await previewImport(payload, DEFAULT_IMPORT_POLICY);
 
-      setImportPayload(payload);
-      setImportPlan(plan);
-      setImportError(plan.valid ? null : 'Import preview found validation errors.');
-      setImportMessage(plan.valid ? importReadyMessage(plan) : null);
+      dispatchImportState({
+        type: 'file-preview-succeeded',
+        payload,
+        plan,
+        error: plan.valid ? null : 'Import preview found validation errors.',
+        message: plan.valid ? importReadyMessage(plan) : null
+      });
     } catch (error) {
-      setImportPayload(null);
-      setImportPlan(null);
-      setImportError(
-        error instanceof SyntaxError
-          ? 'File is not valid JSON.'
-          : importRequestErrorMessage(error, 'Import preview failed.')
-      );
+      dispatchImportState({
+        type: 'file-preview-failed',
+        error:
+          error instanceof SyntaxError
+            ? 'File is not valid JSON.'
+            : importRequestErrorMessage(error, 'Import preview failed.')
+      });
     } finally {
-      setIsImportPreviewing(false);
       resetImportInput();
     }
   }
@@ -169,25 +161,27 @@ export function useImportWorkflow({
       return;
     }
 
-    setIsImportApplying(true);
-    setImportError(null);
+    dispatchImportState({ type: 'apply-started' });
 
     try {
       const plan = await applyImport(importPayload, importPolicy);
       const selectedIssueIdAtApply = getSelectedIssueId();
 
-      setImportPlan(plan);
+      dispatchImportState({ type: 'apply-plan-received', plan });
 
       if (!plan.valid) {
         if (importPlanReferencesIssue(plan, selectedIssueIdAtApply)) {
           await refreshSelectedIssueDetail(selectedIssueIdAtApply);
         }
-        setImportError('Import apply found validation errors.');
+        dispatchImportState({
+          type: 'apply-invalid',
+          plan,
+          error: 'Import apply found validation errors.'
+        });
         return;
       }
 
-      setImportPayload(null);
-      setImportMessage(importAppliedMessage(plan));
+      dispatchImportState({ type: 'apply-succeeded', plan, message: importAppliedMessage(plan) });
       returnToFirstPage();
       await loadSavedViews();
 
@@ -195,34 +189,37 @@ export function useImportWorkflow({
         await refreshSelectedIssueDetail(selectedIssueIdAtApply);
       }
     } catch (error) {
-      setImportError(importRequestErrorMessage(error, 'Import apply failed.'));
+      dispatchImportState({
+        type: 'apply-failed',
+        error: importRequestErrorMessage(error, 'Import apply failed.')
+      });
     } finally {
-      setIsImportApplying(false);
       resetImportInput();
     }
   }
 
   async function changeImportPolicy(nextPolicy: ImportConflictPolicy) {
-    setImportPolicy(nextPolicy);
-
     if (!importPayload) {
+      dispatchImportState({ type: 'policy-selected', policy: nextPolicy });
       return;
     }
 
-    setIsImportPreviewing(true);
-    setImportError(null);
-    setImportMessage(null);
+    dispatchImportState({ type: 'policy-preview-started', policy: nextPolicy });
 
     try {
       const plan = await previewImport(importPayload, nextPolicy);
 
-      setImportPlan(plan);
-      setImportError(plan.valid ? null : 'Import preview found validation errors.');
-      setImportMessage(plan.valid ? importReadyMessage(plan) : null);
+      dispatchImportState({
+        type: 'policy-preview-succeeded',
+        plan,
+        error: plan.valid ? null : 'Import preview found validation errors.',
+        message: plan.valid ? importReadyMessage(plan) : null
+      });
     } catch (error) {
-      setImportError(importRequestErrorMessage(error, 'Import preview failed.'));
-    } finally {
-      setIsImportPreviewing(false);
+      dispatchImportState({
+        type: 'policy-preview-failed',
+        error: importRequestErrorMessage(error, 'Import preview failed.')
+      });
     }
   }
 

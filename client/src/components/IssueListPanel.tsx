@@ -295,11 +295,18 @@ export function IssueListPanel({
           <span>Stale only</span>
         </label>
 
-        <div className="filter-actions">
-          <button type="button" className="secondary-button" onClick={onClearFilters} disabled={!hasActiveFilters}>
-            Clear Filters
-          </button>
-        </div>
+        {hasActiveFilters ? (
+          <div className="filter-actions">
+            <button
+              type="button"
+              className="ghost-button clear-filters-button"
+              onClick={onClearFilters}
+              aria-label="Clear board filters"
+            >
+              Clear all
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <details className="secondary-controls" aria-label="Saved views and page settings">

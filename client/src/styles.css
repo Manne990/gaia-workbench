@@ -430,6 +430,28 @@ h3 {
   justify-content: end;
 }
 
+.clear-filters-button {
+  min-height: 40px;
+  border-color: #b9c6cf;
+  background: #ffffff;
+  font-weight: 800;
+}
+
+.clear-filters-button:hover,
+.clear-filters-button:focus-visible {
+  border-color: #2f6f73;
+  background: #eef5f6;
+}
+
+.clear-filters-button:focus-visible {
+  outline: 3px solid #d9ecee;
+  outline-offset: 2px;
+}
+
+.clear-filters-button:active {
+  background: #d9ecee;
+}
+
 .secondary-controls {
   border-bottom: 1px solid #e4e8ec;
   background: #ffffff;

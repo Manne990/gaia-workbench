@@ -758,16 +758,14 @@ export function App() {
   }
 
   function handleClearFilters(options: { restoreFocus?: boolean } = {}) {
+    const currentSelectedIssueId = selectedIssueIdRef.current;
+
     dashboardFiltersRef.current = defaultDashboardFilters;
     activeSavedViewIdRef.current = null;
     savedViewRouteAbortRef.current?.abort();
     savedViewRouteAbortRef.current = null;
     clearFilters();
-    writeRouteState(null, defaultDashboardFilters, 'replace', null);
-    setSelectedIssueId(null);
-    setSelectedIssue(null);
-    setSelectedIssueLoadState('idle');
-    detailReturnFocusRef.current = null;
+    writeRouteState(currentSelectedIssueId, defaultDashboardFilters, 'replace', null);
 
     if (options.restoreFocus) {
       restoreFocus(null, () => issueListHeadingRef.current);

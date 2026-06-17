@@ -423,7 +423,6 @@ export function App() {
         commandHint: 'Views',
         disabled: false
       },
-      ...savedViewCommands,
       {
         id: 'open-first-visible-issue',
         label: 'Open first visible issue',
@@ -466,7 +465,8 @@ export function App() {
         description: 'Close issue detail panel',
         commandHint: 'Esc',
         disabled: !selectedIssueId
-      }
+      },
+      ...savedViewCommands
     ],
     [
       dashboardDensity,

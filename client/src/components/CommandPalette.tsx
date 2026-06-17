@@ -1,12 +1,7 @@
 import { type ChangeEvent, type FormEvent, type KeyboardEvent, type RefObject, useMemo } from 'react';
+import { getCommandPaletteMatches, type CommandSearchCommand } from '../utils/commandSearch';
 
-type CommandDefinition = {
-  id: string;
-  label: string;
-  description: string;
-  commandHint: string;
-  disabled?: boolean;
-};
+type CommandDefinition = CommandSearchCommand;
 
 type CommandPaletteProps = {
   isOpen: boolean;
@@ -42,18 +37,7 @@ export function CommandPalette({
   onClose,
   commands
 }: CommandPaletteProps) {
-  const filteredCommands = useMemo(() => {
-    const normalized = searchQuery.toLowerCase().trim();
-
-    if (!normalized) {
-      return commands;
-    }
-
-    return commands.filter((command) => {
-      const haystack = `${command.label} ${command.description} ${command.commandHint}`.toLowerCase();
-      return haystack.includes(normalized);
-    });
-  }, [commands, searchQuery]);
+  const filteredCommands = useMemo(() => getCommandPaletteMatches(commands, searchQuery), [commands, searchQuery]);
 
   if (!isOpen) {
     return null;

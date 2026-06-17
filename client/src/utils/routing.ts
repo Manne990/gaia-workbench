@@ -80,6 +80,10 @@ export function buildIssuePath(issueId: string, filters: DashboardFilters = defa
   return query ? `${path}?${query}` : path;
 }
 
+export function buildStableIssueUrl(issueId: string, origin: string): string {
+  return new URL(buildIssuePath(issueId), origin).toString();
+}
+
 export function writeRoute(issueId: string | null, filters: DashboardFilters, mode: 'push' | 'replace'): void {
   const nextPath = issueId ? buildIssuePath(issueId, filters) : buildDashboardPath(filters);
   const currentPath = `${window.location.pathname}${window.location.search}`;

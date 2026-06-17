@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildDashboardPath, buildIssuePath, getIssueIdFromPath, parseDashboardFiltersFromSearch } from './routing';
+import {
+  buildDashboardPath,
+  buildIssuePath,
+  buildStableIssueUrl,
+  getIssueIdFromPath,
+  parseDashboardFiltersFromSearch
+} from './routing';
 
 describe('client routing helpers', () => {
   it('extracts issue ids from canonical detail paths', () => {
@@ -20,6 +26,12 @@ describe('client routing helpers', () => {
 
   it('builds encoded canonical detail paths', () => {
     expect(buildIssuePath('hello world')).toBe('/issues/hello%20world');
+  });
+
+  it('builds absolute stable issue URLs without dashboard filters', () => {
+    expect(buildStableIssueUrl('issue id', 'https://tracker.example.test/app?status=review')).toBe(
+      'https://tracker.example.test/issues/issue%20id'
+    );
   });
 
   it('parses valid dashboard filters from query strings', () => {

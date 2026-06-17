@@ -4,6 +4,7 @@ import type {
   ActiveFilterSummary,
   DashboardDensity,
   Issue,
+  IssueLinkCopyFeedback,
   IssueListPagination,
   IssueStatus,
   LoadState,
@@ -61,6 +62,7 @@ type IssueListPanelProps = {
   onPreviousPage: () => void;
   onNextPage: () => void;
   onOpenIssue: (issue: Issue, trigger: HTMLElement) => void;
+  onCopyIssueLink: (issue: Issue) => void;
   onEditIssue: (issue: Issue, trigger: HTMLElement) => void;
   onArchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
   onUnarchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
@@ -71,6 +73,7 @@ type IssueListPanelProps = {
   bulkStatus: IssueStatus;
   bulkStatusMessage: string | null;
   bulkStatusError: string | null;
+  issueLinkCopyFeedback: IssueLinkCopyFeedback | null;
   isBulkStatusSubmitting: boolean;
   onBulkStatusChange: (value: IssueStatus) => void;
   onToggleIssueSelection: (issueId: string, selected: boolean) => void;
@@ -126,6 +129,7 @@ export function IssueListPanel({
   onPreviousPage,
   onNextPage,
   onOpenIssue,
+  onCopyIssueLink,
   onEditIssue,
   onArchiveIssue,
   onUnarchiveIssue,
@@ -136,6 +140,7 @@ export function IssueListPanel({
   bulkStatus,
   bulkStatusMessage,
   bulkStatusError,
+  issueLinkCopyFeedback,
   isBulkStatusSubmitting,
   onBulkStatusChange,
   onToggleIssueSelection,
@@ -148,6 +153,7 @@ export function IssueListPanel({
   const bulkSelectionContextId = 'bulk-selection-context';
   const bulkStatusFeedbackId = 'bulk-status-feedback';
   const bulkStatusErrorId = 'bulk-status-error';
+  const listLinkCopyFeedback = issueLinkCopyFeedback?.source === 'list' ? issueLinkCopyFeedback : null;
 
   return (
     <section className="issue-panel" aria-labelledby="issue-list-heading" aria-busy={loadState === 'loading'}>
@@ -411,6 +417,17 @@ export function IssueListPanel({
         </div>
       ) : null}
 
+      {listLinkCopyFeedback ? (
+        <p
+          className={listLinkCopyFeedback.status === 'error' ? 'link-copy-feedback error' : 'link-copy-feedback'}
+          role={listLinkCopyFeedback.status === 'error' ? 'alert' : 'status'}
+          aria-live={listLinkCopyFeedback.status === 'error' ? 'assertive' : 'polite'}
+          aria-atomic="true"
+        >
+          {listLinkCopyFeedback.message}
+        </p>
+      ) : null}
+
       {loadState === 'loaded' && filteredIssues.length > 0 ? (
         <div
           className="bulk-status-bar"
@@ -624,6 +641,14 @@ export function IssueListPanel({
                       <td>{formatIssueDate(issue.updatedAt)}</td>
                       <td>
                         <div className="row-actions">
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={() => onCopyIssueLink(issue)}
+                            aria-label={`Copy link for ${issue.title}`}
+                          >
+                            Copy Link
+                          </button>
                           <button
                             type="button"
                             className="ghost-button"

@@ -1001,6 +1001,22 @@ h3 {
   flex-wrap: wrap;
 }
 
+.link-copy-feedback {
+  margin: 0;
+  padding: 10px 20px;
+  border-bottom: 1px solid #d7eadf;
+  background: #edf7f0;
+  color: #29613b;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.link-copy-feedback.error {
+  border-bottom-color: #e6b7ad;
+  background: #fae8e5;
+  color: #9a2f2f;
+}
+
 .state-message.compact {
   padding: 18px 0;
 }

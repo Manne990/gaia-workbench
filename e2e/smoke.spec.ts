@@ -2989,6 +2989,54 @@ test('shareable issue detail URLs support direct load refresh and history', asyn
   await expect(page).toHaveURL('/');
 });
 
+test('copies stable issue links from list and detail actions', async ({ page }) => {
+  const issue = await createIssueThroughApi(page, {
+    title: 'Stable link copy issue',
+    description: 'Copied from filtered and detail contexts.',
+    status: 'review'
+  });
+
+  await page.goto('/?search=Stable%20link%20copy&status=review');
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], {
+    origin: new URL(page.url()).origin
+  });
+
+  const expectedStableLink = new URL(`/issues/${issue.id}`, page.url()).toString();
+  const row = page.getByRole('row', { name: /Stable link copy issue.*Review/ });
+
+  await expect(row).toBeVisible();
+
+  const filteredListUrl = page.url();
+  const listCopyButton = row.getByRole('button', { name: `Copy link for ${issue.title}` });
+
+  await listCopyButton.click();
+  await expect(listCopyButton).toBeFocused();
+  await expect(page.locator('.link-copy-feedback')).toHaveText(`Copied link for "${issue.title}".`);
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(expectedStableLink);
+  expect(page.url()).toBe(filteredListUrl);
+
+  await row.getByRole('button', { name: `Open ${issue.title}` }).click();
+
+  const detail = page.getByRole('region', { name: issue.title });
+
+  await expect(detail.getByRole('heading', { name: issue.title })).toBeVisible();
+
+  const detailRoute = new URL(page.url());
+
+  expect(detailRoute.pathname).toBe(`/issues/${issue.id}`);
+  expect(detailRoute.searchParams.get('search')).toBe('Stable link copy');
+  expect(detailRoute.searchParams.get('status')).toBe('review');
+
+  const detailUrl = page.url();
+  const detailCopyButton = detail.getByRole('button', { name: `Copy issue link for ${issue.title}` });
+
+  await detailCopyButton.click();
+  await expect(detailCopyButton).toBeFocused();
+  await expect(detail.locator('.link-copy-feedback')).toHaveText(`Copied link for "${issue.title}".`);
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(expectedStableLink);
+  expect(page.url()).toBe(detailUrl);
+});
+
 test('issue detail URLs deep-link directly to comment entries', async ({ page }) => {
   const issue = await createIssueThroughApi(page, {
     title: 'Comment deep link issue',

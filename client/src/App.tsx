@@ -39,6 +39,7 @@ import type {
   Issue,
   IssueDependencyState,
   IssueDetailLoadState,
+  IssueLinkCopyFeedback,
   IssueFormValues,
   IssueStatus,
   PriorityFilter,
@@ -48,7 +49,13 @@ import type {
 } from './types';
 import { restoreFocus } from './utils/focus';
 import { parseDueDateInput, parseLabelsInput } from './utils/parse';
-import { buildDashboardQuery, defaultDashboardFilters, getRouteStateFromLocation, writeRoute } from './utils/routing';
+import {
+  buildDashboardQuery,
+  buildStableIssueUrl,
+  defaultDashboardFilters,
+  getRouteStateFromLocation,
+  writeRoute
+} from './utils/routing';
 import { issueMatchesDashboardFilters } from './utils/savedView';
 
 const DASHBOARD_DENSITY_STORAGE_KEY = 'tinytracker.dashboardDensity';
@@ -176,6 +183,7 @@ export function App() {
   const [bulkStatus, setBulkStatus] = useState<IssueStatus>('in_progress');
   const [bulkStatusMessage, setBulkStatusMessage] = useState<string | null>(null);
   const [bulkStatusError, setBulkStatusError] = useState<string | null>(null);
+  const [issueLinkCopyFeedback, setIssueLinkCopyFeedback] = useState<IssueLinkCopyFeedback | null>(null);
   const [isBulkStatusSubmitting, setIsBulkStatusSubmitting] = useState(false);
   const newIssueButtonRef = useRef<HTMLButtonElement>(null);
   const importButtonRef = useRef<HTMLButtonElement>(null);
@@ -1013,6 +1021,27 @@ export function App() {
     cancelForm({ restoreFocus: false });
   }
 
+  async function copyIssueLink(issue: Issue, source: IssueLinkCopyFeedback['source']) {
+    const stableIssueUrl = buildStableIssueUrl(issue.id, window.location.origin);
+
+    try {
+      await navigator.clipboard.writeText(stableIssueUrl);
+      setIssueLinkCopyFeedback({
+        issueId: issue.id,
+        source,
+        status: 'success',
+        message: `Copied link for "${issue.title}".`
+      });
+    } catch {
+      setIssueLinkCopyFeedback({
+        issueId: issue.id,
+        source,
+        status: 'error',
+        message: `Unable to copy link for "${issue.title}".`
+      });
+    }
+  }
+
   function closeIssueDetail() {
     const returnFocusTarget = detailReturnFocusRef.current;
 
@@ -1467,6 +1496,7 @@ export function App() {
           onPreviousPage={goToPreviousPage}
           onNextPage={goToNextPage}
           onOpenIssue={openIssue}
+          onCopyIssueLink={(issue) => void copyIssueLink(issue, 'list')}
           onEditIssue={startEdit}
           onArchiveIssue={handleArchiveIssue}
           onUnarchiveIssue={handleUnarchiveIssue}
@@ -1477,6 +1507,7 @@ export function App() {
           bulkStatus={bulkStatus}
           bulkStatusMessage={bulkStatusMessage}
           bulkStatusError={bulkStatusError}
+          issueLinkCopyFeedback={issueLinkCopyFeedback}
           isBulkStatusSubmitting={isBulkStatusSubmitting}
           onBulkStatusChange={(status) => {
             setBulkStatus(status);
@@ -1517,7 +1548,9 @@ export function App() {
           missingIssueHeadingRef={missingIssueHeadingRef}
           commentsHeadingRef={commentsHeadingRef}
           editCommentTextareaRef={editCommentTextareaRef}
+          issueLinkCopyFeedback={issueLinkCopyFeedback}
           onCloseIssueDetail={closeIssueDetail}
+          onCopyIssueLink={(issue) => void copyIssueLink(issue, 'detail')}
           onDuplicateIssue={handleDuplicateIssue}
           onArchiveIssue={handleArchiveIssue}
           onUnarchiveIssue={handleUnarchiveIssue}

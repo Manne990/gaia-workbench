@@ -3163,6 +3163,13 @@ test('failed dependency cycle edit reconciles stale blocker state', async ({ pag
   await expect(dependencyForm.getByRole('alert')).toHaveText(
     'Cannot add dependency because the selected blocker already depends on this issue'
   );
+  const rollbackFeedback = detail.locator('.dependency-rollback-feedback');
+
+  await expect(rollbackFeedback).toHaveText(
+    'Dependency edit rolled back. Cannot add dependency because the selected blocker already depends on this issue'
+  );
+  await expect(rollbackFeedback).toHaveAttribute('aria-live', 'assertive');
+  await expect(rollbackFeedback).toHaveAttribute('aria-atomic', 'true');
   await expect(dependencyInput).toHaveValue(first.id);
   await expect(staleBlockerItem).toHaveCount(0);
   await expect(blockers).toContainText('No blockers.');
@@ -3186,6 +3193,7 @@ test('failed dependency cycle edit reconciles stale blocker state', async ({ pag
   });
 
   await dependencyInput.fill(staleBlocker.id);
+  await expect(rollbackFeedback).toHaveCount(0);
   await dependencyForm.getByRole('button', { name: 'Add Dependency' }).click();
 
   const successfulDependencyResponse = await successfulDependencyResponsePromise;

@@ -35,8 +35,9 @@ type IssueDetailPanelProps = {
   issueDependencies: IssueDependencyState | null;
   dependencyLoadState: CommentLoadState;
   dependencyIssueId: string;
-  setDependencyIssueId: Dispatch<SetStateAction<string>>;
+  onDependencyIssueIdChange: (issueId: string) => void;
   dependencyError: string | null;
+  dependencyRollbackReason: string | null;
   isDependencySubmitting: boolean;
   commentBody: string;
   setCommentBody: Dispatch<SetStateAction<string>>;
@@ -79,8 +80,9 @@ export function IssueDetailPanel({
   issueDependencies,
   dependencyLoadState,
   dependencyIssueId,
-  setDependencyIssueId,
+  onDependencyIssueIdChange,
   dependencyError,
+  dependencyRollbackReason,
   isDependencySubmitting,
   commentBody,
   setCommentBody,
@@ -392,12 +394,18 @@ export function IssueDetailPanel({
                     id="dependency-issue-id"
                     ref={dependencyIssueInputRef}
                     value={dependencyIssueId}
-                    onChange={(event) => setDependencyIssueId(event.target.value)}
+                    onChange={(event) => onDependencyIssueIdChange(event.target.value)}
                     disabled={isDependencySubmitting || dependencyLoadState === 'loading'}
                     aria-invalid={dependencyError ? true : undefined}
                     aria-describedby={dependencyError ? 'dependency-form-error' : undefined}
                   />
                 </label>
+
+                {dependencyRollbackReason ? (
+                  <p className="dependency-rollback-feedback" aria-live="assertive" aria-atomic="true">
+                    <strong>Dependency edit rolled back.</strong> {dependencyRollbackReason}
+                  </p>
+                ) : null}
 
                 {dependencyError ? (
                   <div className="form-error" id="dependency-form-error" role="alert">

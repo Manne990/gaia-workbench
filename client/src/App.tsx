@@ -259,6 +259,7 @@ export function App() {
   const [dependencyLoadState, setDependencyLoadState] = useState<CommentLoadState>('idle');
   const [dependencyIssueId, setDependencyIssueId] = useState('');
   const [dependencyError, setDependencyError] = useState<string | null>(null);
+  const [dependencyRollbackReason, setDependencyRollbackReason] = useState<string | null>(null);
   const [isDependencySubmitting, setIsDependencySubmitting] = useState(false);
   const [savedViews, setSavedViews] = useState<SavedFilterView[]>([]);
   const [selectedSavedViewId, setSelectedSavedViewId] = useState(() => initialRouteStateRef.current?.savedViewId ?? '');
@@ -1314,6 +1315,7 @@ export function App() {
       setDependencyLoadState('idle');
       setDependencyIssueId('');
       setDependencyError(null);
+      setDependencyRollbackReason(null);
       return;
     }
 
@@ -1553,6 +1555,8 @@ export function App() {
       return;
     }
 
+    setDependencyRollbackReason(null);
+
     const dependsOnIssueId = dependencyIssueId.trim();
 
     if (!dependsOnIssueId) {
@@ -1584,6 +1588,7 @@ export function App() {
 
       if (selectedIssueIdRef.current === selectedIssue.id) {
         setDependencyError(errorMessage);
+        setDependencyRollbackReason(errorMessage);
       }
     } finally {
       setIsDependencySubmitting(false);
@@ -1597,6 +1602,7 @@ export function App() {
 
     setIsDependencySubmitting(true);
     setDependencyError(null);
+    setDependencyRollbackReason(null);
 
     try {
       const dependencies = await removeIssueDependency(selectedIssue.id, dependsOnIssueId);
@@ -1609,6 +1615,7 @@ export function App() {
 
       if (selectedIssueIdRef.current === selectedIssue.id) {
         setDependencyError(errorMessage);
+        setDependencyRollbackReason(errorMessage);
       }
     } finally {
       setIsDependencySubmitting(false);
@@ -2076,8 +2083,12 @@ export function App() {
           issueDependencies={issueDependencies}
           dependencyLoadState={dependencyLoadState}
           dependencyIssueId={dependencyIssueId}
-          setDependencyIssueId={setDependencyIssueId}
+          onDependencyIssueIdChange={(issueId) => {
+            setDependencyIssueId(issueId);
+            setDependencyRollbackReason(null);
+          }}
           dependencyError={dependencyError}
+          dependencyRollbackReason={dependencyRollbackReason}
           isDependencySubmitting={isDependencySubmitting}
           commentBody={commentBody}
           setCommentBody={setCommentBody}

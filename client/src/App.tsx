@@ -57,7 +57,6 @@ import {
   type RouteState,
   writeRoute
 } from './utils/routing';
-import { issueMatchesDashboardFilters } from './utils/savedView';
 
 const DASHBOARD_DENSITY_STORAGE_KEY = 'tinytracker.dashboardDensity';
 const SELECTED_ISSUE_STATUS_COMMAND_PREFIX = 'set-selected-issue-status:';
@@ -218,7 +217,6 @@ export function App() {
   const didCanonicalizeInitialRouteRef = useRef(false);
   const dashboardFiltersRef = useRef<DashboardFilters>(initialRouteStateRef.current.filters);
   const selectedIssueIdRef = useRef<string | null>(initialRouteStateRef.current.issueId);
-  const selectedIssueRef = useRef<Issue | null>(null);
   const activeSavedViewIdRef = useRef<string | null>(initialRouteStateRef.current.savedViewId);
   const savedViewRouteAbortRef = useRef<AbortController | null>(null);
 
@@ -357,10 +355,6 @@ export function App() {
   useEffect(() => {
     selectedIssueIdRef.current = selectedIssueId;
   }, [selectedIssueId]);
-
-  useEffect(() => {
-    selectedIssueRef.current = selectedIssue;
-  }, [selectedIssue]);
 
   useEffect(() => {
     const visibleIds = new Set(filteredIssues.map((issue) => issue.id));
@@ -815,18 +809,13 @@ export function App() {
     };
   }
 
-  function getSelectedIssueIdForFilters(filters: DashboardFilters): string | null {
-    const currentIssueId = selectedIssueIdRef.current;
-    const currentIssue = selectedIssueRef.current;
-
-    return currentIssueId && currentIssue?.id === currentIssueId && !issueMatchesDashboardFilters(currentIssue, filters)
-      ? null
-      : currentIssueId;
+  function getSelectedIssueIdForSavedView(): string | null {
+    return selectedIssueIdRef.current;
   }
 
   function applySavedViewState(view: SavedFilterView, mode: 'push' | 'replace') {
     const nextFilters = getFiltersForSavedView(view);
-    const nextSelectedIssueId = getSelectedIssueIdForFilters(nextFilters);
+    const nextSelectedIssueId = getSelectedIssueIdForSavedView();
 
     activeSavedViewIdRef.current = view.id;
     upsertSavedView(view);

@@ -910,7 +910,7 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
   await expect(description.getByText('<script>window.__tinytrackerImportXss = true</script>')).toBeVisible();
   await expect(description.getByText('[bad](javascript:alert(1)).')).toBeVisible();
   await expect(detail.getByLabel('Issue labels').getByText('replay', { exact: true })).toBeVisible();
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByText('1 unresolved dependency remains: Imported blocker from JSON.')).toBeVisible();
   await expect(
     detail.getByLabel('Issue blockers').getByRole('listitem').filter({ hasText: 'Imported blocker from JSON' })
   ).toContainText('Blocking');
@@ -1406,7 +1406,7 @@ test('create dependency archive and recovery flow preserves blocker context', as
   await dependencyForm.getByLabel('Add blocker issue ID').fill(blocker.id);
   await dependencyForm.getByRole('button', { name: 'Add Dependency' }).click();
 
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
   await expect(blockerItem.getByText(blocker.title)).toBeVisible();
   await expect(blockerItem.locator('.blocked-pill')).toHaveText('Blocking');
   await expect(detail.getByLabel('Issue activity').getByText('Dependency added')).toBeVisible();
@@ -1432,7 +1432,7 @@ test('create dependency archive and recovery flow preserves blocker context', as
   await expect(detail.getByLabel('Issue activity').getByText('Issue restored')).toBeVisible();
   await expect(blockerItem.getByText(blocker.title)).toBeVisible();
   await expect(blockerItem.locator('.blocked-pill')).toHaveText('Blocking');
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
   await expect(issueRow).toBeVisible();
   await expect(issueRow.locator('.blocked-pill')).toHaveText('Blocked');
 });
@@ -1542,7 +1542,7 @@ test('bulk status refreshes selected dependency detail when a blocker resolves',
   const blockerRow = page.getByRole('row', { name: /Bulk blocker refresh source/ });
   const dependentRow = page.getByRole('row', { name: /Bulk blocker refresh dependent/ });
 
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
   await expect(blockerRow).toContainText('Todo');
   await expect(blockerRow).toContainText('High');
   await expect(dependentRow).toContainText('In Progress');
@@ -1711,7 +1711,7 @@ test('dependency links show and clear blocked issue visibility', async ({ page }
   const blockersSection = detail.getByLabel('Issue blockers');
   const blockerItem = blockersSection.getByRole('listitem').filter({ hasText: blocker.title });
 
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
   await expect(blockerItem.getByText(blocker.title)).toBeVisible();
   await expect(blockerItem.getByRole('button', { name: `Remove dependency ${blocker.title}` })).toBeVisible();
   await expect(blockerItem.locator('.blocked-pill')).toHaveText('Blocking');
@@ -1750,7 +1750,7 @@ test('dependency links show and clear blocked issue visibility', async ({ page }
 
   await expect(unarchivedBlockerItem.getByText('Archived')).toHaveCount(0);
   await expect(unarchivedBlockerItem.locator('.blocked-pill')).toHaveText('Blocking');
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
   await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
 
   await page.request.post(`/api/issues/${blocker.id}/close`);
@@ -1769,7 +1769,7 @@ test('dependency links show and clear blocked issue visibility', async ({ page }
   const reopenedBlockerItem = blockersSection.getByRole('listitem').filter({ hasText: blocker.title });
 
   await expect(reopenedBlockerItem.locator('.blocked-pill')).toHaveText('Blocking');
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
   await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
 
   await page.request.post(`/api/issues/${blocker.id}/archive`);
@@ -1786,7 +1786,11 @@ test('dependency links show and clear blocked issue visibility', async ({ page }
   const blockerAfterArchiveItem = blockersSection.getByRole('listitem').filter({ hasText: blockerAfterArchive.title });
 
   await expect(blockerAfterArchiveItem).toBeVisible();
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(
+    detail.getByText(
+      `1 unresolved dependency remains: ${blockerAfterArchive.title}. 1 other dependency is already resolved.`
+    )
+  ).toBeVisible();
   await expect(detail.getByLabel('Issue activity').getByText('Dependency added')).toHaveCount(2);
 
   await blockerAfterArchiveItem.getByRole('button', { name: `Remove dependency ${blockerAfterArchive.title}` }).click();
@@ -1852,7 +1856,7 @@ test('dependency add refreshes blocked-only list while preserving detail route',
     isBlocked: true,
     dependsOnIssueIds: [blocker.id]
   });
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
   await expect(blockerItem.getByText(blocker.title)).toBeVisible();
   await expect(blockerItem.locator('.blocked-pill')).toHaveText('Blocking');
   await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
@@ -1930,7 +1934,7 @@ test('dependency duplicate and cycle rejections keep UI graph state unchanged', 
   const secondBlockerItem = firstBlockers.getByRole('listitem').filter({ hasText: second.title });
 
   await expect(secondBlockerItem).toBeVisible();
-  await expect(firstDetail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(firstDetail.getByText(`1 unresolved dependency remains: ${second.title}.`)).toBeVisible();
   await expect(
     page.getByRole('row', { name: /Duplicate cycle first issue.*In Progress.*Medium/ }).locator('.blocked-pill')
   ).toHaveText('Blocked');
@@ -1941,7 +1945,7 @@ test('dependency duplicate and cycle rejections keep UI graph state unchanged', 
   await expect(firstBlockers.getByRole('listitem')).toHaveCount(1);
   await expect(secondBlockerItem).toBeVisible();
   await expect(firstDetail.getByLabel('Issue activity').getByText('Dependency added')).toHaveCount(1);
-  await expect(firstDetail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(firstDetail.getByText(`1 unresolved dependency remains: ${second.title}.`)).toBeVisible();
 
   const secondDependency = await page.request.post(`/api/issues/${second.id}/dependencies`, {
     data: {
@@ -2031,7 +2035,7 @@ test('dependency form trims whitespace and blocks self-dependency before submit'
 
   const blockerItem = blockers.getByRole('listitem').filter({ hasText: blocker.title });
   await expect(blockerItem).toBeVisible();
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
   await expect(dependencyInput).toHaveValue('');
   expect(dependencyPostCount).toBe(1);
 });

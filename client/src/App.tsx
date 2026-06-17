@@ -293,6 +293,7 @@ export function App() {
   const commandPaletteInputRef = useRef<HTMLInputElement>(null);
   const savedViewsDetailsRef = useRef<HTMLDetailsElement>(null);
   const savedViewSelectRef = useRef<HTMLSelectElement>(null);
+  const bulkArchiveButtonRef = useRef<HTMLButtonElement>(null);
   const dependencyIssueInputRef = useRef<HTMLInputElement>(null);
   const issueListHeadingRef = useRef<HTMLHeadingElement>(null);
   const issueTitleInputRef = useRef<HTMLInputElement>(null);
@@ -303,6 +304,7 @@ export function App() {
   const formReturnFocusRef = useRef<HTMLElement | null>(null);
   const detailReturnFocusRef = useRef<HTMLElement | null>(null);
   const commandPaletteFocusReturnRef = useRef<HTMLElement | null>(null);
+  const pendingBulkArchiveFocusRestoreRef = useRef(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState('');
   const [recentlyArchivedIssue, setRecentlyArchivedIssue] = useState<ArchivedIssueRecovery | null>(null);
@@ -347,6 +349,16 @@ export function App() {
     return dashboardActiveFilterSummaries;
   }, [activeSavedViewId, dashboardActiveFilterSummaries, dashboardFilters, editedSavedViewId, savedViews]);
   const hasActiveFilters = activeFilterSummaries.length > 0;
+
+  useEffect(() => {
+    if (!pendingBulkArchiveFocusRestoreRef.current || isBulkStatusSubmitting || !bulkStatusError) {
+      return;
+    }
+
+    pendingBulkArchiveFocusRestoreRef.current = false;
+    restoreFocus(bulkArchiveButtonRef.current, () => issueListHeadingRef.current);
+  }, [bulkStatusError, isBulkStatusSubmitting]);
+
   const loadSavedViews = useCallback(async (signal?: AbortSignal) => {
     try {
       setSavedViews(await fetchSavedFilterViews(signal));
@@ -1814,6 +1826,7 @@ export function App() {
     }
 
     setIsBulkStatusSubmitting(true);
+    pendingBulkArchiveFocusRestoreRef.current = false;
     setBulkStatusError(null);
     setBulkStatusMessage(null);
 
@@ -1913,6 +1926,7 @@ export function App() {
           .join(' ')
       );
     } catch (error) {
+      pendingBulkArchiveFocusRestoreRef.current = true;
       setBulkStatusError(error instanceof Error ? error.message : 'Bulk archive failed.');
     } finally {
       setIsBulkStatusSubmitting(false);
@@ -2101,6 +2115,7 @@ export function App() {
           savedViewsDetailsRef={savedViewsDetailsRef}
           savedViewSelectRef={savedViewSelectRef}
           issueListHeadingRef={issueListHeadingRef}
+          bulkArchiveButtonRef={bulkArchiveButtonRef}
           onClearFilters={handleClearFilters}
           onRetryLoad={refreshIssues}
           onPreviousPage={goToPreviousPage}

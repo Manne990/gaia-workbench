@@ -60,6 +60,7 @@ type IssueListPanelProps = {
   savedViewsDetailsRef: RefObject<HTMLDetailsElement | null>;
   savedViewSelectRef: RefObject<HTMLSelectElement | null>;
   issueListHeadingRef: RefObject<HTMLHeadingElement | null>;
+  bulkArchiveButtonRef: RefObject<HTMLButtonElement | null>;
   onClearFilters: () => void;
   onRetryLoad: () => void;
   onPreviousPage: () => void;
@@ -130,6 +131,7 @@ export function IssueListPanel({
   savedViewsDetailsRef,
   savedViewSelectRef,
   issueListHeadingRef,
+  bulkArchiveButtonRef,
   onClearFilters,
   onRetryLoad,
   onPreviousPage,
@@ -171,6 +173,13 @@ export function IssueListPanel({
   const bulkSelectionContextId = 'bulk-selection-context';
   const bulkStatusFeedbackId = 'bulk-status-feedback';
   const bulkStatusErrorId = 'bulk-status-error';
+  const bulkActionDescriptionIds = [
+    bulkSelectionContextId,
+    bulkStatusMessage ? bulkStatusFeedbackId : null,
+    bulkStatusError ? bulkStatusErrorId : null
+  ]
+    .filter(Boolean)
+    .join(' ');
   const listLinkCopyFeedback = issueLinkCopyFeedback?.source === 'list' ? issueLinkCopyFeedback : null;
 
   return (
@@ -479,7 +488,7 @@ export function IssueListPanel({
               className="ghost-button"
               onClick={onSelectAllVisibleIssues}
               disabled={selectedCount === filteredIssues.length || isBulkStatusSubmitting}
-              aria-describedby={bulkSelectionContextId}
+              aria-describedby={bulkActionDescriptionIds}
               aria-label={`Select all ${filteredIssues.length} visible issues`}
             >
               Select all visible
@@ -491,7 +500,7 @@ export function IssueListPanel({
                 value={bulkStatus}
                 onChange={(event) => onBulkStatusChange(event.target.value as IssueStatus)}
                 disabled={isBulkStatusSubmitting}
-                aria-describedby={bulkSelectionContextId}
+                aria-describedby={bulkActionDescriptionIds}
                 aria-label={`Bulk status target. ${selectedCount} issue${selectedCount === 1 ? '' : 's'} selected.`}
               >
                 {statusOrder.map((status) => (
@@ -506,7 +515,7 @@ export function IssueListPanel({
               className="secondary-button"
               onClick={onApplyBulkStatus}
               disabled={selectedCount === 0 || isBulkStatusSubmitting}
-              aria-describedby={bulkSelectionContextId}
+              aria-describedby={bulkActionDescriptionIds}
               aria-label={`Change status for ${selectedCount} selected issue${selectedCount === 1 ? '' : 's'}`}
             >
               Change Status
@@ -514,9 +523,10 @@ export function IssueListPanel({
             <button
               type="button"
               className="ghost-button"
+              ref={bulkArchiveButtonRef}
               onClick={onApplyBulkArchive}
               disabled={selectedCount === 0 || isBulkStatusSubmitting}
-              aria-describedby={bulkSelectionContextId}
+              aria-describedby={bulkActionDescriptionIds}
               aria-label={`Archive ${selectedCount} selected issue${selectedCount === 1 ? '' : 's'}`}
             >
               Archive Selected
@@ -526,7 +536,7 @@ export function IssueListPanel({
               className="ghost-button"
               onClick={onClearBulkSelection}
               disabled={selectedCount === 0 || isBulkStatusSubmitting}
-              aria-describedby={bulkSelectionContextId}
+              aria-describedby={bulkActionDescriptionIds}
             >
               Clear
             </button>

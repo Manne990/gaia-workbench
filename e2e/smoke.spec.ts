@@ -2450,6 +2450,58 @@ test('bulk archive clears focused detail and offers undo recovery', async ({ pag
   await expect(page.getByRole('row', { name: /Bulk archive focus survivor.*In Progress.*Low/ })).toBeVisible();
 });
 
+test('bulk archive failure restores action focus and announces the reason', async ({ page }) => {
+  const first = await createIssueThroughApi(page, {
+    title: 'Bulk archive failure first',
+    description: 'Failed archive should keep focus anchored.',
+    status: 'todo',
+    priority: 'high'
+  });
+  const second = await createIssueThroughApi(page, {
+    title: 'Bulk archive failure second',
+    description: 'Failed archive should keep the selection intact.',
+    status: 'review',
+    priority: 'medium'
+  });
+
+  await page.route('**/api/issues/bulk-archive', async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'Bulk archive temporarily unavailable.' })
+    });
+  });
+
+  await page.goto('/?search=Bulk%20archive%20failure');
+
+  const bulkActions = page.getByLabel('Bulk status actions');
+
+  await page.getByLabel(`Select ${first.title}`).check();
+  await page.getByLabel(`Select ${second.title}`).check();
+  await expect(bulkActions).toContainText('2 selected');
+
+  const archiveButton = bulkActions.getByRole('button', { name: 'Archive 2 selected issues' });
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toBe('Archive 2 selected issues?');
+    await dialog.accept();
+  });
+  await archiveButton.click();
+
+  const failureAlert = bulkActions.getByRole('alert');
+
+  await expect(failureAlert).toHaveText('Bulk archive temporarily unavailable.');
+  await expect(failureAlert).toHaveAttribute('aria-live', 'assertive');
+  await expect(failureAlert).toHaveAttribute('aria-atomic', 'true');
+  await expect(archiveButton).toBeFocused();
+  await expect(archiveButton).toHaveAccessibleDescription(
+    '2 issues selected from the current page. Bulk archive temporarily unavailable.'
+  );
+  await expect(bulkActions).toContainText('2 selected');
+  await expect(page.getByRole('row', { name: /Bulk archive failure first.*Todo.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Bulk archive failure second.*Review.*Medium/ })).toBeVisible();
+});
+
 test('bulk status refreshes selected dependency detail when a blocker resolves', async ({ page }) => {
   const blocker = await createIssueThroughApi(page, {
     title: 'Bulk blocker refresh source',

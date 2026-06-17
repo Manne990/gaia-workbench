@@ -13,6 +13,17 @@ const VALID_SAVED_PRIORITIES: SavedFilterPriority[] = ['all', 'low', 'medium', '
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
 const MAX_NAME_LENGTH = 120;
+const SAVED_FILTER_VIEW_FIELDS = new Set([
+  'name',
+  'search',
+  'status',
+  'priority',
+  'label',
+  'includeArchived',
+  'blockedOnly',
+  'staleOnly',
+  'pageSize'
+]);
 
 type SavedFilterViewRow = {
   id: string;
@@ -37,6 +48,14 @@ export class DuplicateSavedFilterViewNameError extends Error {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function assertAllowedSavedFilterViewKeys(input: object): void {
+  for (const key of Object.keys(input)) {
+    if (!SAVED_FILTER_VIEW_FIELDS.has(key)) {
+      throw new Error('Invalid saved view payload');
+    }
+  }
 }
 
 function normalizeName(value: unknown): string {
@@ -208,6 +227,8 @@ export class SavedFilterViewRepository {
   }
 
   create(input: NewSavedFilterView): SavedFilterView {
+    assertAllowedSavedFilterViewKeys(input);
+
     const now = nowIso();
     const view: SavedFilterView = {
       id: randomUUID(),
@@ -261,6 +282,8 @@ export class SavedFilterViewRepository {
     if (!current) {
       return null;
     }
+
+    assertAllowedSavedFilterViewKeys(input);
 
     const next: SavedFilterView = {
       ...current,

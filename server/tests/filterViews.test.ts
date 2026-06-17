@@ -210,6 +210,13 @@ describe('saved filter views API', () => {
     await request(app).post('/api/filter-views').send({ name: 'Bad page size', pageSize: 101 }).expect(400, {
       error: 'Invalid saved view pageSize'
     });
+
+    await request(app)
+      .post('/api/filter-views')
+      .send({ name: 'Unknown key view', unexpectedField: 'survives?' })
+      .expect(400, {
+        error: 'Invalid saved view payload'
+      });
   });
 
   it('rejects invalid saved view PATCH filters without mutating the saved view', async () => {
@@ -230,6 +237,14 @@ describe('saved filter views API', () => {
       .expect(201);
 
     const invalidPatches = [
+      {
+        body: { unexpectedPatchField: true },
+        error: 'Invalid saved view payload'
+      },
+      {
+        body: { search: 'ship', unexpectedPatchField: true },
+        error: 'Invalid saved view payload'
+      },
       {
         body: { pageSize: 0 },
         error: 'Invalid saved view pageSize'

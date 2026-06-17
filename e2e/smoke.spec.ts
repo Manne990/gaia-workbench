@@ -1060,6 +1060,7 @@ test('issue detail undoes the latest status transition with audit evidence', asy
   await expect(detail).toBeVisible();
   await expect(detail.getByLabel('Issue details')).toContainText('Review');
   await expect(page.getByRole('row', { name: /Undo status detail issue.*Review.*Medium/ })).toBeVisible();
+  await expect(detail.getByLabel('Issue activity')).toContainText('Todo -> Review');
 
   const undoResponsePromise = page.waitForResponse((response) => {
     const responseUrl = new URL(response.url());
@@ -1081,6 +1082,7 @@ test('issue detail undoes the latest status transition with audit evidence', asy
   expect(undoResponse.ok()).toBe(true);
   expect(activityResponse.ok()).toBe(true);
   expect(statusEvents).toHaveLength(2);
+  expect(undoResponse.request().postDataJSON()).toEqual({ expectedStatusEventId: statusEvents[0].id });
   expect(statusEvents[0].metadata).toEqual({ from: 'todo', to: 'review' });
   expect(statusEvents[1].metadata).toEqual({
     from: 'review',
@@ -1107,6 +1109,7 @@ test('issue detail reports blocked status undo without mutating the issue', asyn
 
   await expect(detail).toBeVisible();
   await expect(detail.getByLabel('Issue details')).toContainText('Todo');
+  await expect(detail.getByLabel('Issue activity')).toContainText('Issue created');
 
   const undoResponsePromise = page.waitForResponse((response) => {
     const responseUrl = new URL(response.url());
@@ -1125,6 +1128,53 @@ test('issue detail reports blocked status undo without mutating the issue', asyn
   expect(unchangedIssue.status).toBe('todo');
   await expect(detail.getByRole('alert')).toContainText('No status transition to undo.');
   await expect(detail.getByLabel('Issue details')).toContainText('Todo');
+});
+
+test('issue detail reports stale status undo cursors without mutating the issue', async ({ page }) => {
+  const issue = await createIssueThroughApi(page, {
+    title: 'Undo status stale cursor issue',
+    description: 'Detail action should reject stale undo cursors.',
+    status: 'todo',
+    priority: 'medium'
+  });
+  const firstStatusUpdateResponse = await page.request.put(`/api/issues/${issue.id}`, {
+    data: { status: 'review' }
+  });
+
+  expect(firstStatusUpdateResponse.ok()).toBe(true);
+
+  await page.goto(`/issues/${issue.id}?search=${encodeURIComponent('Undo status stale cursor')}`);
+
+  const detail = page.getByRole('region', { name: issue.title });
+
+  await expect(detail).toBeVisible();
+  await expect(detail.getByLabel('Issue details')).toContainText('Review');
+  await expect(detail.getByLabel('Issue activity')).toContainText('Todo -> Review');
+
+  const secondStatusUpdateResponse = await page.request.put(`/api/issues/${issue.id}`, {
+    data: { status: 'done' }
+  });
+
+  expect(secondStatusUpdateResponse.ok()).toBe(true);
+
+  const undoResponsePromise = page.waitForResponse((response) => {
+    const responseUrl = new URL(response.url());
+
+    return response.request().method() === 'POST' && responseUrl.pathname === `/api/issues/${issue.id}/undo-status`;
+  });
+
+  await detail.getByRole('button', { name: `Undo last status change for ${issue.title}` }).click();
+
+  const undoResponse = await undoResponsePromise;
+  const issueResponse = await page.request.get(`/api/issues/${issue.id}`);
+  const unchangedIssue = (await issueResponse.json()) as ApiIssue;
+
+  expect(undoResponse.status()).toBe(409);
+  expect(issueResponse.ok()).toBe(true);
+  expect(unchangedIssue.status).toBe('done');
+  await expect(detail.getByRole('alert')).toContainText(
+    'Status undo audit cursor is stale. Refresh issue activity before undoing status.'
+  );
 });
 
 test('command palette jumps to saved views and applies saved view commands', async ({ page }) => {

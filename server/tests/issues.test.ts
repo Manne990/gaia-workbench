@@ -1262,7 +1262,15 @@ describe('issues API', () => {
       .send({ title: 'Undo status API issue', status: 'todo' })
       .expect(201);
     const moved = await request(app).put(`/api/issues/${created.body.id}`).send({ status: 'review' }).expect(200);
-    const undone = await request(app).post(`/api/issues/${created.body.id}/undo-status`).expect(200);
+    const activityBeforeUndo = await request(app).get(`/api/issues/${created.body.id}/activity`).expect(200);
+    const statusEventId = activityBeforeUndo.body.find(
+      (event: { type: string }) => event.type === 'issue_status_changed'
+    )?.id;
+
+    const undone = await request(app)
+      .post(`/api/issues/${created.body.id}/undo-status`)
+      .send({ expectedStatusEventId: statusEventId })
+      .expect(200);
 
     expect(moved.body).toMatchObject({
       id: created.body.id,
@@ -1289,6 +1297,63 @@ describe('issues API', () => {
           undoOfEventId: activity.body[1].id
         });
       });
+  });
+
+  it('rejects status undo when the audit cursor is stale', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const created = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Undo status stale cursor issue', status: 'todo' })
+      .expect(201);
+    await request(app).put(`/api/issues/${created.body.id}`).send({ status: 'review' }).expect(200);
+
+    const activityBeforeDrift = await request(app).get(`/api/issues/${created.body.id}/activity`).expect(200);
+    const staleStatusEventId = activityBeforeDrift.body.find(
+      (event: { type: string }) => event.type === 'issue_status_changed'
+    )?.id;
+
+    await request(app).put(`/api/issues/${created.body.id}`).send({ status: 'done' }).expect(200);
+
+    await request(app)
+      .post(`/api/issues/${created.body.id}/undo-status`)
+      .send({ expectedStatusEventId: staleStatusEventId })
+      .expect(409, {
+        error: 'Status undo audit cursor is stale. Refresh issue activity before undoing status.'
+      });
+
+    await request(app)
+      .get(`/api/issues/${created.body.id}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.status).toBe('done');
+      });
+    await request(app)
+      .get(`/api/issues/${created.body.id}/activity`)
+      .expect(200)
+      .expect((activity) => {
+        expect(activity.body.map((event: { type: string }) => event.type)).toEqual([
+          'issue_created',
+          'issue_status_changed',
+          'issue_status_changed'
+        ]);
+        expect(activity.body[2].metadata).toEqual({ from: 'review', to: 'done' });
+      });
+  });
+
+  it('rejects malformed status undo audit cursors', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const created = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Undo status malformed cursor issue', status: 'todo' })
+      .expect(201);
+    await request(app).put(`/api/issues/${created.body.id}`).send({ status: 'review' }).expect(200);
+
+    await request(app)
+      .post(`/api/issues/${created.body.id}/undo-status`)
+      .send({ expectedStatusEventId: '   ' })
+      .expect(400, validationErrorBody('Invalid status undo cursor'));
   });
 
   it('blocks status undo when the previous status is not known', async () => {

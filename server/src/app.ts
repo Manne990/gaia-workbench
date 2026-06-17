@@ -252,6 +252,7 @@ const validationErrorMessages = new Set([
   'Invalid blockedOnly parameter',
   'Invalid staleOnly parameter',
   'Invalid includeAuditSummary parameter',
+  'Invalid status undo cursor',
   'Invalid bulk issue ids',
   'Invalid bulk dependency ids',
   'dependsOnIssueId is required',
@@ -344,6 +345,21 @@ function getOptionalRequestObject(value: unknown, errorMessage: string): Record<
   }
 
   return value as Record<string, unknown>;
+}
+
+function parseStatusUndoInput(body: unknown): { expectedStatusEventId?: string } {
+  const input = getOptionalRequestObject(body, 'Invalid issue payload');
+  const expectedStatusEventId = input.expectedStatusEventId;
+
+  if (expectedStatusEventId === undefined) {
+    return {};
+  }
+
+  if (typeof expectedStatusEventId !== 'string' || expectedStatusEventId.trim().length === 0) {
+    throw new Error('Invalid status undo cursor');
+  }
+
+  return { expectedStatusEventId: expectedStatusEventId.trim() };
 }
 
 function neutralizeSpreadsheetFormulaCell(value: string): string {
@@ -1068,7 +1084,7 @@ export function createApp(config: AppConfig = {}) {
 
   app.post('/api/issues/:id/undo-status', (req, res) => {
     try {
-      const issue = issueRepository.undoLastStatusTransition(req.params.id);
+      const issue = issueRepository.undoLastStatusTransition(req.params.id, parseStatusUndoInput(req.body));
 
       if (!issue) {
         return res.status(404).json({ error: 'Issue not found' });
@@ -1076,6 +1092,10 @@ export function createApp(config: AppConfig = {}) {
 
       return res.status(200).json(issue);
     } catch (error) {
+      if (isValidationError(error)) {
+        return sendValidationError(res, error.message);
+      }
+
       if (error instanceof IssueStatusUndoNotAvailableError) {
         return res.status(409).json({ error: error.message });
       }

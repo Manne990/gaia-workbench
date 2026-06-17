@@ -9,7 +9,8 @@ import {
   fetchIssueActivity,
   fetchIssues,
   fetchServiceHealth,
-  previewImport
+  previewImport,
+  undoIssueStatus
 } from './api';
 import type { ImportPlan } from './types';
 
@@ -84,6 +85,32 @@ describe('client API errors', () => {
 
     await expect(archiveIssue('missing-issue')).rejects.toThrow('Issue not found');
     expect(fetch).toHaveBeenCalledWith('/api/issues/missing-issue/archive', { method: 'POST' });
+  });
+
+  it('sends status undo audit cursors when provided', async () => {
+    const issue = {
+      id: 'issue-1',
+      title: 'Undo cursor issue',
+      description: '',
+      status: 'todo',
+      priority: 'medium',
+      labels: [],
+      dueDate: null,
+      isOverdue: false,
+      isBlocked: false,
+      dependsOnIssueIds: [],
+      archivedAt: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z'
+    };
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(issue, { status: 200 }));
+
+    await expect(undoIssueStatus('issue-1', { expectedStatusEventId: 'activity-1' })).resolves.toEqual(issue);
+    expect(fetch).toHaveBeenCalledWith('/api/issues/issue-1/undo-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expectedStatusEventId: 'activity-1' })
+    });
   });
 
   it('preserves server error messages for activity and comment history requests', async () => {

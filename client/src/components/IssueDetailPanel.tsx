@@ -65,7 +65,7 @@ type IssueDetailPanelProps = {
   onCloseIssueDetail: () => void;
   onCopyIssueLink: (issue: Issue) => void;
   onDuplicateIssue: (issue: Issue, trigger: HTMLElement) => void;
-  onUndoIssueStatus: (issue: Issue) => void;
+  onUndoIssueStatus: (issue: Issue, expectedStatusEventId?: string) => void;
   onArchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
   onUnarchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
   onSubmitIssueDependency: (event: FormEvent<HTMLFormElement>) => void;
@@ -135,6 +135,15 @@ export function IssueDetailPanel({
     () => filterActivityEvents(activityEvents, activityCategory),
     [activityCategory, activityEvents]
   );
+  const latestStatusEventId = useMemo(() => {
+    for (let index = activityEvents.length - 1; index >= 0; index -= 1) {
+      if (activityEvents[index].type === 'issue_status_changed') {
+        return activityEvents[index].id;
+      }
+    }
+
+    return undefined;
+  }, [activityEvents]);
   const activityCountLabel =
     activityCategory === 'all'
       ? `${activityEvents.length}`
@@ -192,8 +201,8 @@ export function IssueDetailPanel({
               <button
                 type="button"
                 className="secondary-button"
-                onClick={() => onUndoIssueStatus(selectedIssue)}
-                disabled={isStatusUndoSubmitting || selectedIssue.archivedAt !== null}
+                onClick={() => onUndoIssueStatus(selectedIssue, latestStatusEventId)}
+                disabled={isStatusUndoSubmitting || selectedIssue.archivedAt !== null || activityLoadState !== 'loaded'}
                 aria-label={`Undo last status change for ${selectedIssue.title}`}
               >
                 {isStatusUndoSubmitting ? 'Undoing...' : 'Undo Status'}

@@ -102,9 +102,20 @@ export function duplicateIssue(issueId: string): Promise<Issue> {
   return postIssueAction(issueId, 'duplicate');
 }
 
-export async function undoIssueStatus(issueId: string): Promise<Issue> {
+type UndoIssueStatusOptions = {
+  expectedStatusEventId?: string;
+};
+
+export async function undoIssueStatus(issueId: string, options: UndoIssueStatusOptions = {}): Promise<Issue> {
+  const hasAuditCursor = options.expectedStatusEventId !== undefined;
   const response = await fetch(`/api/issues/${issueId}/undo-status`, {
-    method: 'POST'
+    method: 'POST',
+    ...(hasAuditCursor
+      ? {
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expectedStatusEventId: options.expectedStatusEventId })
+        }
+      : {})
   });
 
   return readJsonOrThrow<Issue>(response, 'Issue status undo failed');

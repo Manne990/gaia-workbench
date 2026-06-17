@@ -40,6 +40,12 @@ type IssueListResponse = {
   };
 };
 
+type LargeIssueSetOptions = {
+  idOffset?: number;
+  titlePrefix?: string;
+  descriptionPrefix?: string;
+};
+
 type ImportSummaryResponse = {
   summary: {
     toCreate: {
@@ -182,16 +188,21 @@ async function changeDashboardFiltersInSameTask(
   }, values);
 }
 
-async function createLargeIssueSet(page: Page, count: number): Promise<CreatedIssue[]> {
+async function createLargeIssueSet(
+  page: Page,
+  count: number,
+  options: LargeIssueSetOptions = {}
+): Promise<CreatedIssue[]> {
+  const { idOffset = 0, titlePrefix = 'Large issue', descriptionPrefix = 'Large-list guardrail item' } = options;
   const issues = Array.from({ length: count }, (_, index) => {
     const paddedIndex = String(index).padStart(4, '0');
-    const title = `Large issue ${paddedIndex}`;
+    const title = `${titlePrefix} ${paddedIndex}`;
     const timestamp = new Date(largeIssueImportBaseDate + index * 1000).toISOString();
 
     return {
-      id: `00000000-0000-4000-9000-${String(index).padStart(12, '0')}`,
+      id: `00000000-0000-4000-9000-${String(idOffset + index).padStart(12, '0')}`,
       title,
-      description: `Large-list guardrail item ${paddedIndex}`,
+      description: `${descriptionPrefix} ${paddedIndex}`,
       status: largeIssueStatuses[index % largeIssueStatuses.length],
       priority: largeIssuePriorities[index % largeIssuePriorities.length],
       labels: ['bulk', `group-${index % 10}`],
@@ -2742,6 +2753,77 @@ test('dashboard density toggle compacts rows without hiding issue information', 
   await expect(comfortableButton).toHaveAttribute('aria-pressed', 'true');
   await expect(issueRow).toBeVisible();
   await expect(issueRow.locator('.blocked-pill')).toHaveText('Blocked');
+});
+
+test('large queues keep dashboard rows scannable in compact and mobile layouts', async ({ page }) => {
+  const issues = await createLargeIssueSet(page, 120, {
+    idOffset: 1000,
+    titlePrefix: 'Scan issue',
+    descriptionPrefix: 'Scan guardrail item'
+  });
+  const blockedIssue = issues[117];
+  const blockerIssue = issues[118];
+  const archivedIssue = issues[116];
+
+  const dependencyResponse = await page.request.post(`/api/issues/${blockedIssue.id}/dependencies`, {
+    data: { dependsOnIssueId: blockerIssue.id }
+  });
+  const archiveResponse = await page.request.post(`/api/issues/${archivedIssue.id}/archive`);
+
+  expect(dependencyResponse.ok()).toBe(true);
+  expect(archiveResponse.ok()).toBe(true);
+
+  await page.goto('/?limit=25&includeArchived=true&search=Scan%20issue');
+
+  const densityControls = page.getByLabel('Dashboard density');
+  const compactButton = densityControls.getByRole('button', { name: 'Compact' });
+  const blockedRow = page.getByRole('row', { name: /Scan issue 0117.*In Progress.*Low/ });
+  const archivedRow = page.getByRole('row', { name: /Scan issue 0116.*Todo.*High/ });
+  const blockedDescription = blockedRow.locator('.issue-description-snippet');
+
+  await expect(blockedRow).toBeVisible();
+  await expect(blockedRow.locator('.issue-title-text')).toHaveText('Scan issue 0117');
+  await expect(blockedDescription).toContainText('Scan guardrail item 0117');
+  await expect(blockedRow.locator('.issue-state-flags')).toBeVisible();
+  await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
+  await expect(blockedRow.locator('.pill.status-in_progress')).toHaveText('In Progress');
+  await expect(blockedRow.locator('.pill.priority-low')).toHaveText('Low');
+  await expect(blockedRow.getByText('No due date')).toBeVisible();
+  await expect(blockedRow.getByText('bulk', { exact: true })).toBeVisible();
+  await expect(blockedRow.getByText('group-7', { exact: true })).toBeVisible();
+  await expect(blockedRow.getByRole('button', { name: 'Open Scan issue 0117' })).toBeVisible();
+  await expect(blockedRow.getByRole('button', { name: 'Edit Scan issue 0117' })).toBeVisible();
+  await expect(blockedRow.getByRole('button', { name: 'Archive Scan issue 0117' })).toBeVisible();
+  await expect(archivedRow.locator('.archived-pill')).toHaveText('Archived');
+  await expect
+    .poll(() =>
+      blockedDescription.evaluate((element) => getComputedStyle(element).getPropertyValue('-webkit-line-clamp'))
+    )
+    .toBe('2');
+
+  await compactButton.click();
+  await expect(compactButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(blockedRow).toBeVisible();
+  await expect(blockedRow.locator('.label-row')).toHaveCSS('overflow', 'hidden');
+  await expect
+    .poll(() =>
+      blockedDescription.evaluate((element) => getComputedStyle(element).getPropertyValue('-webkit-line-clamp'))
+    )
+    .toBe('1');
+  await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
+  await expect(blockedRow.locator('.pill.status-in_progress')).toHaveText('In Progress');
+  await expect(blockedRow.locator('.pill.priority-low')).toHaveText('Low');
+  await expect(blockedRow.getByRole('button', { name: 'Open Scan issue 0117' })).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 760 });
+  await expect(page.locator('.table-wrap')).toBeVisible();
+  await expect(page.locator('.table-wrap')).toHaveCSS('overflow-x', 'auto');
+  await expect(blockedRow).toBeVisible();
+  await expect(blockedRow.locator('.issue-state-flags')).toBeVisible();
+  await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
+  await expect(blockedRow.locator('.pill.status-in_progress')).toHaveText('In Progress');
+  await expect(blockedRow.locator('.pill.priority-low')).toHaveText('Low');
+  await expect(blockedRow.getByRole('button', { name: 'Open Scan issue 0117' })).toBeVisible();
 });
 
 test('keyboard focus survives density changes and issue detail navigation', async ({ page }) => {

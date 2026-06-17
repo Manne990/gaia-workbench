@@ -136,6 +136,16 @@ async function waitForIssueActionResponse(page: Page, issueId: string, action: '
   expect(response.ok()).toBe(true);
 }
 
+async function waitForBulkArchiveResponse(page: Page): Promise<void> {
+  const response = await page.waitForResponse((nextResponse) => {
+    const responseUrl = new URL(nextResponse.url());
+
+    return nextResponse.request().method() === 'POST' && responseUrl.pathname === '/api/issues/bulk-archive';
+  });
+
+  expect(response.ok()).toBe(true);
+}
+
 async function changeDashboardFiltersInSameTask(
   page: Page,
   values: { search?: string; status?: string; priority?: string; label?: string }
@@ -2185,6 +2195,75 @@ test('bulk status reports mixed invalid selections clearly and clears stale sele
   await expect(bulkActions).toContainText('0 selected');
   await expect(page.getByRole('row', { name: /Bulk mixed invalid first.*Done.*High/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /Bulk mixed invalid second.*Done.*Medium/ })).toBeVisible();
+});
+
+test('bulk archive clears focused detail and offers undo recovery', async ({ page }) => {
+  const focused = await createIssueThroughApi(page, {
+    title: 'Bulk archive focus detail',
+    description: 'Focused detail should be cleared after bulk archive.',
+    status: 'todo',
+    priority: 'high'
+  });
+  const second = await createIssueThroughApi(page, {
+    title: 'Bulk archive focus companion',
+    description: 'Archived with the focused issue.',
+    status: 'review',
+    priority: 'medium'
+  });
+  await createIssueThroughApi(page, {
+    title: 'Bulk archive focus survivor',
+    description: 'Should remain visible after selected issues archive.',
+    status: 'in_progress',
+    priority: 'low'
+  });
+
+  await page.goto(`/issues/${focused.id}?search=Bulk%20archive%20focus`);
+
+  const detail = page.getByRole('region', { name: focused.title });
+  const bulkActions = page.getByLabel('Bulk status actions');
+
+  await expect(detail.getByRole('heading', { name: focused.title })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Bulk archive focus detail.*Todo.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Bulk archive focus companion.*Review.*Medium/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Bulk archive focus survivor.*In Progress.*Low/ })).toBeVisible();
+
+  await page.getByLabel(`Select ${focused.title}`).check();
+  await page.getByLabel(`Select ${second.title}`).check();
+  await expect(bulkActions).toContainText('2 selected');
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toBe('Archive 2 selected issues?');
+    await dialog.accept();
+  });
+  const archiveResponse = waitForBulkArchiveResponse(page);
+  await bulkActions.getByRole('button', { name: 'Archive 2 selected issues' }).click();
+  await archiveResponse;
+
+  await expect(page.getByRole('region', { name: focused.title })).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/');
+  await expect(bulkActions).toContainText('Archived 2 issues.');
+  await expect(bulkActions).toContainText('0 selected');
+  await expect(page.getByRole('status').filter({ hasText: '2 issues archived.' })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Bulk archive focus detail/ })).toHaveCount(0);
+  await expect(page.getByRole('row', { name: /Bulk archive focus companion/ })).toHaveCount(0);
+  await expect(page.getByRole('row', { name: /Bulk archive focus survivor.*In Progress.*Low/ })).toBeVisible();
+
+  const focusedAfterArchiveResponse = await page.request.get(`/api/issues/${focused.id}`);
+  const focusedAfterArchive = (await focusedAfterArchiveResponse.json()) as ApiIssue;
+
+  expect(focusedAfterArchive.archivedAt).toEqual(expect.any(String));
+
+  const restoreFocusedResponse = waitForIssueActionResponse(page, focused.id, 'unarchive');
+  const restoreSecondResponse = waitForIssueActionResponse(page, second.id, 'unarchive');
+
+  await page.getByRole('button', { name: 'Undo archive of 2 issues' }).click();
+  await Promise.all([restoreFocusedResponse, restoreSecondResponse]);
+
+  await expect(page.getByRole('status').filter({ hasText: '2 issues archived.' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: focused.title })).toHaveCount(0);
+  await expect(page.getByRole('row', { name: /Bulk archive focus detail.*Todo.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Bulk archive focus companion.*Review.*Medium/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Bulk archive focus survivor.*In Progress.*Low/ })).toBeVisible();
 });
 
 test('bulk status refreshes selected dependency detail when a blocker resolves', async ({ page }) => {

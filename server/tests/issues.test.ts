@@ -1337,6 +1337,66 @@ describe('issues API', () => {
       });
   });
 
+  it('bulk archives selected issues with duplicate unchanged and missing reporting', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const first = await request(app).post('/api/issues').send({ title: 'Bulk archive first issue' }).expect(201);
+    const second = await request(app).post('/api/issues').send({ title: 'Bulk archive second issue' }).expect(201);
+    const alreadyArchived = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Bulk archive unchanged issue' })
+      .expect(201);
+
+    await request(app).post(`/api/issues/${alreadyArchived.body.id}/archive`).expect(200);
+
+    const response = await request(app)
+      .post('/api/issues/bulk-archive')
+      .send({
+        issueIds: [first.body.id, second.body.id, alreadyArchived.body.id, first.body.id, 'missing-bulk-archive']
+      })
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      unchangedIds: [alreadyArchived.body.id],
+      duplicateIds: [first.body.id],
+      notFoundIds: ['missing-bulk-archive']
+    });
+    expect(response.body.archived.map((issue: { id: string }) => issue.id)).toEqual([first.body.id, second.body.id]);
+    expect(response.body.archived).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: first.body.id, archivedAt: expect.any(String) }),
+        expect.objectContaining({ id: second.body.id, archivedAt: expect.any(String) })
+      ])
+    );
+
+    await request(app)
+      .get('/api/issues')
+      .expect(200)
+      .expect((list) => {
+        expect(list.body.items.map((issue: { id: string }) => issue.id)).toEqual([]);
+      });
+    await request(app)
+      .get('/api/issues?includeArchived=true')
+      .expect(200)
+      .expect((list) => {
+        expect(list.body.items.map((issue: { id: string }) => issue.id)).toEqual(
+          expect.arrayContaining([first.body.id, second.body.id, alreadyArchived.body.id])
+        );
+      });
+    await request(app)
+      .get(`/api/issues/${first.body.id}/activity`)
+      .expect(200)
+      .expect((activity) => {
+        expect(activity.body.map((event: { type: string }) => event.type)).toEqual(['issue_created', 'issue_archived']);
+      });
+    await request(app)
+      .get(`/api/issues/${alreadyArchived.body.id}/activity`)
+      .expect(200)
+      .expect((activity) => {
+        expect(activity.body.map((event: { type: string }) => event.type)).toEqual(['issue_created', 'issue_archived']);
+      });
+  });
+
   it('archives and unarchives issues without deleting detail comments or activity', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

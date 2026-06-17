@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   addIssueDependency,
   archiveIssue,
+  bulkArchiveIssues,
   bulkUpdateIssueStatus,
   createSavedFilterView,
   deleteSavedFilterView,
@@ -33,6 +34,7 @@ import { useSelectedIssueDiscussion } from './hooks/useSelectedIssueDiscussion';
 import type {
   ActiveFilterSummary,
   ActiveForm,
+  ArchivedIssueRecovery,
   CancelOptions,
   CommentLoadState,
   DashboardDensity,
@@ -253,7 +255,7 @@ export function App() {
   const commandPaletteFocusReturnRef = useRef<HTMLElement | null>(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState('');
-  const [recentlyArchivedIssue, setRecentlyArchivedIssue] = useState<{ id: string; title: string } | null>(null);
+  const [recentlyArchivedIssue, setRecentlyArchivedIssue] = useState<ArchivedIssueRecovery | null>(null);
   const didCanonicalizeInitialRouteRef = useRef(false);
   const dashboardFiltersRef = useRef<DashboardFilters>(initialRouteStateRef.current.filters);
   const selectedIssueIdRef = useRef<string | null>(initialRouteStateRef.current.issueId);
@@ -1525,7 +1527,7 @@ export function App() {
 
     try {
       const archivedIssue = await archiveIssue(issue.id);
-      setRecentlyArchivedIssue({ id: archivedIssue.id, title: archivedIssue.title });
+      setRecentlyArchivedIssue({ issues: [{ id: archivedIssue.id, title: archivedIssue.title }] });
 
       if (selectedIssueId === archivedIssue.id) {
         setSelectedIssue(archivedIssue);
@@ -1541,17 +1543,21 @@ export function App() {
   }
 
   async function handleUndoArchiveIssue(_trigger: HTMLElement) {
-    if (!recentlyArchivedIssue) {
+    if (!recentlyArchivedIssue || recentlyArchivedIssue.issues.length === 0) {
       return;
     }
 
     try {
-      const restoredIssue = await unarchiveIssue(recentlyArchivedIssue.id);
+      const restoredIssues = await Promise.all(recentlyArchivedIssue.issues.map((issue) => unarchiveIssue(issue.id)));
+      const selectedIssueIdAfterMutation = selectedIssueIdRef.current;
+      const restoredSelectedIssue = selectedIssueIdAfterMutation
+        ? restoredIssues.find((issue) => issue.id === selectedIssueIdAfterMutation)
+        : null;
 
-      if (selectedIssueId === restoredIssue.id) {
-        setSelectedIssue(restoredIssue);
+      if (restoredSelectedIssue) {
+        setSelectedIssue(restoredSelectedIssue);
         setSelectedIssueLoadState('loaded');
-        await refreshActivity(restoredIssue.id);
+        await refreshActivity(restoredSelectedIssue.id);
       }
 
       refreshIssues();
@@ -1566,9 +1572,15 @@ export function App() {
     try {
       const restoredIssue = await unarchiveIssue(issue.id);
 
-      if (recentlyArchivedIssue?.id === restoredIssue.id) {
-        setRecentlyArchivedIssue(null);
-      }
+      setRecentlyArchivedIssue((current) => {
+        if (!current || !current.issues.some((archivedIssue) => archivedIssue.id === restoredIssue.id)) {
+          return current;
+        }
+
+        const remainingIssues = current.issues.filter((archivedIssue) => archivedIssue.id !== restoredIssue.id);
+
+        return remainingIssues.length > 0 ? { issues: remainingIssues } : null;
+      });
 
       if (selectedIssueId === restoredIssue.id) {
         setSelectedIssue(restoredIssue);
@@ -1672,6 +1684,72 @@ export function App() {
       );
     } catch (error) {
       setBulkStatusError(error instanceof Error ? error.message : 'Bulk status update failed.');
+    } finally {
+      setIsBulkStatusSubmitting(false);
+    }
+  }
+
+  async function submitBulkArchiveChange() {
+    if (selectedBulkIssueIds.length === 0) {
+      setBulkStatusError('Select at least one visible issue.');
+      return;
+    }
+
+    const issueCount = selectedBulkIssueIds.length;
+    const confirmed = window.confirm(`Archive ${issueCount} selected issue${issueCount === 1 ? '' : 's'}?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsBulkStatusSubmitting(true);
+    setBulkStatusError(null);
+    setBulkStatusMessage(null);
+
+    try {
+      const result = await bulkArchiveIssues(selectedBulkIssueIds);
+      const archivedCount = result.archived.length;
+      const unchangedCount = result.unchangedIds.length;
+      const duplicateCount = result.duplicateIds.length;
+      const notFoundCount = result.notFoundIds.length;
+      const archivedIds = new Set(result.archived.map((issue) => issue.id));
+      const selectedIssueIdAfterMutation = selectedIssueIdRef.current;
+
+      setSelectedBulkIssueIds([]);
+      refreshIssues();
+
+      if (archivedCount > 0) {
+        setRecentlyArchivedIssue({
+          issues: result.archived.map((issue) => ({ id: issue.id, title: issue.title }))
+        });
+      }
+
+      if (selectedIssueIdAfterMutation && archivedIds.has(selectedIssueIdAfterMutation)) {
+        selectedIssueIdRef.current = null;
+        detailReturnFocusRef.current = null;
+        setSelectedIssueId(null);
+        setSelectedIssue(null);
+        setSelectedIssueLoadState('idle');
+        writeRouteState(null, dashboardFiltersRef.current, 'replace');
+        restoreFocus(null, () => issueListHeadingRef.current);
+      } else if (selectedIssueIdAfterMutation) {
+        await refreshSelectedIssueDetail(selectedIssueIdAfterMutation);
+      }
+
+      setBulkStatusMessage(
+        [
+          `Archived ${archivedCount} issue${archivedCount === 1 ? '' : 's'}.`,
+          unchangedCount > 0 ? `${unchangedCount} already ${unchangedCount === 1 ? 'was' : 'were'} archived.` : null,
+          notFoundCount > 0 ? `${notFoundCount} missing ${notFoundCount === 1 ? 'id was' : 'ids were'} skipped.` : null,
+          duplicateCount > 0
+            ? `${duplicateCount} duplicate ${duplicateCount === 1 ? 'id was' : 'ids were'} ignored.`
+            : null
+        ]
+          .filter(Boolean)
+          .join(' ')
+      );
+    } catch (error) {
+      setBulkStatusError(error instanceof Error ? error.message : 'Bulk archive failed.');
     } finally {
       setIsBulkStatusSubmitting(false);
     }
@@ -1885,6 +1963,7 @@ export function App() {
           onSelectAllVisibleIssues={selectAllVisibleBulkIssues}
           onClearBulkSelection={clearBulkSelection}
           onApplyBulkStatus={submitBulkStatusChange}
+          onApplyBulkArchive={submitBulkArchiveChange}
         />
 
         <IssueDetailPanel

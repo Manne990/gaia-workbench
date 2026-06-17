@@ -1,5 +1,6 @@
 import type {
   ActivityEvent,
+  BulkIssueArchiveResult,
   BulkIssueStatusResult,
   CommentEditHistory,
   ImportPlan,
@@ -109,6 +110,16 @@ export async function bulkUpdateIssueStatus(issueIds: string[], status: IssueSta
   });
 
   return readJsonOrThrow<BulkIssueStatusResult>(response, 'Bulk status update failed');
+}
+
+export async function bulkArchiveIssues(issueIds: string[]): Promise<BulkIssueArchiveResult> {
+  const response = await fetch('/api/issues/bulk-archive', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ issueIds })
+  });
+
+  return readJsonOrThrow<BulkIssueArchiveResult>(response, 'Bulk archive failed');
 }
 
 async function readJsonOrThrow<T>(response: Response, fallbackMessage: string): Promise<T> {

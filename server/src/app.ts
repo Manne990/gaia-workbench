@@ -846,6 +846,24 @@ export function createApp(config: AppConfig = {}) {
     }
   });
 
+  app.post('/api/issues/bulk-archive', (req, res) => {
+    try {
+      const body = (req.body ?? {}) as { issueIds?: unknown };
+
+      return res.status(200).json(
+        issueRepository.bulkArchive({
+          issueIds: body.issueIds as never
+        })
+      );
+    } catch (error) {
+      if (isValidationError(error)) {
+        return sendValidationError(res, error.message);
+      }
+
+      throw error;
+    }
+  });
+
   app.get('/api/issues/:id', (req, res) => {
     const issue = issueRepository.getById(req.params.id);
 

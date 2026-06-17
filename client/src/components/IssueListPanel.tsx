@@ -52,6 +52,7 @@ type IssueListPanelProps = {
   onSavedViewNameChange: (name: string) => void;
   onSaveCurrentView: () => void;
   onApplySavedView: () => void;
+  onDuplicateSavedView: () => void;
   onRenameSavedView: () => void;
   onDeleteSavedView: () => void;
   issueSearchInputRef: RefObject<HTMLInputElement | null>;
@@ -115,6 +116,7 @@ export function IssueListPanel({
   onSavedViewNameChange,
   onSaveCurrentView,
   onApplySavedView,
+  onDuplicateSavedView,
   onRenameSavedView,
   onDeleteSavedView,
   issueSearchInputRef,
@@ -353,6 +355,14 @@ export function IssueListPanel({
                 disabled={isSavedViewBusy || !selectedSavedViewId}
               >
                 Apply View
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={onDuplicateSavedView}
+                disabled={isSavedViewBusy || !selectedSavedViewId}
+              >
+                Duplicate
               </button>
               <button
                 type="button"

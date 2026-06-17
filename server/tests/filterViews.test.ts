@@ -212,6 +212,85 @@ describe('saved filter views API', () => {
     });
   });
 
+  it('duplicates saved views with deterministic safe copy naming and copied filters', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const app = createApp({ databasePath: ':memory:' });
+
+      vi.setSystemTime(new Date('2026-06-17T00:12:00.000Z'));
+      const original = await request(app)
+        .post('/api/filter-views')
+        .send({
+          name: 'Release review',
+          search: 'release',
+          status: 'review',
+          priority: 'high',
+          label: 'ops',
+          includeArchived: true,
+          blockedOnly: true,
+          staleOnly: false,
+          pageSize: 50
+        })
+        .expect(201);
+
+      vi.setSystemTime(new Date('2026-06-17T00:12:01.000Z'));
+      const firstCopy = await request(app).post(`/api/filter-views/${original.body.id}/duplicate`).expect(201);
+
+      vi.setSystemTime(new Date('2026-06-17T00:12:02.000Z'));
+      const secondCopy = await request(app).post(`/api/filter-views/${original.body.id}/duplicate`).expect(201);
+
+      vi.setSystemTime(new Date('2026-06-17T00:12:03.000Z'));
+      const thirdCopy = await request(app).post(`/api/filter-views/${firstCopy.body.id}/duplicate`).expect(201);
+
+      expect(firstCopy.body).toMatchObject({
+        name: 'Release review (copy)',
+        search: original.body.search,
+        status: original.body.status,
+        priority: original.body.priority,
+        label: original.body.label,
+        includeArchived: original.body.includeArchived,
+        blockedOnly: original.body.blockedOnly,
+        staleOnly: original.body.staleOnly,
+        pageSize: original.body.pageSize,
+        createdAt: '2026-06-17T00:12:01.000Z',
+        updatedAt: '2026-06-17T00:12:01.000Z'
+      });
+      expect(firstCopy.body.id).not.toBe(original.body.id);
+
+      expect(secondCopy.body).toMatchObject({
+        name: 'Release review (copy 2)',
+        search: original.body.search,
+        pageSize: original.body.pageSize,
+        createdAt: '2026-06-17T00:12:02.000Z',
+        updatedAt: '2026-06-17T00:12:02.000Z'
+      });
+
+      expect(thirdCopy.body).toMatchObject({
+        name: 'Release review (copy 3)',
+        search: firstCopy.body.search,
+        pageSize: firstCopy.body.pageSize,
+        createdAt: '2026-06-17T00:12:03.000Z',
+        updatedAt: '2026-06-17T00:12:03.000Z'
+      });
+
+      const list = await request(app).get('/api/filter-views').expect(200);
+
+      expect(list.body.map((view: { name: string }) => view.name)).toEqual([
+        'Release review (copy 3)',
+        'Release review (copy 2)',
+        'Release review (copy)',
+        'Release review'
+      ]);
+
+      await request(app).post('/api/filter-views/not-found/duplicate').expect(404, {
+        error: 'Saved view not found'
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('rejects invalid saved view PATCH filters without mutating the saved view', async () => {
     const app = createApp({ databasePath: ':memory:' });
     const created = await request(app)

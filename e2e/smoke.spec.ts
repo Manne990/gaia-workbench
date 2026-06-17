@@ -3120,6 +3120,142 @@ test('saved filter view apply resets stale pagination and preserves page size', 
   await expect.poll(() => new URL(page.url()).searchParams.get('page')).toBeNull();
 });
 
+test('blocked-only filter resets later pagination and keeps the canonical route', async ({ page }) => {
+  const fillerIssues = Array.from({ length: 14 }, (_, index) =>
+    createIssueThroughApi(page, {
+      title: `Blocked pagination filler ${String(index + 1).padStart(2, '0')}`,
+      description: 'Broad result set used to reach a later page before narrowing.',
+      status: 'todo',
+      priority: 'low',
+      labels: ['blocked-pagination']
+    })
+  );
+  const blocker = await createIssueThroughApi(page, {
+    title: 'Blocked pagination blocker',
+    description: 'Active dependency that keeps one issue blocked.',
+    status: 'todo',
+    priority: 'medium',
+    labels: ['blocked-pagination']
+  });
+  const blockedIssue = await createIssueThroughApi(page, {
+    title: 'Blocked pagination target',
+    description: 'Should remain after blocked-only narrows the list.',
+    status: 'in_progress',
+    priority: 'high',
+    labels: ['blocked-pagination', 'focus-target']
+  });
+
+  await Promise.all(fillerIssues);
+  expect(
+    (
+      await page.request.post(`/api/issues/${blockedIssue.id}/dependencies`, {
+        data: { dependsOnIssueId: blocker.id }
+      })
+    ).ok()
+  ).toBe(true);
+
+  await page.goto('/');
+
+  const filters = page.getByLabel('Issue filters');
+  const settings = await expandDashboardSettings(page);
+  const pagination = page.getByLabel('Issue pagination');
+
+  await settings.getByLabel('Page size').selectOption('10');
+  await filters.getByLabel('Search').fill('Blocked pagination');
+  await expect(pagination).toContainText('Page 1 of 2');
+  await pagination.getByRole('button', { name: 'Next' }).click();
+  await expect(pagination).toContainText('Page 2 of 2');
+  await expect(page.getByText('Showing 11-16 of 16 matches')).toBeVisible();
+
+  await filters.getByLabel('Blocked only').check();
+
+  await expect(filters.getByLabel('Blocked only')).toBeChecked();
+  await expect(pagination).toContainText('Page 1 of 1');
+  await expect(page.getByText('No issues on this page.')).toHaveCount(0);
+  await expect(page.getByRole('row', { name: /Blocked pagination target.*In Progress.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Blocked pagination filler 14.*Todo.*Low/ })).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Blocked pagination');
+  await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
+  await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('10');
+  await expect.poll(() => new URL(page.url()).searchParams.get('page')).toBeNull();
+});
+
+test('stale-only filter resets later pagination and keeps the canonical route', async ({ page }) => {
+  const issues = Array.from({ length: 14 }, (_, index) => {
+    const paddedIndex = String(index + 1).padStart(2, '0');
+
+    return {
+      id: `00000000-0000-4000-8100-${String(index + 1).padStart(12, '0')}`,
+      title: `Stale pagination filler ${paddedIndex}`,
+      description: 'Fresh result set used to reach a later page before narrowing.',
+      status: 'todo',
+      priority: 'low',
+      labels: ['stale-pagination'],
+      dueDate: null,
+      isOverdue: false,
+      isBlocked: false,
+      dependsOnIssueIds: [],
+      archivedAt: null,
+      createdAt: `2026-06-01T00:00:${String(index).padStart(2, '0')}.000Z`,
+      updatedAt: `2026-06-01T00:00:${String(index).padStart(2, '0')}.000Z`,
+      comments: [],
+      activityEvents: []
+    };
+  });
+
+  issues.push({
+    id: '00000000-0000-4000-8100-000000000099',
+    title: 'Stale pagination target',
+    description: 'Old enough to survive stale-only after the list narrows.',
+    status: 'review',
+    priority: 'high',
+    labels: ['stale-pagination', 'focus-target'],
+    dueDate: null,
+    isOverdue: false,
+    isBlocked: false,
+    dependsOnIssueIds: [],
+    archivedAt: null,
+    createdAt: '2000-01-01T00:00:00.000Z',
+    updatedAt: '2000-01-01T00:00:00.000Z',
+    comments: [],
+    activityEvents: []
+  });
+
+  const importResponse = await page.request.post('/api/import/apply', {
+    data: {
+      exportVersion: 1,
+      issues
+    }
+  });
+
+  expect(importResponse.ok()).toBe(true);
+
+  await page.goto('/');
+
+  const filters = page.getByLabel('Issue filters');
+  const settings = await expandDashboardSettings(page);
+  const pagination = page.getByLabel('Issue pagination');
+
+  await settings.getByLabel('Page size').selectOption('10');
+  await filters.getByLabel('Search').fill('Stale pagination');
+  await expect(pagination).toContainText('Page 1 of 2');
+  await pagination.getByRole('button', { name: 'Next' }).click();
+  await expect(pagination).toContainText('Page 2 of 2');
+  await expect(page.getByText('Showing 11-15 of 15 matches')).toBeVisible();
+
+  await filters.getByLabel('Stale only').check();
+
+  await expect(filters.getByLabel('Stale only')).toBeChecked();
+  await expect(pagination).toContainText('Page 1 of 1');
+  await expect(page.getByText('No issues on this page.')).toHaveCount(0);
+  await expect(page.getByRole('row', { name: /Stale pagination target.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Stale pagination filler 14.*Todo.*Low/ })).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Stale pagination');
+  await expect.poll(() => new URL(page.url()).searchParams.get('staleOnly')).toBe('true');
+  await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('10');
+  await expect.poll(() => new URL(page.url()).searchParams.get('page')).toBeNull();
+});
+
 test('saved filter view apply preserves the local view after transient fetch failures', async ({ page }) => {
   await createIssueThroughApi(page, {
     title: 'Saved view transient target',

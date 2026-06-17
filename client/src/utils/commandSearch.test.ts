@@ -76,4 +76,28 @@ describe('getCommandPaletteMatches', () => {
     expect(matches).toHaveLength(1);
     expect(matches[0]?.id).toBe('target-saved-view');
   });
+
+  it('matches hidden imported issue aliases and drops stale aliases after command refresh', () => {
+    const importedIssueCommand = command({
+      id: 'open-imported-issue',
+      label: 'Open issue: Imported issue from JSON',
+      description: 'Open Imported issue from JSON',
+      commandHint: 'Issue',
+      searchText: ['e2e-import-issue', 'legacy-tracker-42']
+    });
+
+    expect(getCommandPaletteMatches([importedIssueCommand], 'legacy-tracker-42').map((match) => match.id)).toEqual([
+      'open-imported-issue'
+    ]);
+
+    const refreshedIssueCommand = {
+      ...importedIssueCommand,
+      searchText: ['e2e-import-issue', 'refreshed-tracker-84']
+    };
+
+    expect(getCommandPaletteMatches([refreshedIssueCommand], 'legacy-tracker-42')).toEqual([]);
+    expect(getCommandPaletteMatches([refreshedIssueCommand], 'refreshed-tracker-84').map((match) => match.id)).toEqual([
+      'open-imported-issue'
+    ]);
+  });
 });

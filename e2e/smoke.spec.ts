@@ -1505,7 +1505,21 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
   await expect(importedRow).toBeVisible();
   await expect(importedRow.locator('.blocked-pill')).toHaveText('Blocked');
 
-  await page.getByRole('button', { name: 'Open Imported issue from JSON' }).click();
+  const quickActionsButton = page.getByRole('button', { name: 'Quick Actions' });
+  const commandPalette = page.getByRole('dialog', { name: 'Command palette' });
+  const commandSearch = page.getByLabel('Search commands');
+
+  await quickActionsButton.click();
+  await expect(commandPalette).toBeVisible();
+  await commandSearch.fill('e2e-import-issue');
+  await expect(
+    commandPalette.getByRole('button', {
+      name: 'Open issue: Imported issue from JSON. Open Imported issue from JSON'
+    })
+  ).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(commandPalette).toHaveCount(0);
+  await expect(page).toHaveURL(/\/issues\/e2e-import-issue/);
 
   const detail = page.getByRole('region', { name: 'Imported issue from JSON' });
   const description = detail.locator('.detail-description');

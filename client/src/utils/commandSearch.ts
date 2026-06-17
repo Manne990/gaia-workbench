@@ -3,6 +3,7 @@ export type CommandSearchCommand = {
   label: string;
   description: string;
   commandHint: string;
+  searchText?: string | string[];
   disabled?: boolean;
 };
 
@@ -37,11 +38,20 @@ function tokenize(value: string): string[] {
     .filter(Boolean);
 }
 
+function normalizeCommandSearchText(value: CommandSearchCommand['searchText']): string {
+  if (!value) {
+    return '';
+  }
+
+  return normalizeSearchText(Array.isArray(value) ? value.join(' ') : value);
+}
+
 function prepareCommand(command: CommandSearchCommand): PreparedCommand {
   const label = normalizeSearchText(command.label);
   const description = normalizeSearchText(command.description);
   const hint = normalizeSearchText(command.commandHint);
-  const haystack = `${label} ${description} ${hint}`;
+  const searchText = normalizeCommandSearchText(command.searchText);
+  const haystack = `${label} ${description} ${hint} ${searchText}`;
 
   return {
     label,

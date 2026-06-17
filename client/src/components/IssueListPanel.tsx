@@ -2,6 +2,7 @@ import type { RefObject } from 'react';
 import { priorityLabels, priorityOrder, statusLabels, statusOrder } from '../constants';
 import type {
   ActiveFilterSummary,
+  ArchivedIssueRecovery,
   DashboardDensity,
   Issue,
   IssueLinkCopyFeedback,
@@ -68,7 +69,7 @@ type IssueListPanelProps = {
   onEditIssue: (issue: Issue, trigger: HTMLElement) => void;
   onArchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
   onUnarchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
-  recentlyArchivedIssue: { id: string; title: string } | null;
+  recentlyArchivedIssue: ArchivedIssueRecovery | null;
   onUndoArchiveIssue: (trigger: HTMLElement) => void;
   onDismissArchiveRecovery: (trigger: HTMLElement) => void;
   selectedBulkIssueIds: string[];
@@ -82,6 +83,7 @@ type IssueListPanelProps = {
   onSelectAllVisibleIssues: () => void;
   onClearBulkSelection: () => void;
   onApplyBulkStatus: () => void;
+  onApplyBulkArchive: () => void;
 };
 
 export function IssueListPanel({
@@ -150,10 +152,22 @@ export function IssueListPanel({
   onToggleIssueSelection,
   onSelectAllVisibleIssues,
   onClearBulkSelection,
-  onApplyBulkStatus
+  onApplyBulkStatus,
+  onApplyBulkArchive
 }: IssueListPanelProps) {
   const selectedIssueIdSet = new Set(selectedBulkIssueIds);
   const selectedCount = selectedBulkIssueIds.length;
+  const recentlyArchivedIssues = recentlyArchivedIssue?.issues ?? [];
+  const recentlyArchivedCount = recentlyArchivedIssues.length;
+  const recentlyArchivedTitle = recentlyArchivedIssues[0]?.title ?? '';
+  const archiveNoticeMessage =
+    recentlyArchivedCount === 1
+      ? `Issue "${recentlyArchivedTitle}" archived.`
+      : `${recentlyArchivedCount} issues archived.`;
+  const archiveUndoLabel =
+    recentlyArchivedCount === 1
+      ? `Undo archive of ${recentlyArchivedTitle}`
+      : `Undo archive of ${recentlyArchivedCount} issues`;
   const bulkSelectionContextId = 'bulk-selection-context';
   const bulkStatusFeedbackId = 'bulk-status-feedback';
   const bulkStatusErrorId = 'bulk-status-error';
@@ -161,15 +175,15 @@ export function IssueListPanel({
 
   return (
     <section className="issue-panel" aria-labelledby="issue-list-heading" aria-busy={loadState === 'loading'}>
-      {recentlyArchivedIssue ? (
+      {recentlyArchivedIssue && recentlyArchivedCount > 0 ? (
         <div className="archive-undo-notice" role="status">
-          <span>{`Issue "${recentlyArchivedIssue.title}" archived.`}</span>
+          <span>{archiveNoticeMessage}</span>
           <div className="archive-undo-actions">
             <button
               type="button"
               className="ghost-button"
               onClick={(event) => onUndoArchiveIssue(event.currentTarget)}
-              aria-label={`Undo archive of ${recentlyArchivedIssue.title}`}
+              aria-label={archiveUndoLabel}
             >
               Undo archive
             </button>
@@ -496,6 +510,16 @@ export function IssueListPanel({
               aria-label={`Change status for ${selectedCount} selected issue${selectedCount === 1 ? '' : 's'}`}
             >
               Change Status
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={onApplyBulkArchive}
+              disabled={selectedCount === 0 || isBulkStatusSubmitting}
+              aria-describedby={bulkSelectionContextId}
+              aria-label={`Archive ${selectedCount} selected issue${selectedCount === 1 ? '' : 's'}`}
+            >
+              Archive Selected
             </button>
             <button
               type="button"

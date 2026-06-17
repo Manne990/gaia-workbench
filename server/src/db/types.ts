@@ -118,6 +118,17 @@ export interface BulkIssueStatusUpdateResult {
   notFoundIds: string[];
 }
 
+export interface BulkIssueArchiveInput {
+  issueIds: string[];
+}
+
+export interface BulkIssueArchiveResult {
+  archived: Issue[];
+  unchangedIds: string[];
+  duplicateIds: string[];
+  notFoundIds: string[];
+}
+
 export type SavedFilterStatus = 'all' | IssueStatus;
 
 export type SavedFilterPriority = 'all' | IssuePriority;

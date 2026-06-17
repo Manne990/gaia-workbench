@@ -84,6 +84,20 @@ export type BulkIssueStatusResult = {
   notFoundIds: string[];
 };
 
+export type BulkIssueArchiveResult = {
+  archived: Issue[];
+  unchangedIds: string[];
+  duplicateIds: string[];
+  notFoundIds: string[];
+};
+
+export type ArchivedIssueRecovery = {
+  issues: Array<{
+    id: string;
+    title: string;
+  }>;
+};
+
 export type ServiceHealth = {
   status: 'ok';
   service: 'TinyTracker';

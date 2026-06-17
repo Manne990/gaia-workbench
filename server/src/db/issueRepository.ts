@@ -9,6 +9,8 @@ import {
   DEFAULT_ISSUE_STATUS
 } from './issueStatus.js';
 import {
+  BulkIssueArchiveInput,
+  BulkIssueArchiveResult,
   BulkIssueStatusUpdateInput,
   BulkIssueStatusUpdateResult,
   Issue,
@@ -901,6 +903,90 @@ export class IssueRepository {
     return {
       status: input.status,
       updated: attachIssueDependencyState(this.database, updatedIssues),
+      unchangedIds,
+      duplicateIds,
+      notFoundIds
+    };
+  }
+
+  bulkArchive(input: BulkIssueArchiveInput): BulkIssueArchiveResult {
+    const { uniqueIds, duplicateIds } = normalizeBulkIssueIds(input.issueIds);
+    const placeholders = uniqueIds.map(() => '?').join(', ');
+    const rows = this.database
+      .prepare(
+        `
+        SELECT id, title, description, status, priority, labels, due_date, archived_at, created_at, updated_at
+        FROM issues
+        WHERE id IN (${placeholders})
+      `
+      )
+      .all(...uniqueIds) as IssueRow[];
+    const rowsById = new Map(rows.map((row) => [row.id, row]));
+    const notFoundIds = uniqueIds.filter((id) => !rowsById.has(id));
+
+    const unchangedIds: string[] = [];
+    const changedRows: IssueRow[] = [];
+
+    for (const issueId of uniqueIds) {
+      const row = rowsById.get(issueId);
+
+      if (!row) {
+        continue;
+      }
+
+      if (row.archived_at !== null) {
+        unchangedIds.push(issueId);
+      } else {
+        changedRows.push(row);
+      }
+    }
+
+    if (changedRows.length === 0) {
+      return {
+        archived: [],
+        unchangedIds,
+        duplicateIds,
+        notFoundIds
+      };
+    }
+
+    const archivedAt = nowIso();
+    const transaction = this.database.transaction(() => {
+      const archiveIssue = this.database.prepare(
+        `
+        UPDATE issues
+        SET archived_at = @archivedAt, updated_at = @archivedAt
+        WHERE id = @id
+      `
+      );
+
+      for (const row of changedRows) {
+        archiveIssue.run({
+          id: row.id,
+          archivedAt
+        });
+
+        recordActivityEvent(this.database, {
+          issueId: row.id,
+          type: 'issue_archived',
+          metadata: { from: row.archived_at, to: archivedAt },
+          createdAt: archivedAt
+        });
+      }
+    });
+
+    transaction();
+
+    const archivedIssues = changedRows.map((row) =>
+      mapIssueRow({
+        ...row,
+        archived_at: archivedAt,
+        updated_at: archivedAt
+      })
+    );
+
+    return {
+      archived: attachIssueDependencyState(this.database, archivedIssues),
       unchangedIds,
       duplicateIds,
       notFoundIds

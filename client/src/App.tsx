@@ -330,7 +330,7 @@ export function App() {
     const activeSavedView = activeSavedViewId ? savedViews.find((view) => view.id === activeSavedViewId) : null;
     const editedSavedView = editedSavedViewId ? savedViews.find((view) => view.id === editedSavedViewId) : null;
 
-    if (activeSavedView) {
+    if (activeSavedView && areDashboardFiltersEqual(activeSavedView, dashboardFilters)) {
       return [
         { key: 'savedView', label: 'Saved view', value: activeSavedView.name },
         ...dashboardActiveFilterSummaries

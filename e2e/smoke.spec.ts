@@ -352,6 +352,10 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
 
   await commentForm.getByRole('button', { name: 'Add Comment' }).click();
   await expect(commentForm.getByRole('alert')).toHaveText('Comment is required.');
+  await commentForm.getByLabel('New comment').fill(' \n\t  ');
+  await commentForm.getByRole('button', { name: 'Add Comment' }).click();
+  await expect(commentForm.getByRole('alert')).toHaveText('Comment is required.');
+  await expect(detail.getByText('No comments yet.')).toBeVisible();
 
   await commentForm.getByLabel('New comment').fill('Initial detail comment');
   await commentForm.getByRole('button', { name: 'Add Comment' }).click();
@@ -363,6 +367,10 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
 
   await initialCommentItem.getByRole('button', { name: 'Edit comment' }).click();
   const editCommentForm = page.getByRole('form', { name: 'Edit comment form' });
+
+  await editCommentForm.getByLabel('Comment').fill(' \n\t  ');
+  await editCommentForm.getByRole('button', { name: 'Save Comment' }).click();
+  await expect(editCommentForm.getByRole('alert')).toHaveText('Comment is required.');
 
   await editCommentForm.getByLabel('Comment').fill('Edited detail comment');
   await editCommentForm.getByRole('button', { name: 'Save Comment' }).click();

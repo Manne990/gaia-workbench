@@ -2,6 +2,12 @@ import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 
+const validationErrorBody = (error: string) => ({
+  error,
+  code: 'validation_error',
+  errors: [{ message: error }]
+});
+
 describe('issues API', () => {
   it('creates an issue and reads it back', async () => {
     const app = createApp({ databasePath: ':memory:' });
@@ -1101,9 +1107,7 @@ describe('issues API', () => {
         labels: ['mutated'],
         dueDate: '2000-01-01'
       })
-      .expect(400, {
-        error: 'Invalid issue priority'
-      });
+      .expect(400, validationErrorBody('Invalid issue priority'));
 
     await request(app)
       .get(`/api/issues/${created.body.id}`)
@@ -1258,18 +1262,15 @@ describe('issues API', () => {
     await request(app)
       .post('/api/issues/bulk-status')
       .send({ status: 'waiting', issueIds: [issue.body.id] })
-      .expect(400, {
-        error: 'Invalid issue status'
-      });
-    await request(app).post('/api/issues/bulk-status').send({ status: 'done', issueIds: [] }).expect(400, {
-      error: 'Invalid bulk issue ids'
-    });
+      .expect(400, validationErrorBody('Invalid issue status'));
+    await request(app)
+      .post('/api/issues/bulk-status')
+      .send({ status: 'done', issueIds: [] })
+      .expect(400, validationErrorBody('Invalid bulk issue ids'));
     await request(app)
       .post('/api/issues/bulk-status')
       .send({ status: 'done', issueIds: [issue.body.id, ''] })
-      .expect(400, {
-        error: 'Invalid bulk issue ids'
-      });
+      .expect(400, validationErrorBody('Invalid bulk issue ids'));
 
     await request(app)
       .post('/api/issues/bulk-status')
@@ -1646,9 +1647,10 @@ describe('issues API', () => {
       'issue_created'
     ]);
 
-    await request(app).post(`/api/issues/${first.body.id}/dependencies`).send({}).expect(400, {
-      error: 'dependsOnIssueId is required'
-    });
+    await request(app)
+      .post(`/api/issues/${first.body.id}/dependencies`)
+      .send({})
+      .expect(400, validationErrorBody('dependsOnIssueId is required'));
     await request(app)
       .post(`/api/issues/${first.body.id}/dependencies`)
       .send({ dependsOnIssueId: 'missing-issue' })
@@ -1780,9 +1782,8 @@ describe('issues API', () => {
       .send('{')
       .expect(400)
       .expect((response) => {
-        expect(response.body).toEqual({ error: 'Request body must be valid JSON.' });
+        expect(response.body).toEqual(validationErrorBody('Request body must be valid JSON.'));
         expect(response.body).not.toHaveProperty('valid');
-        expect(response.body).not.toHaveProperty('errors');
       });
 
     await request(app)
@@ -1791,9 +1792,8 @@ describe('issues API', () => {
       .send('{')
       .expect(400)
       .expect((response) => {
-        expect(response.body).toEqual({ error: 'Request body must be valid JSON.' });
+        expect(response.body).toEqual(validationErrorBody('Request body must be valid JSON.'));
         expect(response.body).not.toHaveProperty('valid');
-        expect(response.body).not.toHaveProperty('errors');
       });
   });
 
@@ -1861,81 +1861,66 @@ describe('issues API', () => {
   it('returns validation errors for invalid issue payloads', async () => {
     const app = createApp({ databasePath: ':memory:' });
 
-    await request(app).post('/api/issues').send({ title: '   ' }).expect(400, {
-      error: 'title is required'
-    });
+    await request(app).post('/api/issues').send({ title: '   ' }).expect(400, validationErrorBody('title is required'));
 
     const created = await request(app).post('/api/issues').send({ title: 'Valid issue' }).expect(201);
 
     await request(app)
       .post('/api/issues')
       .send({ title: 'Invalid description issue', description: { text: 'not a string' } })
-      .expect(400, {
-        error: 'Invalid issue description'
-      });
+      .expect(400, validationErrorBody('Invalid issue description'));
 
-    await request(app).put(`/api/issues/${created.body.id}`).send({ description: 42 }).expect(400, {
-      error: 'Invalid issue description'
-    });
+    await request(app)
+      .put(`/api/issues/${created.body.id}`)
+      .send({ description: 42 })
+      .expect(400, validationErrorBody('Invalid issue description'));
 
-    await request(app).put(`/api/issues/${created.body.id}`).send([]).expect(400, {
-      error: 'Invalid issue payload'
-    });
+    await request(app)
+      .put(`/api/issues/${created.body.id}`)
+      .send([])
+      .expect(400, validationErrorBody('Invalid issue payload'));
 
-    await request(app).put(`/api/issues/${created.body.id}`).send({ status: 'done', priority: 'urgent' }).expect(400, {
-      error: 'Invalid issue priority'
-    });
+    await request(app)
+      .put(`/api/issues/${created.body.id}`)
+      .send({ status: 'done', priority: 'urgent' })
+      .expect(400, validationErrorBody('Invalid issue priority'));
 
-    await request(app).get('/api/issues?status=archived').expect(400, {
-      error: 'Invalid issue status'
-    });
+    await request(app).get('/api/issues?status=archived').expect(400, validationErrorBody('Invalid issue status'));
 
-    await request(app).get('/api/issues?priority=urgent').expect(400, {
-      error: 'Invalid issue priority'
-    });
+    await request(app).get('/api/issues?priority=urgent').expect(400, validationErrorBody('Invalid issue priority'));
 
-    await request(app).get('/api/issues?page=0').expect(400, {
-      error: 'Invalid page parameter'
-    });
+    await request(app).get('/api/issues?page=0').expect(400, validationErrorBody('Invalid page parameter'));
 
-    await request(app).get('/api/issues?page=1.5').expect(400, {
-      error: 'Invalid page parameter'
-    });
+    await request(app).get('/api/issues?page=1.5').expect(400, validationErrorBody('Invalid page parameter'));
 
-    await request(app).get('/api/issues?limit=0').expect(400, {
-      error: 'Invalid limit parameter'
-    });
+    await request(app).get('/api/issues?limit=0').expect(400, validationErrorBody('Invalid limit parameter'));
 
-    await request(app).get('/api/issues?limit=101').expect(400, {
-      error: 'Invalid limit parameter'
-    });
+    await request(app).get('/api/issues?limit=101').expect(400, validationErrorBody('Invalid limit parameter'));
 
-    await request(app).get('/api/issues?includeArchived=yes').expect(400, {
-      error: 'Invalid includeArchived parameter'
-    });
+    await request(app)
+      .get('/api/issues?includeArchived=yes')
+      .expect(400, validationErrorBody('Invalid includeArchived parameter'));
 
-    await request(app).get('/api/issues?blockedOnly=yes').expect(400, {
-      error: 'Invalid blockedOnly parameter'
-    });
+    await request(app)
+      .get('/api/issues?blockedOnly=yes')
+      .expect(400, validationErrorBody('Invalid blockedOnly parameter'));
 
-    await request(app).get('/api/issues?staleOnly=yes').expect(400, {
-      error: 'Invalid staleOnly parameter'
-    });
+    await request(app).get('/api/issues?staleOnly=yes').expect(400, validationErrorBody('Invalid staleOnly parameter'));
 
     await request(app)
       .put(`/api/issues/${created.body.id}`)
       .send({ labels: [''] })
-      .expect(400, {
-        error: 'Invalid issue labels'
-      });
+      .expect(400, validationErrorBody('Invalid issue labels'));
 
-    await request(app).post('/api/issues').send({ title: 'Bad due date', dueDate: '2026-02-30' }).expect(400, {
-      error: 'Invalid issue due date'
-    });
+    await request(app)
+      .post('/api/issues')
+      .send({ title: 'Bad due date', dueDate: '2026-02-30' })
+      .expect(400, validationErrorBody('Invalid issue due date'));
 
-    await request(app).put(`/api/issues/${created.body.id}`).send({ dueDate: 'tomorrow' }).expect(400, {
-      error: 'Invalid issue due date'
-    });
+    await request(app)
+      .put(`/api/issues/${created.body.id}`)
+      .send({ dueDate: 'tomorrow' })
+      .expect(400, validationErrorBody('Invalid issue due date'));
   });
 
   it('returns 404 for missing issues', async () => {

@@ -2,6 +2,12 @@ import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
 
+const validationErrorBody = (error: string) => ({
+  error,
+  code: 'validation_error',
+  errors: [{ message: error }]
+});
+
 describe('saved filter views API', () => {
   it('creates lists fetches renames updates and deletes saved filter views', async () => {
     const app = createApp({ databasePath: ':memory:' });
@@ -176,47 +182,50 @@ describe('saved filter views API', () => {
       error: 'Saved view name already exists'
     });
 
-    await request(app).post('/api/filter-views').send({ name: '   ' }).expect(400, {
-      error: 'Saved view name is required'
-    });
+    await request(app)
+      .post('/api/filter-views')
+      .send({ name: '   ' })
+      .expect(400, validationErrorBody('Saved view name is required'));
 
-    await request(app).post('/api/filter-views').send({ name: 'Bad status', status: 'blocked' }).expect(400, {
-      error: 'Invalid saved view status'
-    });
+    await request(app)
+      .post('/api/filter-views')
+      .send({ name: 'Bad status', status: 'blocked' })
+      .expect(400, validationErrorBody('Invalid saved view status'));
 
-    await request(app).post('/api/filter-views').send({ name: 'Bad priority', priority: 'urgent' }).expect(400, {
-      error: 'Invalid saved view priority'
-    });
+    await request(app)
+      .post('/api/filter-views')
+      .send({ name: 'Bad priority', priority: 'urgent' })
+      .expect(400, validationErrorBody('Invalid saved view priority'));
 
-    await request(app).post('/api/filter-views').send({ name: 'Bad label', label: true }).expect(400, {
-      error: 'Invalid saved view label'
-    });
+    await request(app)
+      .post('/api/filter-views')
+      .send({ name: 'Bad label', label: true })
+      .expect(400, validationErrorBody('Invalid saved view label'));
 
     await request(app)
       .post('/api/filter-views')
       .send({ name: 'Bad archive flag', includeArchived: 'true' })
-      .expect(400, {
-        error: 'Invalid saved view includeArchived'
-      });
+      .expect(400, validationErrorBody('Invalid saved view includeArchived'));
 
-    await request(app).post('/api/filter-views').send({ name: 'Bad blocked flag', blockedOnly: 'true' }).expect(400, {
-      error: 'Invalid saved view blockedOnly'
-    });
+    await request(app)
+      .post('/api/filter-views')
+      .send({ name: 'Bad blocked flag', blockedOnly: 'true' })
+      .expect(400, validationErrorBody('Invalid saved view blockedOnly'));
 
-    await request(app).post('/api/filter-views').send({ name: 'Bad stale flag', staleOnly: 'true' }).expect(400, {
-      error: 'Invalid saved view staleOnly'
-    });
+    await request(app)
+      .post('/api/filter-views')
+      .send({ name: 'Bad stale flag', staleOnly: 'true' })
+      .expect(400, validationErrorBody('Invalid saved view staleOnly'));
 
-    await request(app).post('/api/filter-views').send({ name: 'Bad page size', pageSize: 101 }).expect(400, {
-      error: 'Invalid saved view pageSize'
-    });
+    await request(app)
+      .post('/api/filter-views')
+      .send({ name: 'Bad page size', pageSize: 101 })
+      .expect(400, validationErrorBody('Invalid saved view pageSize'));
 
     await request(app)
       .post('/api/filter-views')
       .send({ name: 'Unknown key view', unexpectedField: 'survives?' })
-      .expect(400, {
-        error: 'Invalid saved view payload'
-      });
+      .expect(400, validationErrorBody('Invalid saved view payload'));
   });
 
   it('duplicates saved views with deterministic safe copy naming and copied filters', async () => {
@@ -351,9 +360,10 @@ describe('saved filter views API', () => {
     ];
 
     for (const invalidPatch of invalidPatches) {
-      await request(app).patch(`/api/filter-views/${created.body.id}`).send(invalidPatch.body).expect(400, {
-        error: invalidPatch.error
-      });
+      await request(app)
+        .patch(`/api/filter-views/${created.body.id}`)
+        .send(invalidPatch.body)
+        .expect(400, validationErrorBody(invalidPatch.error));
 
       await request(app).get(`/api/filter-views/${created.body.id}`).expect(200, created.body);
     }
@@ -368,9 +378,8 @@ describe('saved filter views API', () => {
       .send('{')
       .expect(400)
       .expect((response) => {
-        expect(response.body).toEqual({ error: 'Request body must be valid JSON.' });
+        expect(response.body).toEqual(validationErrorBody('Request body must be valid JSON.'));
         expect(response.body).not.toHaveProperty('valid');
-        expect(response.body).not.toHaveProperty('errors');
       });
 
     const created = await request(app).post('/api/filter-views').send({ name: 'Malformed body target' }).expect(201);
@@ -381,9 +390,8 @@ describe('saved filter views API', () => {
       .send('{')
       .expect(400)
       .expect((response) => {
-        expect(response.body).toEqual({ error: 'Request body must be valid JSON.' });
+        expect(response.body).toEqual(validationErrorBody('Request body must be valid JSON.'));
         expect(response.body).not.toHaveProperty('valid');
-        expect(response.body).not.toHaveProperty('errors');
       });
 
     await request(app).get(`/api/filter-views/${created.body.id}`).expect(200, created.body);
@@ -394,9 +402,8 @@ describe('saved filter views API', () => {
       .send('{')
       .expect(400)
       .expect((response) => {
-        expect(response.body).toEqual({ error: 'Request body must be valid JSON.' });
+        expect(response.body).toEqual(validationErrorBody('Request body must be valid JSON.'));
         expect(response.body).not.toHaveProperty('valid');
-        expect(response.body).not.toHaveProperty('errors');
       });
 
     await request(app).get(`/api/filter-views/${created.body.id}`).expect(200, created.body);

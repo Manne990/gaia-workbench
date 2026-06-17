@@ -82,6 +82,12 @@ type TrackerExport = {
 
 type TrackerExportBase = Omit<TrackerExport, 'auditSummary'>;
 
+type ValidationErrorResponse = {
+  error: string;
+  code: 'validation_error';
+  errors: Array<{ message: string }>;
+};
+
 const SPREADSHEET_FORMULA_PREFIX_PATTERN = /^[=+\-@\t\r\n]/;
 const activityEventTypes: ActivityEventType[] = [
   'issue_created',
@@ -173,6 +179,7 @@ const validationErrorMessages = new Set([
   'Invalid staleOnly parameter',
   'Invalid includeAuditSummary parameter',
   'Invalid bulk issue ids',
+  'dependsOnIssueId is required',
   'Saved view name is required',
   'Invalid saved view payload',
   'Invalid saved view name',
@@ -188,6 +195,18 @@ const validationErrorMessages = new Set([
 
 function isValidationError(error: unknown): error is Error {
   return error instanceof Error && validationErrorMessages.has(error.message);
+}
+
+function validationErrorResponse(message: string): ValidationErrorResponse {
+  return {
+    error: message,
+    code: 'validation_error',
+    errors: [{ message }]
+  };
+}
+
+function sendValidationError(res: Response, message: string) {
+  return res.status(400).json(validationErrorResponse(message));
 }
 
 function isJsonParseError(error: unknown): error is SyntaxError & { status?: number; type?: string } {
@@ -211,7 +230,7 @@ function jsonParseErrorHandler(error: unknown, req: Request, res: Response, next
     return;
   }
 
-  res.status(400).json({ error: 'Request body must be valid JSON.' });
+  sendValidationError(res, 'Request body must be valid JSON.');
 }
 
 function getOptionalRequestObject(value: unknown, errorMessage: string): Record<string, unknown> {
@@ -527,7 +546,7 @@ export function createApp(config: AppConfig = {}) {
       return;
     } catch (error) {
       if (isValidationError(error)) {
-        return res.status(400).json({ error: error.message });
+        return sendValidationError(res, error.message);
       }
 
       throw error;
@@ -545,7 +564,7 @@ export function createApp(config: AppConfig = {}) {
       return;
     } catch (error) {
       if (isValidationError(error)) {
-        return res.status(400).json({ error: error.message });
+        return sendValidationError(res, error.message);
       }
 
       throw error;
@@ -565,7 +584,7 @@ export function createApp(config: AppConfig = {}) {
       }
 
       if (isValidationError(error)) {
-        return res.status(400).json({ error: error.message });
+        return sendValidationError(res, error.message);
       }
 
       throw error;
@@ -607,7 +626,7 @@ export function createApp(config: AppConfig = {}) {
       }
 
       if (isValidationError(error)) {
-        return res.status(400).json({ error: error.message });
+        return sendValidationError(res, error.message);
       }
 
       throw error;
@@ -649,7 +668,7 @@ export function createApp(config: AppConfig = {}) {
       return res.status(200).json(issueRepository.list(filters, getIssueListPagination(req.query)));
     } catch (error) {
       if (isValidationError(error)) {
-        return res.status(400).json({ error: error.message });
+        return sendValidationError(res, error.message);
       }
       throw error;
     }
@@ -662,7 +681,7 @@ export function createApp(config: AppConfig = {}) {
       return res.status(200).json(issueRepository.getAuditSummary(filters));
     } catch (error) {
       if (isValidationError(error)) {
-        return res.status(400).json({ error: error.message });
+        return sendValidationError(res, error.message);
       }
       throw error;
     }
@@ -680,7 +699,7 @@ export function createApp(config: AppConfig = {}) {
       );
     } catch (error) {
       if (isValidationError(error)) {
-        return res.status(400).json({ error: error.message });
+        return sendValidationError(res, error.message);
       }
 
       throw error;
@@ -703,7 +722,7 @@ export function createApp(config: AppConfig = {}) {
       return res.status(201).json(issue);
     } catch (error) {
       if (isValidationError(error)) {
-        return res.status(400).json({ error: error.message });
+        return sendValidationError(res, error.message);
       }
       throw error;
     }
@@ -723,7 +742,7 @@ export function createApp(config: AppConfig = {}) {
       return res.status(200).json(issue);
     } catch (error) {
       if (isValidationError(error)) {
-        return res.status(400).json({ error: error.message });
+        return sendValidationError(res, error.message);
       }
       throw error;
     }
@@ -794,7 +813,7 @@ export function createApp(config: AppConfig = {}) {
       const dependsOnIssueId = req.body?.dependsOnIssueId;
 
       if (typeof dependsOnIssueId !== 'string' || dependsOnIssueId.trim().length === 0) {
-        return res.status(400).json({ error: 'dependsOnIssueId is required' });
+        return sendValidationError(res, 'dependsOnIssueId is required');
       }
 
       return res.status(201).json(issueDependencyRepository.add(req.params.id, dependsOnIssueId.trim()));
@@ -859,7 +878,7 @@ export function createApp(config: AppConfig = {}) {
       return res.status(201).json(comment);
     } catch (error) {
       if (isValidationError(error)) {
-        return res.status(400).json({ error: error.message });
+        return sendValidationError(res, error.message);
       }
       throw error;
     }
@@ -876,7 +895,7 @@ export function createApp(config: AppConfig = {}) {
       return res.status(200).json(comment);
     } catch (error) {
       if (isValidationError(error)) {
-        return res.status(400).json({ error: error.message });
+        return sendValidationError(res, error.message);
       }
       throw error;
     }

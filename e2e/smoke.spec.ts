@@ -1979,6 +1979,63 @@ test('dependency duplicate and cycle rejections keep UI graph state unchanged', 
   });
 });
 
+test('dependency form trims whitespace and blocks self-dependency before submit', async ({ page }) => {
+  const selected = await createIssueThroughApi(page, {
+    title: 'Whitespace self dependency issue',
+    description: 'Owns the dependency form under test.',
+    status: 'in_progress',
+    priority: 'medium'
+  });
+  const blocker = await createIssueThroughApi(page, {
+    title: 'Trimmed blocker issue',
+    description: 'Should be added after whitespace normalization.',
+    status: 'todo',
+    priority: 'high'
+  });
+
+  await page.goto(`/issues/${selected.id}`);
+
+  const detail = page.getByRole('region', { name: selected.title });
+  const dependencyForm = detail.getByRole('form', { name: 'Dependency form' });
+  const dependencyInput = dependencyForm.getByLabel('Add blocker issue ID');
+  const blockers = detail.getByLabel('Issue blockers');
+
+  let dependencyPostCount = 0;
+
+  await page.route('**/api/issues/*/dependencies', async (route) => {
+    if (route.request().method() === 'POST') {
+      dependencyPostCount += 1;
+    }
+
+    await route.continue();
+  });
+
+  await dependencyInput.fill(`  ${selected.id}  `);
+  await dependencyForm.getByRole('button', { name: 'Add Dependency' }).click();
+
+  await expect(detail.getByRole('alert')).toHaveText('Issue cannot depend on itself');
+  await expect(dependencyInput).toHaveValue(selected.id);
+  await expect(blockers).toContainText('No blockers.');
+  expect(dependencyPostCount).toBe(0);
+
+  const dependencyRequestPromise = page.waitForRequest((request) => {
+    const requestUrl = new URL(request.url());
+    return request.method() === 'POST' && requestUrl.pathname === `/api/issues/${selected.id}/dependencies`;
+  });
+
+  await dependencyInput.fill(`  ${blocker.id}  `);
+  await dependencyForm.getByRole('button', { name: 'Add Dependency' }).click();
+
+  const dependencyRequest = await dependencyRequestPromise;
+  expect(dependencyRequest.postDataJSON()).toEqual({ dependsOnIssueId: blocker.id });
+
+  const blockerItem = blockers.getByRole('listitem').filter({ hasText: blocker.title });
+  await expect(blockerItem).toBeVisible();
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(dependencyInput).toHaveValue('');
+  expect(dependencyPostCount).toBe(1);
+});
+
 test('dependency dependents show blocking only when the selected issue can block', async ({ page }) => {
   const completedBlocker = await createIssueThroughApi(page, {
     title: 'Completed dependency source',

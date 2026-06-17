@@ -55,10 +55,11 @@ export async function fetchIssueDependencies(issueId: string, signal?: AbortSign
 }
 
 export async function addIssueDependency(issueId: string, dependsOnIssueId: string): Promise<IssueDependencyState> {
+  const normalizedDependsOnIssueId = dependsOnIssueId.trim();
   const response = await fetch(`/api/issues/${issueId}/dependencies`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ dependsOnIssueId })
+    body: JSON.stringify({ dependsOnIssueId: normalizedDependsOnIssueId })
   });
 
   return readJsonOrThrow<IssueDependencyState>(response, 'Dependency add failed');

@@ -90,11 +90,28 @@ describe('client API errors', () => {
   it('preserves dependency mutation server error messages', async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ error: 'dependsOnIssueId is required' }, { status: 400 }));
 
-    await expect(addIssueDependency('issue-1', '')).rejects.toThrow('dependsOnIssueId is required');
+    await expect(addIssueDependency('issue-1', '  ')).rejects.toThrow('dependsOnIssueId is required');
     expect(fetch).toHaveBeenCalledWith('/api/issues/issue-1/dependencies', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dependsOnIssueId: '' })
+    });
+  });
+
+  it('normalizes dependency ids before posting mutations', async () => {
+    const dependencyState = {
+      issueId: 'issue-1',
+      dependencies: [],
+      dependents: [],
+      isBlocked: false
+    };
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(dependencyState, { status: 201 }));
+
+    await expect(addIssueDependency('issue-1', '  issue-2  ')).resolves.toEqual(dependencyState);
+    expect(fetch).toHaveBeenCalledWith('/api/issues/issue-1/dependencies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dependsOnIssueId: 'issue-2' })
     });
   });
 

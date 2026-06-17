@@ -503,6 +503,75 @@ test('dashboard issue-list error state preserves the API error and recovers on r
   expect(issueResponse.ok()).toBe(true);
 });
 
+test('issue detail activity filters timeline by category with a clear filtered empty state', async ({ page }) => {
+  const blocker = await createIssueThroughApi(page, {
+    title: 'Activity filter blocker',
+    description: 'Provides a dependency event.'
+  });
+  const issue = await createIssueThroughApi(page, {
+    title: 'Activity filter target',
+    description: 'Shows activity categories in issue detail.'
+  });
+
+  const updateResponse = await page.request.put(`/api/issues/${issue.id}`, {
+    data: {
+      status: 'in_progress'
+    }
+  });
+  expect(updateResponse.ok()).toBe(true);
+
+  const dependencyResponse = await page.request.post(`/api/issues/${issue.id}/dependencies`, {
+    data: { dependsOnIssueId: blocker.id }
+  });
+  expect(dependencyResponse.ok()).toBe(true);
+
+  const commentResponse = await page.request.post(`/api/issues/${issue.id}/comments`, {
+    data: { body: 'Activity filter comment' }
+  });
+  expect(commentResponse.ok()).toBe(true);
+
+  await page.goto(`/issues/${issue.id}`);
+
+  const detail = page.getByRole('region', { name: 'Activity filter target' });
+  const activitySection = detail.locator('.activity-section');
+  const activityFilters = detail.getByLabel('Activity category filters');
+  const visibleCount = detail.getByLabel('Visible activity count');
+
+  await expect(detail.getByRole('heading', { name: 'Activity filter target' })).toBeVisible();
+  await expect(visibleCount).toHaveText('4');
+  await expect(activitySection.getByText('Issue created')).toBeVisible();
+  await expect(activitySection.getByText('Status changed')).toBeVisible();
+  await expect(activitySection.getByText('Dependency added')).toBeVisible();
+  await expect(activitySection.getByText('Comment added')).toBeVisible();
+
+  await activityFilters.getByRole('button', { name: 'Comments' }).click();
+  await expect(visibleCount).toHaveText('1/4');
+  await expect(activitySection.getByText('Comment added')).toBeVisible();
+  await expect(activitySection.getByText('Dependency added')).toHaveCount(0);
+  await expect(activitySection.getByText('Status changed')).toHaveCount(0);
+
+  await activityFilters.getByRole('button', { name: 'Issue changes' }).click();
+  await expect(visibleCount).toHaveText('2/4');
+  await expect(activitySection.getByText('Issue created')).toBeVisible();
+  await expect(activitySection.getByText('Status changed')).toBeVisible();
+  await expect(activitySection.getByText('Comment added')).toHaveCount(0);
+
+  await activityFilters.getByRole('button', { name: 'Dependencies' }).click();
+  await expect(visibleCount).toHaveText('1/4');
+  await expect(activitySection.getByText('Dependency added')).toBeVisible();
+  await expect(activitySection.getByText('Comment added')).toHaveCount(0);
+
+  await activityFilters.getByRole('button', { name: 'Archive changes' }).click();
+  await expect(visibleCount).toHaveText('0/4');
+  await expect(activitySection.getByText('No archive activity for this issue yet.')).toBeVisible();
+  await expect(activitySection.getByRole('listitem')).toHaveCount(0);
+
+  await activityFilters.getByRole('button', { name: 'All activity' }).click();
+  await expect(visibleCount).toHaveText('4');
+  await expect(activitySection.getByText('Issue created')).toBeVisible();
+  await expect(activitySection.getByText('Comment added')).toBeVisible();
+});
+
 test('duplicates an issue from detail without copying history or dependencies', async ({ page }) => {
   const blocker = await createIssueThroughApi(page, {
     title: 'Duplicate source blocker'

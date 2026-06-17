@@ -111,6 +111,8 @@ export type ActivityEvent = {
   createdAt: string;
 };
 
+export type ActivityCategory = 'all' | 'comments' | 'issue_changes' | 'dependencies' | 'archive';
+
 export type ImportEntity = 'issue' | 'comment' | 'commentEditHistory' | 'activityEvent' | 'savedFilterView';
 export type ImportConflictPolicy = 'skip-conflicts' | 'replace-conflicts';
 export type ImportDecisionType = 'import' | 'skip-existing' | 'replace-existing' | 'reject';

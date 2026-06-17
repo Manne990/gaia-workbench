@@ -434,6 +434,16 @@ export function createApp(config: AppConfig = {}) {
     return res.status(200).json(view);
   });
 
+  app.post('/api/filter-views/:id/duplicate', (req, res) => {
+    const view = savedFilterViewRepository.duplicate(req.params.id);
+
+    if (!view) {
+      return res.status(404).json({ error: 'Saved view not found' });
+    }
+
+    return res.status(201).json(view);
+  });
+
   app.patch('/api/filter-views/:id', (req, res) => {
     try {
       const view = savedFilterViewRepository.update(req.params.id, req.body ?? {});

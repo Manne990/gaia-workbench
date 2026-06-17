@@ -2948,6 +2948,22 @@ test('saved filter views persist restore and compose with detail routes', async 
   await expect(filters.getByLabel('Label')).toHaveValue('archive');
 
   await savedViews.getByLabel('Saved views').selectOption({ label: 'Review archive view' });
+  await savedViews.getByRole('button', { name: 'Duplicate' }).click();
+  const duplicatedSavedViewList = await page.request.get('/api/filter-views');
+  const duplicatedSavedViewListBody = (await duplicatedSavedViewList.json()) as Array<{ id: string; name: string }>;
+  const duplicatedSavedView = duplicatedSavedViewListBody.find((view) => view.name === 'Review archive view (copy)');
+
+  expect(duplicatedSavedViewList.ok()).toBe(true);
+  expect(duplicatedSavedView).toBeDefined();
+  await expect(savedViews.getByLabel('Saved views')).toContainText('Review archive view (copy)');
+  await expect(savedViews.getByLabel('Saved views')).toHaveValue(duplicatedSavedView!.id);
+  await expect(savedViews.getByLabel('View name')).toHaveValue('Review archive view (copy)');
+  await savedViews.getByRole('button', { name: 'Apply View' }).click();
+  await expect(filters.getByLabel('Search')).toHaveValue('Saved view target');
+  await expect(filters.getByLabel('Label')).toHaveValue('archive');
+  await expect(settings.getByLabel('Page size')).toHaveValue('50');
+
+  await savedViews.getByLabel('Saved views').selectOption({ label: 'Review archive view' });
   await savedViews.getByLabel('View name').fill('Renamed archive view');
   await savedViews.getByRole('button', { name: 'Rename' }).click();
   await expect(savedViews.getByLabel('Saved views')).toContainText('Renamed archive view');
@@ -2987,7 +3003,10 @@ test('saved filter views persist restore and compose with detail routes', async 
   await expect(page.getByRole('region', { name: targetIssue.title })).toBeVisible();
 
   await savedViews.getByRole('button', { name: 'Delete' }).click();
+  await savedViews.getByLabel('Saved views').selectOption({ label: 'Review archive view (copy)' });
+  await savedViews.getByRole('button', { name: 'Delete' }).click();
   await expect(savedViews.getByRole('option', { name: 'Renamed archive view' })).toHaveCount(0);
+  await expect(savedViews.getByRole('option', { name: 'Review archive view (copy)' })).toHaveCount(0);
   await expect(savedViews.getByLabel('Saved views')).toHaveValue('');
   await expect(savedViews.getByLabel('View name')).toHaveValue('');
   await expect(savedViews.getByRole('button', { name: 'Apply View' })).toBeDisabled();

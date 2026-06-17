@@ -170,6 +170,14 @@ export async function deleteSavedFilterView(id: string): Promise<void> {
   }
 }
 
+export async function duplicateSavedFilterView(id: string): Promise<SavedFilterView> {
+  const response = await fetch(`/api/filter-views/${id}/duplicate`, {
+    method: 'POST'
+  });
+
+  return readJsonOrThrow<SavedFilterView>(response, 'Saved view duplicate failed');
+}
+
 function withImportPolicy(payload: unknown, conflictPolicy: ImportConflictPolicy): unknown {
   return payload && typeof payload === 'object' && !Array.isArray(payload)
     ? { ...(payload as Record<string, unknown>), conflictPolicy }

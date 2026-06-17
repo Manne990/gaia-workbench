@@ -339,6 +339,26 @@ export class SavedFilterViewRepository {
     return this.getById(id);
   }
 
+  duplicate(id: string): SavedFilterView | null {
+    const current = this.getById(id);
+
+    if (!current) {
+      return null;
+    }
+
+    return this.create({
+      name: this.buildDuplicateName(current.name),
+      search: current.search,
+      status: current.status,
+      priority: current.priority,
+      label: current.label,
+      includeArchived: current.includeArchived,
+      blockedOnly: current.blockedOnly,
+      staleOnly: current.staleOnly,
+      pageSize: current.pageSize
+    });
+  }
+
   delete(id: string): boolean {
     const result = this.database.prepare('DELETE FROM saved_filter_views WHERE id = @id').run({ id });
 
@@ -361,5 +381,41 @@ export class SavedFilterViewRepository {
     if (existing) {
       throw new DuplicateSavedFilterViewNameError();
     }
+  }
+
+  private buildDuplicateName(name: string): string {
+    const sourceName = this.getDuplicateSourceName(name);
+    const baseName = `${sourceName} (copy)`;
+
+    if (!this.hasName(baseName)) {
+      return baseName;
+    }
+
+    let suffix = 2;
+
+    while (this.hasName(`${sourceName} (copy ${suffix})`)) {
+      suffix += 1;
+    }
+
+    return `${sourceName} (copy ${suffix})`;
+  }
+
+  private hasName(name: string): boolean {
+    const existing = this.database
+      .prepare(
+        `
+        SELECT 1
+        FROM saved_filter_views
+        WHERE name = @name COLLATE NOCASE
+        LIMIT 1
+      `
+      )
+      .get({ name }) as { 1: number } | undefined;
+
+    return Boolean(existing);
+  }
+
+  private getDuplicateSourceName(name: string): string {
+    return name.replace(/ \(copy(?: \d+)?\)$/i, '');
   }
 }

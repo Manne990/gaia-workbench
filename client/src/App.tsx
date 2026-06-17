@@ -8,6 +8,7 @@ import {
   bulkUpdateIssueStatus,
   createSavedFilterView,
   deleteSavedFilterView,
+  duplicateSavedFilterView,
   duplicateIssue,
   fetchCommentHistory,
   fetchIssue,
@@ -758,6 +759,30 @@ export function App() {
       upsertSavedView(await updateSavedFilterView(selectedSavedViewId, { name }));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Saved view rename failed.';
+
+      setSavedViewError(message);
+
+      if (message === 'Saved view not found') {
+        removeMissingSavedView(selectedSavedViewId);
+      }
+    } finally {
+      setIsSavedViewBusy(false);
+    }
+  }
+
+  async function handleDuplicateSavedView() {
+    if (!selectedSavedViewId) {
+      setSavedViewError('Choose a saved view to duplicate.');
+      return;
+    }
+
+    setIsSavedViewBusy(true);
+    setSavedViewError(null);
+
+    try {
+      upsertSavedView(await duplicateSavedFilterView(selectedSavedViewId));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Saved view duplicate failed.';
 
       setSavedViewError(message);
 
@@ -1750,6 +1775,7 @@ export function App() {
           }}
           onSaveCurrentView={handleSaveCurrentView}
           onApplySavedView={handleApplySavedView}
+          onDuplicateSavedView={handleDuplicateSavedView}
           onRenameSavedView={handleRenameSavedView}
           onDeleteSavedView={handleDeleteSavedView}
           issueSearchInputRef={issueSearchInputRef}

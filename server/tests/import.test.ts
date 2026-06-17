@@ -1183,6 +1183,79 @@ describe('tracker import API', () => {
     });
   });
 
+  it('exposes recoverable dependency warnings per row without hiding conflict rows', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const warningPayload = cloneExport(payload);
+    const blockedIssueIndex = warningPayload.issues.findIndex((issue) => (issue.dependsOnIssueIds ?? []).length > 0);
+    const blockedIssue = warningPayload.issues[blockedIssueIndex];
+
+    if (!blockedIssue?.dependsOnIssueIds?.[0]) {
+      throw new Error('Expected import fixture to include an issue with a dependency');
+    }
+
+    const dependencyTarget = warningPayload.issues.find((issue) => issue.id === blockedIssue.dependsOnIssueIds?.[0]);
+
+    if (!dependencyTarget) {
+      throw new Error('Expected import fixture dependency to reference another issue');
+    }
+
+    const existingConflictPayload = cloneExport(payload);
+    existingConflictPayload.issues = existingConflictPayload.issues.filter((issue) => issue.id === dependencyTarget.id);
+    existingConflictPayload.savedFilterViews = [];
+
+    await request(app).post('/api/import/apply').send(existingConflictPayload).expect(200);
+
+    dependencyTarget.status = 'done';
+    blockedIssue.isBlocked = false;
+
+    const preview = await request(app).post('/api/import/preview').send(warningPayload).expect(200);
+    const warningDecision = preview.body.decisions.find(
+      (decision: { entity: string; issueId?: string }) =>
+        decision.entity === 'issue' && decision.issueId === blockedIssue.id
+    );
+    const conflictDecision = preview.body.decisions.find(
+      (decision: { entity: string; issueId?: string }) =>
+        decision.entity === 'issue' && decision.issueId === dependencyTarget.id
+    );
+
+    expect(preview.body).toMatchObject({
+      valid: true,
+      errors: [],
+      warnings: [
+        expect.objectContaining({
+          code: 'non_blocking_dependency',
+          path: `$.issues[${blockedIssueIndex}].dependsOnIssueIds[0]`,
+          message: 'Dependency target is done or archived and will be imported without blocking this issue.',
+          value: dependencyTarget.id
+        })
+      ],
+      summary: {
+        categories: {
+          creates: expect.objectContaining({ issues: 1 }),
+          conflicts: expect.objectContaining({ issues: 1 })
+        }
+      }
+    });
+    expect(warningDecision).toMatchObject({
+      decision: 'import',
+      matchType: 'new',
+      warnings: [
+        expect.objectContaining({
+          code: 'non_blocking_dependency',
+          path: `$.issues[${blockedIssueIndex}].dependsOnIssueIds[0]`,
+          value: dependencyTarget.id
+        })
+      ]
+    });
+    expect(conflictDecision).toMatchObject({
+      decision: 'skip-existing',
+      matchType: 'changed',
+      policyDecision: 'skip'
+    });
+    expect(conflictDecision).not.toHaveProperty('warnings');
+  });
+
   it('replaces changed issue fields and dependencies while importing new descendants under replace policy', async () => {
     const app = createApp({ databasePath: ':memory:' });
     const payload = await createExportFixture();

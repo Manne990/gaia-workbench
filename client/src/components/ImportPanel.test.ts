@@ -148,4 +148,56 @@ describe('ImportPanel', () => {
     expect(markup).toContain('<th scope="col">Conflict</th>');
     expect(markup).not.toContain('Exact matches');
   });
+
+  it('renders structured import preview warnings separately from validation errors', () => {
+    const plan: ImportPlan = {
+      valid: true,
+      exportVersion: 1,
+      policy: 'skip-conflicts',
+      summary: {
+        input: emptyCounts,
+        toCreate: emptyCounts,
+        toReplace: emptyCounts,
+        skip: emptyCounts,
+        exactMatches: emptyCounts,
+        changed: emptyCounts,
+        categories: emptyCategories,
+        reject: 0
+      },
+      decisions: [],
+      errors: [],
+      warnings: [
+        {
+          code: 'non_blocking_dependency',
+          path: '$.issues[0].dependsOnIssueIds[0]',
+          message: 'Dependency target is done or archived and will be imported without blocking this issue.',
+          value: 'done-blocker'
+        }
+      ]
+    };
+
+    const markup = renderToStaticMarkup(
+      createElement(ImportPanel, {
+        fileName: 'tracker.json',
+        importPlan: plan,
+        importPolicy: 'skip-conflicts',
+        importError: null,
+        importMessage: 'Ready.',
+        isPreviewing: false,
+        isApplying: false,
+        canApply: true,
+        onPolicyChange: () => {},
+        onDownloadReport: () => {},
+        onApply: () => {},
+        onCancel: () => {}
+      })
+    );
+
+    expect(markup).toContain('Warnings');
+    expect(markup).toContain('$.issues[0].dependsOnIssueIds[0]');
+    expect(markup).toContain('Dependency target is done or archived and will be imported without blocking this issue.');
+    expect(markup).toContain('Received');
+    expect(markup).toContain('done-blocker');
+    expect(markup).not.toContain('Validation errors');
+  });
 });

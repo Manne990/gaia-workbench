@@ -31,6 +31,7 @@ import { useImportWorkflow } from './hooks/useImportWorkflow';
 import { useIssueDirectory } from './hooks/useIssueDirectory';
 import { useSelectedIssueDiscussion } from './hooks/useSelectedIssueDiscussion';
 import type {
+  ActiveFilterSummary,
   ActiveForm,
   CancelOptions,
   CommentLoadState,
@@ -164,8 +165,7 @@ export function App() {
     filteredIssues,
     pagination,
     totalIssueCount,
-    activeFilterSummaries,
-    hasActiveFilters,
+    activeFilterSummaries: dashboardActiveFilterSummaries,
     auditSummary,
     statusCounts,
     issueListSummary,
@@ -246,6 +246,15 @@ export function App() {
 
     return query ? `/api/export.csv?${query}` : '/api/export.csv';
   }, [dashboardFilters]);
+  const activeFilterSummaries: ActiveFilterSummary[] = useMemo(() => {
+    const activeSavedViewId = activeSavedViewIdRef.current;
+    const activeSavedView = activeSavedViewId ? savedViews.find((view) => view.id === activeSavedViewId) : null;
+
+    return activeSavedView
+      ? [{ key: 'savedView', label: 'Saved view', value: activeSavedView.name }, ...dashboardActiveFilterSummaries]
+      : dashboardActiveFilterSummaries;
+  }, [dashboardActiveFilterSummaries, savedViews, selectedSavedViewId]);
+  const hasActiveFilters = activeFilterSummaries.length > 0;
   const loadSavedViews = useCallback(async (signal?: AbortSignal) => {
     try {
       setSavedViews(await fetchSavedFilterViews(signal));
@@ -900,12 +909,14 @@ export function App() {
     setSavedViewError(null);
 
     try {
-      upsertSavedView(
-        await createSavedFilterView({
-          name,
-          ...dashboardFiltersRef.current
-        })
-      );
+      const view = await createSavedFilterView({
+        name,
+        ...dashboardFiltersRef.current
+      });
+
+      activeSavedViewIdRef.current = view.id;
+      upsertSavedView(view);
+      writeRouteState(selectedIssueIdRef.current, dashboardFiltersRef.current, 'replace', view.id);
     } catch (error) {
       setSavedViewError(error instanceof Error ? error.message : 'Saved view create failed.');
     } finally {

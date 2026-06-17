@@ -1861,6 +1861,22 @@ td .issue-state-flags span {
   outline: 3px solid #d9ecee;
 }
 
+.dependency-rollback-feedback {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #e6b7ad;
+  border-radius: 8px;
+  background: #fff8f7;
+  color: #9a2f2f;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.dependency-rollback-feedback strong {
+  color: #812626;
+  font-weight: 900;
+}
+
 .activity-list {
   display: grid;
   gap: 10px;

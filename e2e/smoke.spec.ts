@@ -2382,6 +2382,67 @@ test('dependency add refreshes blocked-only list while preserving detail route',
   await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Blocked-only live detail');
 });
 
+test('blocked-only detail recovers when an archived blocker is restored', async ({ page }) => {
+  const blocker = await createIssueThroughApi(page, {
+    title: 'Blocked archive recovery blocker',
+    description: 'Archiving this issue should unblock the dependent until recovery.',
+    status: 'todo',
+    priority: 'high'
+  });
+  const blocked = await createIssueThroughApi(page, {
+    title: 'Blocked archive recovery target',
+    description: 'Stays selected while its blocker is archived and restored.',
+    status: 'in_progress',
+    priority: 'medium'
+  });
+  const dependencyResponse = await page.request.post(`/api/issues/${blocked.id}/dependencies`, {
+    data: { dependsOnIssueId: blocker.id }
+  });
+
+  expect(dependencyResponse.ok()).toBe(true);
+
+  await page.goto(`/issues/${blocked.id}?blockedOnly=true&search=${encodeURIComponent('Blocked archive recovery')}`);
+
+  const filters = page.getByLabel('Issue filters');
+  const detail = page.getByRole('region', { name: blocked.title });
+  const blockedRow = page.getByRole('row', { name: /Blocked archive recovery target.*In Progress.*Medium/ });
+  const blockersSection = detail.getByLabel('Issue blockers');
+  const blockerItem = blockersSection.getByRole('listitem').filter({ hasText: blocker.title });
+
+  await expect(filters.getByLabel('Blocked only')).toBeChecked();
+  await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
+  await expect(detail.getByRole('heading', { name: blocked.title })).toBeVisible();
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
+  await expect(blockerItem.locator('.blocked-pill')).toHaveText('Blocking');
+
+  const archiveBlockerResponse = await page.request.post(`/api/issues/${blocker.id}/archive`);
+  expect(archiveBlockerResponse.ok()).toBe(true);
+  await page.reload();
+
+  await expect(filters.getByLabel('Blocked only')).toBeChecked();
+  await expect(page.getByText('No issues match the active filters.')).toBeVisible();
+  await expect(blockedRow).toHaveCount(0);
+  await expect(detail.getByRole('heading', { name: blocked.title })).toBeVisible();
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toHaveCount(0);
+  await expect(blockerItem.getByText('Archived')).toBeVisible();
+  await expect(blockerItem.locator('.blocked-pill')).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${blocked.id}`);
+  await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
+
+  const restoreBlockerResponse = await page.request.post(`/api/issues/${blocker.id}/unarchive`);
+  expect(restoreBlockerResponse.ok()).toBe(true);
+  await page.reload();
+
+  await expect(filters.getByLabel('Blocked only')).toBeChecked();
+  await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
+  await expect(blockerItem.getByText('Archived')).toHaveCount(0);
+  await expect(blockerItem.locator('.blocked-pill')).toHaveText('Blocking');
+  await expect(page.getByText('No issues match the active filters.')).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${blocked.id}`);
+  await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
+});
+
 test('dependency duplicate and cycle rejections keep UI graph state unchanged', async ({ page }) => {
   const first = await createIssueThroughApi(page, {
     title: 'Duplicate cycle first issue',

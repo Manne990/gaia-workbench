@@ -1748,16 +1748,23 @@ test('bulk visible selection changes issue status with confirmation and scoped a
   await page.goto('/?search=Bulk%20status%20visible');
 
   const bulkActions = page.getByLabel('Bulk status actions');
+  const firstSelection = page.getByLabel(`Select ${first.title}`);
+  const statusSelect = bulkActions.getByLabel(/Bulk status target\./);
+  const changeStatusButton = bulkActions.getByLabel('Change status for 3 selected issues');
 
   await expect(page.getByRole('row', { name: /Bulk status visible first.*Todo.*High/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /Bulk status visible second.*In Progress.*Medium/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /Bulk status visible unchanged.*Done.*Low/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /Bulk status hidden issue/ })).toHaveCount(0);
   await expect(bulkActions).toContainText('0 selected');
+  await expect(firstSelection).toHaveAttribute('aria-describedby', 'bulk-selection-context');
+  await expect(firstSelection).toHaveAccessibleDescription('0 issues selected from the current page.');
 
-  await bulkActions.getByRole('button', { name: 'Select all visible' }).click();
+  await bulkActions.getByRole('button', { name: 'Select all 3 visible issues' }).click();
   await expect(bulkActions).toContainText('3 selected');
-  await bulkActions.getByLabel('Status').selectOption('done');
+  await expect(statusSelect).toHaveAccessibleName('Bulk status target. 3 issues selected.');
+  await expect(changeStatusButton).toBeEnabled();
+  await statusSelect.selectOption('done');
 
   page.once('dialog', async (dialog) => {
     expect(dialog.message()).toBe('Change 3 selected issues to Done?');
@@ -1768,6 +1775,8 @@ test('bulk visible selection changes issue status with confirmation and scoped a
   await expect(bulkActions).toContainText('Changed 2 issues to Done.');
   await expect(bulkActions).toContainText('1 already was Done.');
   await expect(bulkActions).toContainText('0 selected');
+  await expect(bulkActions.getByRole('status')).toHaveAttribute('aria-live', 'polite');
+  await expect(bulkActions.getByRole('status')).toHaveAttribute('aria-atomic', 'true');
   await expect(page.getByRole('row', { name: /Bulk status visible first.*Done.*High/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /Bulk status visible second.*Done.*Medium/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /Bulk status visible unchanged.*Done.*Low/ })).toBeVisible();
@@ -1846,15 +1855,15 @@ test('bulk status reports mixed invalid selections clearly and clears stale sele
   await page.goto('/?search=Bulk%20mixed%20invalid');
 
   const bulkActions = page.getByLabel('Bulk status actions');
-  await bulkActions.getByRole('button', { name: 'Select all visible' }).click();
+  await bulkActions.getByRole('button', { name: 'Select all 2 visible issues' }).click();
   await expect(bulkActions).toContainText('2 selected');
-  await bulkActions.getByLabel('Status').selectOption('done');
+  await bulkActions.getByLabel(/Bulk status target\./).selectOption('done');
 
   page.once('dialog', async (dialog) => {
     expect(dialog.message()).toBe('Change 2 selected issues to Done?');
     await dialog.accept();
   });
-  await bulkActions.getByRole('button', { name: 'Change Status' }).click();
+  await bulkActions.getByRole('button', { name: 'Change status for 2 selected issues' }).click();
 
   await expect
     .poll(() => page.evaluate(() => window.sessionStorage.getItem('bulk-status-mixed-invalid-mutated')))
@@ -1904,7 +1913,7 @@ test('bulk status refreshes selected dependency detail when a blocker resolves',
   const bulkActions = page.getByLabel('Bulk status actions');
 
   await expect(bulkActions).toContainText('1 selected');
-  await bulkActions.getByLabel('Status').selectOption('done');
+  await bulkActions.getByLabel(/Bulk status target\./).selectOption('done');
 
   page.once('dialog', async (dialog) => {
     expect(dialog.message()).toBe('Change 1 selected issue to Done?');
@@ -1928,6 +1937,50 @@ test('bulk status refreshes selected dependency detail when a blocker resolves',
   await expect(detail.getByText('Waiting on at least one active dependency.')).toHaveCount(0);
   await expect(blockerItem.getByText('Done')).toBeVisible();
   await expect(blockerItem.locator('.blocked-pill')).toHaveCount(0);
+});
+
+test('bulk status failure announces an assertive error without clearing selection', async ({ page }) => {
+  await createIssueThroughApi(page, {
+    title: 'Bulk status failure issue',
+    description: 'Used to verify accessible failure feedback.',
+    status: 'todo',
+    priority: 'medium'
+  });
+
+  await page.goto('/?search=Bulk%20status%20failure');
+
+  await page.route('**/api/issues/bulk-status', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+
+    await route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'Bulk status update failed test.' })
+    });
+  });
+
+  const bulkActions = page.getByLabel('Bulk status actions');
+  const selection = page.getByLabel('Select Bulk status failure issue');
+
+  await selection.check();
+  await expect(bulkActions).toContainText('1 selected');
+  await bulkActions.getByLabel(/Bulk status target\./).selectOption('done');
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toBe('Change 1 selected issue to Done?');
+    await dialog.accept();
+  });
+  await bulkActions.getByRole('button', { name: 'Change status for 1 selected issue' }).click();
+
+  const alert = bulkActions.getByRole('alert');
+
+  await expect(alert).toHaveText('Bulk status update failed test.');
+  await expect(alert).toHaveAttribute('aria-live', 'assertive');
+  await expect(alert).toHaveAttribute('aria-atomic', 'true');
+  await expect(bulkActions).toContainText('1 selected');
 });
 
 test('stale issue signal filters and persists through saved views', async ({ page }) => {

@@ -43,12 +43,23 @@ type ExportedIssue = Issue & {
 
 type ExportAuditSnapshot = Record<string, ActivityMetadataValue>;
 
+type ExportAuditMeetingImpact =
+  | 'scope'
+  | 'workflow'
+  | 'priority'
+  | 'schedule'
+  | 'blocking'
+  | 'discussion'
+  | 'visibility';
+
 type ExportAuditTimelineEntry = {
   eventId: string;
   issueId: string;
   issueTitle: string;
   type: ActivityEventType;
   createdAt: string;
+  meetingLabel: string;
+  meetingImpact: ExportAuditMeetingImpact;
   before: ExportAuditSnapshot | null;
   after: ExportAuditSnapshot | null;
 };
@@ -445,6 +456,78 @@ function getActivityMetadataValue(event: ActivityEvent, key: string): ActivityMe
   return event.metadata[key] ?? null;
 }
 
+function formatAuditMeetingValue(value: ActivityMetadataValue): string {
+  if (Array.isArray(value)) {
+    return value.length > 0 ? value.join(', ') : 'none';
+  }
+
+  return value && value.length > 0 ? value : 'none';
+}
+
+function formatAuditMeetingChange(event: ActivityEvent, label: string): string {
+  return `${label}: ${formatAuditMeetingValue(getActivityMetadataValue(event, 'from'))} -> ${formatAuditMeetingValue(
+    getActivityMetadataValue(event, 'to')
+  )}`;
+}
+
+function buildAuditMeetingLabel(event: ActivityEvent, issue: ExportedIssue): string {
+  switch (event.type) {
+    case 'issue_created':
+      return `Issue created: ${formatAuditMeetingValue(getActivityMetadataValue(event, 'title') ?? issue.title)}`;
+    case 'issue_title_changed':
+      return formatAuditMeetingChange(event, 'Title changed');
+    case 'issue_description_changed':
+      return formatAuditMeetingChange(event, 'Description changed');
+    case 'issue_status_changed':
+      return formatAuditMeetingChange(event, 'Status changed');
+    case 'issue_priority_changed':
+      return formatAuditMeetingChange(event, 'Priority changed');
+    case 'issue_due_date_changed':
+      return formatAuditMeetingChange(event, 'Due date changed');
+    case 'issue_labels_changed':
+      return formatAuditMeetingChange(event, 'Labels changed');
+    case 'issue_archived':
+      return 'Issue archived';
+    case 'issue_unarchived':
+      return 'Issue restored';
+    case 'issue_dependency_added':
+      return `Dependency added: ${formatAuditMeetingValue(getActivityMetadataValue(event, 'title'))}`;
+    case 'issue_dependency_removed':
+      return `Dependency removed: ${formatAuditMeetingValue(getActivityMetadataValue(event, 'title'))}`;
+    case 'comment_added':
+      return `Comment added: ${formatAuditMeetingValue(getActivityMetadataValue(event, 'preview'))}`;
+    case 'comment_edited':
+      return `Comment edited: ${formatAuditMeetingValue(
+        getActivityMetadataValue(event, 'previousPreview')
+      )} -> ${formatAuditMeetingValue(getActivityMetadataValue(event, 'newPreview'))}`;
+  }
+}
+
+function buildAuditMeetingImpact(event: ActivityEvent): ExportAuditMeetingImpact {
+  switch (event.type) {
+    case 'issue_status_changed':
+      return 'workflow';
+    case 'issue_priority_changed':
+      return 'priority';
+    case 'issue_due_date_changed':
+      return 'schedule';
+    case 'issue_dependency_added':
+    case 'issue_dependency_removed':
+      return 'blocking';
+    case 'comment_added':
+    case 'comment_edited':
+      return 'discussion';
+    case 'issue_archived':
+    case 'issue_unarchived':
+      return 'visibility';
+    case 'issue_created':
+    case 'issue_title_changed':
+    case 'issue_description_changed':
+    case 'issue_labels_changed':
+      return 'scope';
+  }
+}
+
 function buildFieldChangeSnapshot(
   event: ActivityEvent,
   field: string
@@ -527,6 +610,8 @@ function buildActivityTimelineEntry(issue: ExportedIssue, event: ActivityEvent):
     issueTitle: issue.title,
     type: event.type,
     createdAt: event.createdAt,
+    meetingLabel: buildAuditMeetingLabel(event, issue),
+    meetingImpact: buildAuditMeetingImpact(event),
     ...snapshots
   };
 }

@@ -75,6 +75,8 @@ type ExportAuditSummary = {
       issueTitle: string;
       type: string;
       createdAt: string;
+      meetingLabel: string;
+      meetingImpact: string;
       before: Record<string, unknown> | null;
       after: Record<string, unknown> | null;
     }>;
@@ -518,10 +520,14 @@ describe('tracker export API', () => {
 
     expect(targetTimelineEntry('issue_status_changed')).toMatchObject({
       issueTitle: 'Timeline target issue',
+      meetingLabel: 'Status changed: todo -> review',
+      meetingImpact: 'workflow',
       before: { status: 'todo' },
       after: { status: 'review' }
     });
     expect(targetTimelineEntry('issue_dependency_added')).toMatchObject({
+      meetingLabel: 'Dependency added: Timeline blocker issue',
+      meetingImpact: 'blocking',
       before: { dependsOnIssueId: null, dependencyTitle: null },
       after: {
         dependsOnIssueId: blocker.body.id,
@@ -529,6 +535,8 @@ describe('tracker export API', () => {
       }
     });
     expect(targetTimelineEntry('comment_added')).toMatchObject({
+      meetingLabel: 'Comment added: Timeline comment creation',
+      meetingImpact: 'discussion',
       before: { commentId: null, commentPreview: null },
       after: {
         commentId: comment.body.id,
@@ -536,10 +544,14 @@ describe('tracker export API', () => {
       }
     });
     expect(targetTimelineEntry('issue_archived')).toMatchObject({
+      meetingLabel: 'Issue archived',
+      meetingImpact: 'visibility',
       before: { archivedAt: null },
       after: { archivedAt: archived.body.archivedAt }
     });
     expect(targetTimelineEntry('issue_unarchived')).toMatchObject({
+      meetingLabel: 'Issue restored',
+      meetingImpact: 'visibility',
       before: { archivedAt: archived.body.archivedAt },
       after: { archivedAt: null }
     });

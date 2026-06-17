@@ -103,14 +103,11 @@ function importRequestErrorMessage(error: unknown, fallbackMessage: string): str
   return error instanceof Error && error.message ? error.message : fallbackMessage;
 }
 
-function importPlanTouchesIssue(plan: ImportPlan, issueId: string | null): issueId is string {
+function importPlanReferencesIssue(plan: ImportPlan, issueId: string | null): issueId is string {
   return Boolean(
     issueId &&
     plan.decisions.some(
-      (decision) =>
-        decision.entity === 'issue' &&
-        decision.issueId === issueId &&
-        (decision.decision === 'import' || decision.decision === 'replace-existing')
+      (decision) => decision.entity === 'issue' && (decision.issueId === issueId || decision.sourceId === issueId)
     )
   );
 }
@@ -930,10 +927,14 @@ export function App() {
 
     try {
       const plan = await applyImport(importPayload, importPolicy);
+      const selectedIssueIdAtApply = selectedIssueIdRef.current;
 
       setImportPlan(plan);
 
       if (!plan.valid) {
+        if (importPlanReferencesIssue(plan, selectedIssueIdAtApply)) {
+          await refreshSelectedIssueDetail(selectedIssueIdAtApply);
+        }
         setImportError('Import apply found validation errors.');
         return;
       }
@@ -943,8 +944,7 @@ export function App() {
       returnToFirstPage();
       await loadSavedViews();
 
-      const selectedIssueIdAtApply = selectedIssueIdRef.current;
-      if (importPlanTouchesIssue(plan, selectedIssueIdAtApply)) {
+      if (importPlanReferencesIssue(plan, selectedIssueIdAtApply)) {
         await refreshSelectedIssueDetail(selectedIssueIdAtApply);
       }
     } catch (error) {
@@ -1458,6 +1458,7 @@ export function App() {
       const changedCount = result.updated.length;
       const unchangedCount = result.unchangedIds.length;
       const duplicateCount = result.duplicateIds.length;
+      const notFoundCount = result.notFoundIds.length;
       const selectedIssueIdAfterMutation = selectedIssueIdRef.current;
 
       setSelectedBulkIssueIds([]);
@@ -1473,6 +1474,7 @@ export function App() {
           unchangedCount > 0
             ? `${unchangedCount} already ${unchangedCount === 1 ? 'was' : 'were'} ${statusLabels[result.status]}.`
             : null,
+          notFoundCount > 0 ? `${notFoundCount} missing ${notFoundCount === 1 ? 'id was' : 'ids were'} skipped.` : null,
           duplicateCount > 0
             ? `${duplicateCount} duplicate ${duplicateCount === 1 ? 'id was' : 'ids were'} ignored.`
             : null
@@ -1781,6 +1783,7 @@ export function App() {
           issueSearchInputRef={issueSearchInputRef}
           issueListHeadingRef={issueListHeadingRef}
           onClearFilters={handleClearFilters}
+          onRetryLoad={refreshIssues}
           onPreviousPage={goToPreviousPage}
           onNextPage={goToNextPage}
           onOpenIssue={openIssue}

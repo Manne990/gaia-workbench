@@ -9,7 +9,6 @@ import {
   CommentRepository,
   createDatabase,
   DuplicateSavedFilterViewNameError,
-  BulkIssueStatusNotFoundError,
   type Issue,
   IssueDependencyConflictError,
   IssueDependencyNotFoundError,
@@ -449,14 +448,6 @@ export function createApp(config: AppConfig = {}) {
         })
       );
     } catch (error) {
-      if (error instanceof BulkIssueStatusNotFoundError) {
-        return res.status(404).json({
-          error: error.message,
-          notFoundIds: error.notFoundIds,
-          duplicateIds: error.duplicateIds
-        });
-      }
-
       if (isValidationError(error)) {
         return res.status(400).json({ error: error.message });
       }

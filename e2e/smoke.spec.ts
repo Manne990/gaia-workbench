@@ -443,6 +443,47 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   expect(formulaCsvLines[1]).toContain("'-risk|safe");
 });
 
+test('dashboard issue-list error state preserves the API error and recovers on retry', async ({ page }) => {
+  const issue = await createIssueThroughApi(page, {
+    title: 'Retryable dashboard issue',
+    description: 'Should appear after the dashboard list retries.',
+    status: 'todo',
+    priority: 'medium'
+  });
+
+  let issueListAttempts = 0;
+
+  await page.route('**/api/issues**', async (route) => {
+    issueListAttempts += 1;
+
+    if (issueListAttempts === 1) {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Temporary issue list outage' })
+      });
+      return;
+    }
+
+    await route.continue();
+  });
+
+  await page.goto('/');
+
+  const alert = page.getByRole('alert');
+  await expect(alert).toContainText('Temporary issue list outage');
+  await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Retry' }).click();
+
+  await expect(page.getByRole('row', { name: /Retryable dashboard issue.*Todo.*Medium/ })).toBeVisible();
+  await expect(alert).toHaveCount(0);
+  expect(issueListAttempts).toBeGreaterThanOrEqual(2);
+
+  const issueResponse = await page.request.get(`/api/issues/${issue.id}`);
+  expect(issueResponse.ok()).toBe(true);
+});
+
 test('duplicates an issue from detail without copying history or dependencies', async ({ page }) => {
   const blocker = await createIssueThroughApi(page, {
     title: 'Duplicate source blocker'
@@ -910,7 +951,7 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
   await expect(description.getByText('<script>window.__tinytrackerImportXss = true</script>')).toBeVisible();
   await expect(description.getByText('[bad](javascript:alert(1)).')).toBeVisible();
   await expect(detail.getByLabel('Issue labels').getByText('replay', { exact: true })).toBeVisible();
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByText('1 unresolved dependency remains: Imported blocker from JSON.')).toBeVisible();
   await expect(
     detail.getByLabel('Issue blockers').getByRole('listitem').filter({ hasText: 'Imported blocker from JSON' })
   ).toContainText('Blocking');
@@ -1174,6 +1215,186 @@ test('import replace refreshes an already open issue detail route', async ({ pag
   await expect(page).toHaveURL(new RegExp(`/issues/${existing.id}$`));
 });
 
+test('import skip keeps an already open issue detail route aligned to persisted issue state', async ({
+  page
+}, testInfo) => {
+  const existingResponse = await page.request.post('/api/issues', {
+    data: {
+      title: 'Selected import skipped issue',
+      description: 'Local detail that should remain after skip.',
+      status: 'todo',
+      priority: 'medium',
+      labels: ['local-skip']
+    }
+  });
+
+  expect(existingResponse.ok()).toBe(true);
+  const existing = (await existingResponse.json()) as ApiIssue;
+
+  await page.goto('/');
+  await page.getByRole('button', { name: `Open ${existing.title}` }).click();
+
+  const detail = page.getByRole('region', { name: existing.title });
+
+  await expect(detail.getByRole('heading', { name: existing.title })).toBeVisible();
+  await expect(detail.locator('.detail-description')).toHaveText('Local detail that should remain after skip.');
+
+  const importPayload = {
+    exportVersion: 1,
+    issues: [
+      {
+        id: existing.id,
+        title: 'Selected import skipped replacement',
+        description: 'Imported detail that should not replace the selected issue under skip.',
+        status: 'review',
+        priority: 'high',
+        labels: ['import-skip'],
+        dueDate: null,
+        isOverdue: false,
+        isBlocked: false,
+        dependsOnIssueIds: [],
+        archivedAt: null,
+        createdAt: existing.createdAt,
+        updatedAt: '2999-04-01T00:00:00.000Z',
+        comments: [],
+        activityEvents: []
+      }
+    ]
+  };
+  const importFilePath = testInfo.outputPath('tinytracker-selected-skip-import.json');
+
+  writeFileSync(importFilePath, JSON.stringify(importPayload), 'utf8');
+  await importJsonFileInput(page).setInputFiles(importFilePath);
+
+  const importPanel = page.getByRole('region', { name: 'Import preview' });
+
+  await expect(importPanel.getByText('Ready to create 0 issues, replace 0 changed issues, and skip 1.')).toBeVisible();
+  await importPanel.getByRole('button', { name: 'Apply Import' }).click();
+  await expect(
+    importPanel.getByText('Import applied: 0 issues created, 0 changed issues replaced, 1 skipped.')
+  ).toBeVisible();
+
+  await expect(detail.getByRole('heading', { name: existing.title })).toBeVisible();
+  await expect(detail.locator('.detail-description')).toHaveText('Local detail that should remain after skip.');
+  await expect(detail.getByLabel('Issue labels').getByText('local-skip', { exact: true })).toBeVisible();
+  await expect(detail.getByLabel('Issue labels').getByText('import-skip', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('row', { name: /Selected import skipped issue.*Todo.*Medium/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Selected import skipped replacement.*Review.*High/ })).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`/issues/${existing.id}$`));
+});
+
+test('import reject keeps an already open issue detail route aligned to persisted issue state', async ({
+  page
+}, testInfo) => {
+  const existingResponse = await page.request.post('/api/issues', {
+    data: {
+      title: 'Selected import rejected issue',
+      description: 'Local detail that should remain after rejected apply.',
+      status: 'todo',
+      priority: 'medium',
+      labels: ['local-reject']
+    }
+  });
+
+  expect(existingResponse.ok()).toBe(true);
+  const existing = (await existingResponse.json()) as ApiIssue;
+
+  await page.goto('/');
+  await page.getByRole('button', { name: `Open ${existing.title}` }).click();
+
+  const detail = page.getByRole('region', { name: existing.title });
+
+  await expect(detail.getByRole('heading', { name: existing.title })).toBeVisible();
+  await expect(detail.locator('.detail-description')).toHaveText(
+    'Local detail that should remain after rejected apply.'
+  );
+
+  const importPayload = {
+    exportVersion: 1,
+    issues: [
+      {
+        id: existing.id,
+        title: 'Selected import rejected replacement',
+        description: 'Apply rejection should keep the selected detail unchanged.',
+        status: 'review',
+        priority: 'high',
+        labels: ['import-reject'],
+        dueDate: null,
+        isOverdue: false,
+        isBlocked: false,
+        dependsOnIssueIds: [],
+        archivedAt: null,
+        createdAt: existing.createdAt,
+        updatedAt: '2999-05-01T00:00:00.000Z',
+        comments: [],
+        activityEvents: []
+      }
+    ]
+  };
+  const importFilePath = testInfo.outputPath('tinytracker-selected-reject-import.json');
+
+  writeFileSync(importFilePath, JSON.stringify(importPayload), 'utf8');
+  await importJsonFileInput(page).setInputFiles(importFilePath);
+
+  const importPanel = page.getByRole('region', { name: 'Import preview' });
+
+  await expect(importPanel.getByText('Ready to create 0 issues, replace 0 changed issues, and skip 1.')).toBeVisible();
+
+  await page.route('**/api/import/apply', async (route) => {
+    await route.fulfill({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        valid: false,
+        exportVersion: 1,
+        policy: 'skip-conflicts',
+        summary: {
+          input: { issues: 1, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 },
+          toCreate: { issues: 0, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 },
+          toReplace: { issues: 0, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 },
+          skip: { issues: 0, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 },
+          exactMatches: { issues: 0, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 },
+          changed: { issues: 1, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 },
+          reject: 1
+        },
+        decisions: [
+          {
+            entity: 'issue',
+            sourceId: existing.id,
+            sourceIndex: 0,
+            issueId: existing.id,
+            decision: 'reject',
+            matchType: 'changed',
+            policyDecision: 'skip',
+            reasons: ['simulated reject for selected issue']
+          }
+        ],
+        errors: [
+          {
+            code: 'simulated_reject',
+            path: '$.issues[0]',
+            message: 'Simulated reject for selected issue.'
+          }
+        ],
+        warnings: []
+      })
+    });
+  });
+
+  await importPanel.getByRole('button', { name: 'Apply Import' }).click();
+  await expect(importPanel.getByText('Import apply found validation errors.')).toBeVisible();
+
+  await expect(detail.getByRole('heading', { name: existing.title })).toBeVisible();
+  await expect(detail.locator('.detail-description')).toHaveText(
+    'Local detail that should remain after rejected apply.'
+  );
+  await expect(detail.getByLabel('Issue labels').getByText('local-reject', { exact: true })).toBeVisible();
+  await expect(detail.getByLabel('Issue labels').getByText('import-reject', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('row', { name: /Selected import rejected issue.*Todo.*Medium/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Selected import rejected replacement.*High/ })).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`/issues/${existing.id}$`));
+});
+
 test('archives hides restores and preserves issue activity', async ({ page }) => {
   const issue = await createIssueThroughApi(page, {
     title: 'Archive recovery issue',
@@ -1406,7 +1627,7 @@ test('create dependency archive and recovery flow preserves blocker context', as
   await dependencyForm.getByLabel('Add blocker issue ID').fill(blocker.id);
   await dependencyForm.getByRole('button', { name: 'Add Dependency' }).click();
 
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
   await expect(blockerItem.getByText(blocker.title)).toBeVisible();
   await expect(blockerItem.locator('.blocked-pill')).toHaveText('Blocking');
   await expect(detail.getByLabel('Issue activity').getByText('Dependency added')).toBeVisible();
@@ -1432,7 +1653,7 @@ test('create dependency archive and recovery flow preserves blocker context', as
   await expect(detail.getByLabel('Issue activity').getByText('Issue restored')).toBeVisible();
   await expect(blockerItem.getByText(blocker.title)).toBeVisible();
   await expect(blockerItem.locator('.blocked-pill')).toHaveText('Blocking');
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
   await expect(issueRow).toBeVisible();
   await expect(issueRow.locator('.blocked-pill')).toHaveText('Blocked');
 });
@@ -1524,6 +1745,75 @@ test('bulk visible selection changes issue status with confirmation and scoped a
   expect(hiddenIssue.status).toBe('todo');
 });
 
+test('bulk status reports mixed invalid selections clearly and clears stale selection state', async ({ page }) => {
+  await createIssueThroughApi(page, {
+    title: 'Bulk mixed invalid first',
+    description: 'Should still update when one selection goes missing.',
+    status: 'todo',
+    priority: 'high'
+  });
+  await createIssueThroughApi(page, {
+    title: 'Bulk mixed invalid second',
+    description: 'Provides a visible multi-selection path.',
+    status: 'in_progress',
+    priority: 'medium'
+  });
+
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+
+    window.fetch = async (input, init) => {
+      const request = input instanceof Request ? input : null;
+      const url = typeof input === 'string' ? input : (request?.url ?? '');
+      const method = init?.method ?? request?.method ?? 'GET';
+
+      if (method === 'POST' && new URL(url, window.location.origin).pathname === '/api/issues/bulk-status') {
+        const response = await originalFetch(input, init);
+        const body = (await response.clone().json()) as {
+          status: string;
+          updated: ApiIssue[];
+          unchangedIds: string[];
+          duplicateIds: string[];
+          notFoundIds: string[];
+        };
+
+        body.notFoundIds = ['missing-bulk-selection'];
+        window.sessionStorage.setItem('bulk-status-mixed-invalid-mutated', 'true');
+
+        return new Response(JSON.stringify(body), {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers
+        });
+      }
+
+      return originalFetch(input, init);
+    };
+  });
+
+  await page.goto('/?search=Bulk%20mixed%20invalid');
+
+  const bulkActions = page.getByLabel('Bulk status actions');
+  await bulkActions.getByRole('button', { name: 'Select all visible' }).click();
+  await expect(bulkActions).toContainText('2 selected');
+  await bulkActions.getByLabel('Status').selectOption('done');
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toBe('Change 2 selected issues to Done?');
+    await dialog.accept();
+  });
+  await bulkActions.getByRole('button', { name: 'Change Status' }).click();
+
+  await expect
+    .poll(() => page.evaluate(() => window.sessionStorage.getItem('bulk-status-mixed-invalid-mutated')))
+    .toBe('true');
+  await expect(bulkActions).toContainText('Changed 2 issues to Done.');
+  await expect(bulkActions).toContainText('1 missing id was skipped.');
+  await expect(bulkActions).toContainText('0 selected');
+  await expect(page.getByRole('row', { name: /Bulk mixed invalid first.*Done.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Bulk mixed invalid second.*Done.*Medium/ })).toBeVisible();
+});
+
 test('bulk status refreshes selected dependency detail when a blocker resolves', async ({ page }) => {
   const blocker = await createIssueThroughApi(page, {
     title: 'Bulk blocker refresh source',
@@ -1551,7 +1841,7 @@ test('bulk status refreshes selected dependency detail when a blocker resolves',
   const blockerRow = page.getByRole('row', { name: /Bulk blocker refresh source/ });
   const dependentRow = page.getByRole('row', { name: /Bulk blocker refresh dependent/ });
 
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
   await expect(blockerRow).toContainText('Todo');
   await expect(blockerRow).toContainText('High');
   await expect(dependentRow).toContainText('In Progress');
@@ -1764,7 +2054,7 @@ test('dependency links show and clear blocked issue visibility', async ({ page }
   const blockersSection = detail.getByLabel('Issue blockers');
   const blockerItem = blockersSection.getByRole('listitem').filter({ hasText: blocker.title });
 
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
   await expect(blockerItem.getByText(blocker.title)).toBeVisible();
   await expect(blockerItem.getByRole('button', { name: `Remove dependency ${blocker.title}` })).toBeVisible();
   await expect(blockerItem.locator('.blocked-pill')).toHaveText('Blocking');
@@ -1803,7 +2093,7 @@ test('dependency links show and clear blocked issue visibility', async ({ page }
 
   await expect(unarchivedBlockerItem.getByText('Archived')).toHaveCount(0);
   await expect(unarchivedBlockerItem.locator('.blocked-pill')).toHaveText('Blocking');
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
   await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
 
   await page.request.post(`/api/issues/${blocker.id}/close`);
@@ -1822,7 +2112,7 @@ test('dependency links show and clear blocked issue visibility', async ({ page }
   const reopenedBlockerItem = blockersSection.getByRole('listitem').filter({ hasText: blocker.title });
 
   await expect(reopenedBlockerItem.locator('.blocked-pill')).toHaveText('Blocking');
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
   await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
 
   await page.request.post(`/api/issues/${blocker.id}/archive`);
@@ -1839,7 +2129,11 @@ test('dependency links show and clear blocked issue visibility', async ({ page }
   const blockerAfterArchiveItem = blockersSection.getByRole('listitem').filter({ hasText: blockerAfterArchive.title });
 
   await expect(blockerAfterArchiveItem).toBeVisible();
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(
+    detail.getByText(
+      `1 unresolved dependency remains: ${blockerAfterArchive.title}. 1 other dependency is already resolved.`
+    )
+  ).toBeVisible();
   await expect(detail.getByLabel('Issue activity').getByText('Dependency added')).toHaveCount(2);
 
   await blockerAfterArchiveItem.getByRole('button', { name: `Remove dependency ${blockerAfterArchive.title}` }).click();
@@ -1905,7 +2199,7 @@ test('dependency add refreshes blocked-only list while preserving detail route',
     isBlocked: true,
     dependsOnIssueIds: [blocker.id]
   });
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
   await expect(blockerItem.getByText(blocker.title)).toBeVisible();
   await expect(blockerItem.locator('.blocked-pill')).toHaveText('Blocking');
   await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
@@ -1983,7 +2277,7 @@ test('dependency duplicate and cycle rejections keep UI graph state unchanged', 
   const secondBlockerItem = firstBlockers.getByRole('listitem').filter({ hasText: second.title });
 
   await expect(secondBlockerItem).toBeVisible();
-  await expect(firstDetail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(firstDetail.getByText(`1 unresolved dependency remains: ${second.title}.`)).toBeVisible();
   await expect(
     page.getByRole('row', { name: /Duplicate cycle first issue.*In Progress.*Medium/ }).locator('.blocked-pill')
   ).toHaveText('Blocked');
@@ -1994,7 +2288,7 @@ test('dependency duplicate and cycle rejections keep UI graph state unchanged', 
   await expect(firstBlockers.getByRole('listitem')).toHaveCount(1);
   await expect(secondBlockerItem).toBeVisible();
   await expect(firstDetail.getByLabel('Issue activity').getByText('Dependency added')).toHaveCount(1);
-  await expect(firstDetail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(firstDetail.getByText(`1 unresolved dependency remains: ${second.title}.`)).toBeVisible();
 
   const secondDependency = await page.request.post(`/api/issues/${second.id}/dependencies`, {
     data: {
@@ -2084,7 +2378,7 @@ test('dependency form trims whitespace and blocks self-dependency before submit'
 
   const blockerItem = blockers.getByRole('listitem').filter({ hasText: blocker.title });
   await expect(blockerItem).toBeVisible();
-  await expect(detail.getByText('Waiting on at least one active dependency.')).toBeVisible();
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
   await expect(dependencyInput).toHaveValue('');
   expect(dependencyPostCount).toBe(1);
 });

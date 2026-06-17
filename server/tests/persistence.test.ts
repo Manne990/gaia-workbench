@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   ActivityRepository,
-  BulkIssueStatusNotFoundError,
   CommentRepository,
   createDatabase,
   IssueDependencyRepository,
@@ -473,22 +472,30 @@ describe('persistence layer', () => {
     }
   });
 
-  it('rejects missing bulk status issue ids before writing any repository changes', () => {
+  it('reports missing bulk status issue ids without blocking valid updates', () => {
     const database = createDatabase(':memory:');
     const issueRepository = new IssueRepository(database);
     const activityRepository = new ActivityRepository(database);
 
     try {
       const issue = issueRepository.create({ title: 'Repository bulk rollback' });
+      const result = issueRepository.bulkUpdateStatus({
+        status: 'done',
+        issueIds: [issue.id, 'missing-repository-bulk-id', issue.id]
+      });
 
-      expect(() =>
-        issueRepository.bulkUpdateStatus({
-          status: 'done',
-          issueIds: [issue.id, 'missing-repository-bulk-id', issue.id]
-        })
-      ).toThrow(BulkIssueStatusNotFoundError);
-      expect(issueRepository.getById(issue.id)).toMatchObject({ status: 'todo' });
-      expect(activityRepository.listByIssueId(issue.id).map((event) => event.type)).toEqual(['issue_created']);
+      expect(result).toMatchObject({
+        status: 'done',
+        updated: [expect.objectContaining({ id: issue.id, status: 'done' })],
+        unchangedIds: [],
+        duplicateIds: [issue.id],
+        notFoundIds: ['missing-repository-bulk-id']
+      });
+      expect(issueRepository.getById(issue.id)).toMatchObject({ status: 'done' });
+      expect(activityRepository.listByIssueId(issue.id).map((event) => event.type)).toEqual([
+        'issue_created',
+        'issue_status_changed'
+      ]);
     } finally {
       database.close();
     }

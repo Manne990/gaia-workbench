@@ -59,6 +59,10 @@ type StatusActivityRow = {
   metadata: string;
 };
 
+type IssueStatusUndoOptions = {
+  expectedStatusEventId?: string;
+};
+
 export class IssueStatusUndoNotAvailableError extends Error {
   constructor(message: string) {
     super(message);
@@ -936,7 +940,7 @@ export class IssueRepository {
     };
   }
 
-  undoLastStatusTransition(id: string): Issue | null {
+  undoLastStatusTransition(id: string, options: IssueStatusUndoOptions = {}): Issue | null {
     const current = this.getById(id);
 
     if (!current) {
@@ -962,6 +966,12 @@ export class IssueRepository {
 
     if (!statusEvent) {
       throw new IssueStatusUndoNotAvailableError('No status transition to undo.');
+    }
+
+    if (options.expectedStatusEventId !== undefined && options.expectedStatusEventId !== statusEvent.id) {
+      throw new IssueStatusUndoNotAvailableError(
+        'Status undo audit cursor is stale. Refresh issue activity before undoing status.'
+      );
     }
 
     const metadata = parseActivityMetadata(statusEvent.metadata);

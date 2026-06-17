@@ -721,7 +721,7 @@ export function App() {
     }
   }
 
-  async function handleUndoIssueStatus(issue: Issue) {
+  async function handleUndoIssueStatus(issue: Issue, expectedStatusEventId?: string) {
     if (issue.archivedAt !== null) {
       setStatusUndoMessage(null);
       setStatusUndoError('Restore archived issues before undoing status.');
@@ -733,7 +733,7 @@ export function App() {
     setStatusUndoError(null);
 
     try {
-      const updatedIssue = await undoIssueStatus(issue.id);
+      const updatedIssue = await undoIssueStatus(issue.id, { expectedStatusEventId });
 
       refreshIssues();
 
@@ -2169,7 +2169,7 @@ export function App() {
           onCloseIssueDetail={closeIssueDetail}
           onCopyIssueLink={(issue) => void copyIssueLink(issue, 'detail')}
           onDuplicateIssue={handleDuplicateIssue}
-          onUndoIssueStatus={(issue) => void handleUndoIssueStatus(issue)}
+          onUndoIssueStatus={(issue, expectedStatusEventId) => void handleUndoIssueStatus(issue, expectedStatusEventId)}
           onArchiveIssue={handleArchiveIssue}
           onUnarchiveIssue={handleUnarchiveIssue}
           onSubmitIssueDependency={submitIssueDependency}

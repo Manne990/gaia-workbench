@@ -62,6 +62,7 @@ import {
   defaultDashboardFilters,
   getRouteStateFromLocation,
   type RouteState,
+  writeSavedViewRoute,
   writeRoute
 } from './utils/routing';
 
@@ -1106,7 +1107,8 @@ export function App() {
       detailReturnFocusRef.current = null;
     }
 
-    writeRouteState(nextSelectedIssueId, nextFilters, mode, view.id);
+    writeSavedViewRoute(nextSelectedIssueId, view, mode);
+    setIssueAnchorHash(window.location.hash);
   }
 
   async function restoreSavedViewFromRoute(savedViewId: string, fallbackRouteState: RouteState) {

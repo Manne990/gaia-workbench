@@ -622,6 +622,45 @@ test('issue detail activity filters timeline by category with a clear filtered e
   await expect(activitySection.getByText('Comment added')).toBeVisible();
 });
 
+test('open issue detail reconciles after a background issue mutation refreshes the list', async ({ page }) => {
+  const issue = await createIssueThroughApi(page, {
+    title: 'Background refresh detail issue',
+    description: 'Original detail state.',
+    status: 'todo',
+    priority: 'high'
+  });
+
+  await page.goto(`/issues/${issue.id}?search=${encodeURIComponent('Background refresh detail')}`);
+
+  const filters = page.getByRole('search', { name: 'Issue filters' });
+  const detail = page.getByRole('region', { name: issue.title });
+  const issueDetails = detail.getByLabel('Issue details');
+
+  await expect(detail.getByRole('heading', { name: issue.title })).toBeVisible();
+  await expect(detail.locator('.detail-description')).toHaveText('Original detail state.');
+  await expect(issueDetails).toContainText('Todo');
+  await expect(issueDetails).toContainText('High');
+
+  const updateResponse = await page.request.put(`/api/issues/${issue.id}`, {
+    data: {
+      description: 'Updated by a background API mutation.',
+      status: 'review',
+      priority: 'low'
+    }
+  });
+
+  expect(updateResponse.ok()).toBe(true);
+
+  await filters.getByLabel('Priority').selectOption('low');
+  await expect(page.getByRole('row', { name: /Background refresh detail issue.*Review.*Low/ })).toBeVisible();
+  await expect(detail.locator('.detail-description')).toHaveText('Updated by a background API mutation.');
+  await expect(issueDetails).toContainText('Review');
+  await expect(issueDetails).toContainText('Low');
+  await expect(detail.getByLabel('Issue activity').getByText('Description changed')).toBeVisible();
+  await expect(detail.getByLabel('Issue activity').getByText('Status changed')).toBeVisible();
+  await expect(detail.getByLabel('Issue activity').getByText('Priority changed')).toBeVisible();
+});
+
 test('duplicates an issue from detail without copying history or dependencies', async ({ page }) => {
   const blocker = await createIssueThroughApi(page, {
     title: 'Duplicate source blocker'

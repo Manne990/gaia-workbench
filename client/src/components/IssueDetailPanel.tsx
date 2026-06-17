@@ -9,6 +9,7 @@ import type {
   IssueDependencyState
 } from '../types';
 import { activityDetail, activityTitle } from '../utils/activity';
+import { blockedDependencySummary } from '../utils/dependencySummary';
 import { formatIssueDate, formatIssueDueDate, getIssueFreshnessPresentation } from '../utils/issuePresentation';
 import { renderMarkdownLite } from '../utils/markdown';
 
@@ -172,7 +173,7 @@ export function IssueDetailPanel({
             {selectedIssue.isBlocked ? (
               <div className="blocked-banner" role="status">
                 <strong>Blocked</strong>
-                <span>Waiting on at least one active dependency.</span>
+                <span>{blockedDependencySummary(blockers)}</span>
               </div>
             ) : null}
 

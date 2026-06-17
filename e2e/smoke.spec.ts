@@ -4357,6 +4357,34 @@ test('saved filter views persist restore and compose with detail routes', async 
   expect(savedViewListBody).toEqual([]);
 });
 
+test('clearing a default saved view removes the active filter summary', async ({ page }) => {
+  await page.goto('/');
+
+  const settings = await expandDashboardSettings(page);
+  const savedViews = settings.getByLabel('Saved filter views');
+
+  await savedViews.getByLabel('View name').fill('Default clear summary view');
+  await savedViews.getByRole('button', { name: 'Save View' }).click();
+
+  await expect(savedViews.getByLabel('Saved views')).toContainText('Default clear summary view');
+  const savedViewId = await savedViews.getByLabel('Saved views').inputValue();
+
+  expect(savedViewId).not.toBe('');
+  await expect(page.getByLabel('Active filters')).toContainText('Saved view: Default clear summary view');
+  await expect(page.getByLabel('Active filter count')).toHaveText('1 active filter');
+
+  await page.getByRole('button', { name: 'Clear board filters' }).click();
+
+  await expect(page.getByLabel('Active filters')).toHaveCount(0);
+  await expect(page.getByLabel('Active filter count')).toHaveCount(0);
+  await expect(page).toHaveURL('/');
+  await expect(savedViews.getByLabel('Saved views')).toHaveValue(savedViewId);
+
+  const cleanupSavedViewResponse = await page.request.delete(`/api/filter-views/${savedViewId}`);
+
+  expect(cleanupSavedViewResponse.ok()).toBe(true);
+});
+
 test('missing saved filter view URLs fall back to explicit filters', async ({ page }) => {
   await page.goto(
     '/?savedView=missing-e2e-view&search=Fallback%20view&status=review&includeArchived=true&blockedOnly=true'

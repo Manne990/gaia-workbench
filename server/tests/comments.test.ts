@@ -9,7 +9,7 @@ const validationErrorBody = (error: string) => ({
 });
 
 describe('comments API', () => {
-  it('adds and lists comments for an issue', async () => {
+  it('adds trims and lists single and multi-line comments for an issue', async () => {
     const app = createApp({ databasePath: ':memory:' });
     const issue = await request(app).post('/api/issues').send({ title: 'Commented issue' }).expect(201);
 
@@ -21,16 +21,24 @@ describe('comments API', () => {
       .post(`/api/issues/${issue.body.id}/comments`)
       .send({ body: 'Second comment' })
       .expect(201);
+    const multiLine = await request(app)
+      .post(`/api/issues/${issue.body.id}/comments`)
+      .send({ body: '  First line\n\nSecond line  ' })
+      .expect(201);
 
     expect(first.body).toMatchObject({
       issueId: issue.body.id,
       body: 'First comment'
     });
     expect(first.body.id).toEqual(expect.any(String));
+    expect(multiLine.body).toMatchObject({
+      issueId: issue.body.id,
+      body: 'First line\n\nSecond line'
+    });
 
     const response = await request(app).get(`/api/issues/${issue.body.id}/comments`).expect(200);
 
-    expect(response.body).toEqual([first.body, second.body]);
+    expect(response.body).toEqual([first.body, second.body, multiLine.body]);
   });
 
   it('edits comments and exposes edit history', async () => {
@@ -43,13 +51,13 @@ describe('comments API', () => {
 
     const edited = await request(app)
       .put(`/api/comments/${comment.body.id}`)
-      .send({ body: 'Edited comment' })
+      .send({ body: '  Edited comment\nwith second line  ' })
       .expect(200);
 
     expect(edited.body).toMatchObject({
       id: comment.body.id,
       issueId: issue.body.id,
-      body: 'Edited comment'
+      body: 'Edited comment\nwith second line'
     });
 
     const history = await request(app).get(`/api/comments/${comment.body.id}/history`).expect(200);
@@ -58,7 +66,7 @@ describe('comments API', () => {
     expect(history.body[0]).toMatchObject({
       commentId: comment.body.id,
       previousBody: 'Initial comment',
-      newBody: 'Edited comment'
+      newBody: 'Edited comment\nwith second line'
     });
   });
 
@@ -356,7 +364,7 @@ describe('comments API', () => {
 
     await request(app)
       .post(`/api/issues/${issue.body.id}/comments`)
-      .send({ body: '   ' })
+      .send({ body: ' \n\t  ' })
       .expect(400, validationErrorBody('body is required'));
 
     await request(app)
@@ -366,7 +374,7 @@ describe('comments API', () => {
 
     await request(app)
       .put(`/api/comments/${comment.body.id}`)
-      .send({ body: '   ' })
+      .send({ body: ' \n\t  ' })
       .expect(400, validationErrorBody('body is required'));
   });
 

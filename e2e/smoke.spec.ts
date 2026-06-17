@@ -1515,6 +1515,75 @@ test('bulk visible selection changes issue status with confirmation and scoped a
   expect(hiddenIssue.status).toBe('todo');
 });
 
+test('bulk status reports mixed invalid selections clearly and clears stale selection state', async ({ page }) => {
+  await createIssueThroughApi(page, {
+    title: 'Bulk mixed invalid first',
+    description: 'Should still update when one selection goes missing.',
+    status: 'todo',
+    priority: 'high'
+  });
+  await createIssueThroughApi(page, {
+    title: 'Bulk mixed invalid second',
+    description: 'Provides a visible multi-selection path.',
+    status: 'in_progress',
+    priority: 'medium'
+  });
+
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+
+    window.fetch = async (input, init) => {
+      const request = input instanceof Request ? input : null;
+      const url = typeof input === 'string' ? input : (request?.url ?? '');
+      const method = init?.method ?? request?.method ?? 'GET';
+
+      if (method === 'POST' && new URL(url, window.location.origin).pathname === '/api/issues/bulk-status') {
+        const response = await originalFetch(input, init);
+        const body = (await response.clone().json()) as {
+          status: string;
+          updated: ApiIssue[];
+          unchangedIds: string[];
+          duplicateIds: string[];
+          notFoundIds: string[];
+        };
+
+        body.notFoundIds = ['missing-bulk-selection'];
+        window.sessionStorage.setItem('bulk-status-mixed-invalid-mutated', 'true');
+
+        return new Response(JSON.stringify(body), {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers
+        });
+      }
+
+      return originalFetch(input, init);
+    };
+  });
+
+  await page.goto('/?search=Bulk%20mixed%20invalid');
+
+  const bulkActions = page.getByLabel('Bulk status actions');
+  await bulkActions.getByRole('button', { name: 'Select all visible' }).click();
+  await expect(bulkActions).toContainText('2 selected');
+  await bulkActions.getByLabel('Status').selectOption('done');
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toBe('Change 2 selected issues to Done?');
+    await dialog.accept();
+  });
+  await bulkActions.getByRole('button', { name: 'Change Status' }).click();
+
+  await expect
+    .poll(() => page.evaluate(() => window.sessionStorage.getItem('bulk-status-mixed-invalid-mutated')))
+    .toBe('true');
+  await expect(bulkActions).toContainText('Changed 2 issues to Done.');
+  await expect(bulkActions).toContainText('1 missing id was skipped.');
+  await expect(bulkActions).toContainText('0 selected');
+  await expect(page.getByRole('row', { name: /Bulk mixed invalid first.*Done.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Bulk mixed invalid second.*Done.*Medium/ })).toBeVisible();
+});
+
 test('bulk status refreshes selected dependency detail when a blocker resolves', async ({ page }) => {
   const blocker = await createIssueThroughApi(page, {
     title: 'Bulk blocker refresh source',

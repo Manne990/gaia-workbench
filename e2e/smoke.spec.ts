@@ -1794,15 +1794,15 @@ test('bulk status reports mixed invalid selections clearly and clears stale sele
   await page.goto('/?search=Bulk%20mixed%20invalid');
 
   const bulkActions = page.getByLabel('Bulk status actions');
-  await bulkActions.getByRole('button', { name: 'Select all visible' }).click();
+  await bulkActions.getByRole('button', { name: 'Select all 2 visible issues' }).click();
   await expect(bulkActions).toContainText('2 selected');
-  await bulkActions.getByLabel('Status').selectOption('done');
+  await bulkActions.getByLabel(/Bulk status target\./).selectOption('done');
 
   page.once('dialog', async (dialog) => {
     expect(dialog.message()).toBe('Change 2 selected issues to Done?');
     await dialog.accept();
   });
-  await bulkActions.getByRole('button', { name: 'Change Status' }).click();
+  await bulkActions.getByRole('button', { name: 'Change status for 2 selected issues' }).click();
 
   await expect
     .poll(() => page.evaluate(() => window.sessionStorage.getItem('bulk-status-mixed-invalid-mutated')))

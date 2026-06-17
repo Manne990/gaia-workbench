@@ -18,6 +18,7 @@ import {
   IssueDependencyRepository,
   type IssuePriority,
   type IssueStatus,
+  IssueStatusUndoNotAvailableError,
   type IssueUpdate,
   IssueRepository,
   type SavedFilterView,
@@ -1063,6 +1064,24 @@ export function createApp(config: AppConfig = {}) {
     }
 
     return res.status(200).json(issue);
+  });
+
+  app.post('/api/issues/:id/undo-status', (req, res) => {
+    try {
+      const issue = issueRepository.undoLastStatusTransition(req.params.id);
+
+      if (!issue) {
+        return res.status(404).json({ error: 'Issue not found' });
+      }
+
+      return res.status(200).json(issue);
+    } catch (error) {
+      if (error instanceof IssueStatusUndoNotAvailableError) {
+        return res.status(409).json({ error: error.message });
+      }
+
+      throw error;
+    }
   });
 
   app.post('/api/issues/:id/archive', (req, res) => {

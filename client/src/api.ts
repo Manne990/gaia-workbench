@@ -102,6 +102,14 @@ export function duplicateIssue(issueId: string): Promise<Issue> {
   return postIssueAction(issueId, 'duplicate');
 }
 
+export async function undoIssueStatus(issueId: string): Promise<Issue> {
+  const response = await fetch(`/api/issues/${issueId}/undo-status`, {
+    method: 'POST'
+  });
+
+  return readJsonOrThrow<Issue>(response, 'Issue status undo failed');
+}
+
 export async function bulkUpdateIssueStatus(issueIds: string[], status: IssueStatus): Promise<BulkIssueStatusResult> {
   const response = await fetch('/api/issues/bulk-status', {
     method: 'POST',

@@ -6,7 +6,7 @@ export {
   IssueDependencyNotFoundError,
   IssueDependencyRepository
 } from './issueDependencyRepository.js';
-export { IssueRepository } from './issueRepository.js';
+export { IssueRepository, IssueStatusUndoNotAvailableError } from './issueRepository.js';
 export {
   assertIssueStatus,
   CLOSED_ISSUE_STATUS,

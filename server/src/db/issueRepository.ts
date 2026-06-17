@@ -6,7 +6,8 @@ import {
   assertIssueStatus,
   CLOSED_ISSUE_STATUS,
   createEmptyIssueStatusCounts,
-  DEFAULT_ISSUE_STATUS
+  DEFAULT_ISSUE_STATUS,
+  isIssueStatus
 } from './issueStatus.js';
 import {
   BulkIssueArchiveInput,
@@ -52,6 +53,18 @@ type StatusCountRow = {
   status: IssueStatus;
   count: number;
 };
+
+type StatusActivityRow = {
+  id: string;
+  metadata: string;
+};
+
+export class IssueStatusUndoNotAvailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'IssueStatusUndoNotAvailableError';
+  }
+}
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -162,6 +175,20 @@ export function getStaleIssueCutoffIso(now = new Date()): string {
 
 function labelsEqual(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((label, index) => label === right[index]);
+}
+
+function parseActivityMetadata(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return {};
+  }
+
+  return {};
 }
 
 function buildIssueChangeEvents(current: Issue, updated: Issue): NewActivityEvent[] {
@@ -907,6 +934,85 @@ export class IssueRepository {
       duplicateIds,
       notFoundIds
     };
+  }
+
+  undoLastStatusTransition(id: string): Issue | null {
+    const current = this.getById(id);
+
+    if (!current) {
+      return null;
+    }
+
+    if (current.archivedAt !== null) {
+      throw new IssueStatusUndoNotAvailableError('Restore archived issues before undoing status.');
+    }
+
+    const statusEvent = this.database
+      .prepare(
+        `
+        SELECT id, metadata
+        FROM activity_events
+        WHERE issue_id = @id
+          AND event_type = 'issue_status_changed'
+        ORDER BY created_at DESC, rowid DESC
+        LIMIT 1
+        `
+      )
+      .get({ id }) as StatusActivityRow | undefined;
+
+    if (!statusEvent) {
+      throw new IssueStatusUndoNotAvailableError('No status transition to undo.');
+    }
+
+    const metadata = parseActivityMetadata(statusEvent.metadata);
+    const previousStatus = metadata.from;
+    const recordedCurrentStatus = metadata.to;
+
+    if (!isIssueStatus(previousStatus) || !isIssueStatus(recordedCurrentStatus)) {
+      throw new IssueStatusUndoNotAvailableError('Latest status transition cannot be undone.');
+    }
+
+    if (recordedCurrentStatus !== current.status) {
+      throw new IssueStatusUndoNotAvailableError(
+        'Latest status transition no longer matches the current issue status.'
+      );
+    }
+
+    if (previousStatus === current.status) {
+      throw new IssueStatusUndoNotAvailableError('Latest status transition cannot be undone.');
+    }
+
+    const updatedAt = nowIso();
+    const transaction = this.database.transaction(() => {
+      const result = this.database
+        .prepare(
+          `
+          UPDATE issues
+          SET status = @status, updated_at = @updatedAt
+          WHERE id = @id
+        `
+        )
+        .run({
+          id,
+          status: previousStatus,
+          updatedAt
+        });
+
+      if (result.changes === 0) {
+        return null;
+      }
+
+      recordActivityEvent(this.database, {
+        issueId: id,
+        type: 'issue_status_changed',
+        metadata: { from: current.status, to: previousStatus, undoOfEventId: statusEvent.id },
+        createdAt: updatedAt
+      });
+
+      return this.getById(id);
+    });
+
+    return transaction();
   }
 
   bulkArchive(input: BulkIssueArchiveInput): BulkIssueArchiveResult {

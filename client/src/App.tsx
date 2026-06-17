@@ -17,6 +17,7 @@ import {
   fetchServiceHealth,
   removeIssueDependency,
   unarchiveIssue,
+  undoIssueStatus,
   updateSavedFilterView
 } from './api';
 import { DashboardHeader } from './components/DashboardHeader';
@@ -279,8 +280,11 @@ export function App() {
   const [bulkStatus, setBulkStatus] = useState<IssueStatus>('in_progress');
   const [bulkStatusMessage, setBulkStatusMessage] = useState<string | null>(null);
   const [bulkStatusError, setBulkStatusError] = useState<string | null>(null);
+  const [statusUndoMessage, setStatusUndoMessage] = useState<string | null>(null);
+  const [statusUndoError, setStatusUndoError] = useState<string | null>(null);
   const [issueLinkCopyFeedback, setIssueLinkCopyFeedback] = useState<IssueLinkCopyFeedback | null>(null);
   const [isBulkStatusSubmitting, setIsBulkStatusSubmitting] = useState(false);
+  const [isStatusUndoSubmitting, setIsStatusUndoSubmitting] = useState(false);
   const newIssueButtonRef = useRef<HTMLButtonElement>(null);
   const importButtonRef = useRef<HTMLButtonElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -501,6 +505,11 @@ export function App() {
   }, [selectedIssueId]);
 
   useEffect(() => {
+    setStatusUndoMessage(null);
+    setStatusUndoError(null);
+  }, [selectedIssue?.id]);
+
+  useEffect(() => {
     const visibleIds = new Set(filteredIssues.map((issue) => issue.id));
 
     setSelectedBulkIssueIds((current) => {
@@ -709,6 +718,36 @@ export function App() {
       }
     } catch (error) {
       setBulkStatusError(error instanceof Error ? error.message : 'Selected issue status update failed.');
+    }
+  }
+
+  async function handleUndoIssueStatus(issue: Issue) {
+    if (issue.archivedAt !== null) {
+      setStatusUndoMessage(null);
+      setStatusUndoError('Restore archived issues before undoing status.');
+      return;
+    }
+
+    setIsStatusUndoSubmitting(true);
+    setStatusUndoMessage(null);
+    setStatusUndoError(null);
+
+    try {
+      const updatedIssue = await undoIssueStatus(issue.id);
+
+      refreshIssues();
+
+      if (selectedIssueIdRef.current === updatedIssue.id) {
+        setSelectedIssue(updatedIssue);
+        setSelectedIssueLoadState('loaded');
+        setSelectedIssueDetailReloadToken((value) => value + 1);
+      }
+
+      setStatusUndoMessage(`Restored status to ${statusLabels[updatedIssue.status]}.`);
+    } catch (error) {
+      setStatusUndoError(error instanceof Error ? error.message : 'Issue status undo failed.');
+    } finally {
+      setIsStatusUndoSubmitting(false);
     }
   }
 
@@ -2124,9 +2163,13 @@ export function App() {
           editCommentTextareaRef={editCommentTextareaRef}
           dependencyIssueInputRef={dependencyIssueInputRef}
           issueLinkCopyFeedback={issueLinkCopyFeedback}
+          statusUndoMessage={statusUndoMessage}
+          statusUndoError={statusUndoError}
+          isStatusUndoSubmitting={isStatusUndoSubmitting}
           onCloseIssueDetail={closeIssueDetail}
           onCopyIssueLink={(issue) => void copyIssueLink(issue, 'detail')}
           onDuplicateIssue={handleDuplicateIssue}
+          onUndoIssueStatus={(issue) => void handleUndoIssueStatus(issue)}
           onArchiveIssue={handleArchiveIssue}
           onUnarchiveIssue={handleUnarchiveIssue}
           onSubmitIssueDependency={submitIssueDependency}

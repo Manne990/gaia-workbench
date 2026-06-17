@@ -59,9 +59,13 @@ type IssueDetailPanelProps = {
   editCommentTextareaRef: RefObject<HTMLTextAreaElement | null>;
   dependencyIssueInputRef: RefObject<HTMLInputElement | null>;
   issueLinkCopyFeedback: IssueLinkCopyFeedback | null;
+  statusUndoMessage: string | null;
+  statusUndoError: string | null;
+  isStatusUndoSubmitting: boolean;
   onCloseIssueDetail: () => void;
   onCopyIssueLink: (issue: Issue) => void;
   onDuplicateIssue: (issue: Issue, trigger: HTMLElement) => void;
+  onUndoIssueStatus: (issue: Issue) => void;
   onArchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
   onUnarchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
   onSubmitIssueDependency: (event: FormEvent<HTMLFormElement>) => void;
@@ -104,9 +108,13 @@ export function IssueDetailPanel({
   editCommentTextareaRef,
   dependencyIssueInputRef,
   issueLinkCopyFeedback,
+  statusUndoMessage,
+  statusUndoError,
+  isStatusUndoSubmitting,
   onCloseIssueDetail,
   onCopyIssueLink,
   onDuplicateIssue,
+  onUndoIssueStatus,
   onArchiveIssue,
   onUnarchiveIssue,
   onSubmitIssueDependency,
@@ -181,6 +189,15 @@ export function IssueDetailPanel({
               >
                 Duplicate
               </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => onUndoIssueStatus(selectedIssue)}
+                disabled={isStatusUndoSubmitting || selectedIssue.archivedAt !== null}
+                aria-label={`Undo last status change for ${selectedIssue.title}`}
+              >
+                {isStatusUndoSubmitting ? 'Undoing...' : 'Undo Status'}
+              </button>
               {selectedIssue.archivedAt ? (
                 <button
                   type="button"
@@ -217,6 +234,18 @@ export function IssueDetailPanel({
               aria-atomic="true"
             >
               {detailLinkCopyFeedback.message}
+            </p>
+          ) : null}
+
+          {statusUndoMessage ? (
+            <p className="link-copy-feedback" role="status" aria-live="polite" aria-atomic="true">
+              {statusUndoMessage}
+            </p>
+          ) : null}
+
+          {statusUndoError ? (
+            <p className="link-copy-feedback error" role="alert" aria-live="assertive" aria-atomic="true">
+              {statusUndoError}
             </p>
           ) : null}
 

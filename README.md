@@ -549,6 +549,50 @@ history, activity events, `archivedAt`, and `dependsOnIssueIds`. Active issues
 use `"archivedAt": null`; archived issues contain the archive timestamp. Export
 is read-only and does not mutate tracker state.
 
+Add `includeAuditSummary=true` to include a compact top-level
+`auditSummary` while keeping the full export payload intact:
+
+```json
+{
+  "exportVersion": 1,
+  "issues": [],
+  "savedFilterViews": [],
+  "auditSummary": {
+    "issues": {
+      "total": 0,
+      "active": 0,
+      "archived": 0,
+      "blocked": 0,
+      "overdue": 0,
+      "byStatus": {},
+      "byPriority": {}
+    },
+    "comments": {
+      "total": 0,
+      "edited": 0,
+      "editHistoryEntries": 0
+    },
+    "dependencies": {
+      "total": 0,
+      "blocking": 0
+    },
+    "activity": {
+      "total": 0,
+      "byType": {},
+      "recent": []
+    },
+    "savedFilterViews": {
+      "total": 0
+    }
+  }
+}
+```
+
+The summary is intended for quick audit review. It counts issue status,
+priority, archive state, blocked state, comments, comment edit history,
+dependency edges, activity by type, the five most recent activity highlights,
+and saved filter views. Invalid `includeAuditSummary` values return `400`.
+
 `GET /api/export.csv` provides spreadsheet-facing issue rows. CSV export
 prefixes cells that start with spreadsheet formula markers (`=`, `+`, `-`, `@`,
 tab, or newline) with an apostrophe; JSON export preserves the same user-authored

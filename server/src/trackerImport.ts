@@ -427,6 +427,41 @@ function validateMetadata(value: unknown, path: string, errors: ImportErrorDetai
   return metadata;
 }
 
+function validateStatusChangeMetadata(event: ActivityEvent, eventPath: string, errors: ImportErrorDetail[]): void {
+  const fromStatus = event.metadata.from;
+  const toStatus = event.metadata.to;
+
+  if (!isIssueStatus(fromStatus)) {
+    pushError(
+      errors,
+      'invalid_status_transition_metadata',
+      `${eventPath}.metadata.from`,
+      'Status change activity metadata must reference valid issue statuses.',
+      fromStatus
+    );
+  }
+
+  if (!isIssueStatus(toStatus)) {
+    pushError(
+      errors,
+      'invalid_status_transition_metadata',
+      `${eventPath}.metadata.to`,
+      'Status change activity metadata must reference valid issue statuses.',
+      toStatus
+    );
+  }
+}
+
+function validateStatusChangeActivity(issue: ExportedIssue, issuePath: string, errors: ImportErrorDetail[]): void {
+  issue.activityEvents.forEach((event, eventIndex) => {
+    if (event.type !== 'issue_status_changed') {
+      return;
+    }
+
+    validateStatusChangeMetadata(event, `${issuePath}.activityEvents[${eventIndex}]`, errors);
+  });
+}
+
 function validateLabels(value: unknown, path: string, errors: ImportErrorDetail[]): string[] {
   if (!Array.isArray(value)) {
     pushError(errors, 'invalid_type', path, 'Labels must be an array.', value);
@@ -1223,7 +1258,7 @@ function validateTrackerExport(input: unknown): ValidationResult {
       });
     });
 
-    issues.push({
+    const issue: ExportedIssue = {
       id: issueId,
       title,
       description,
@@ -1239,7 +1274,10 @@ function validateTrackerExport(input: unknown): ValidationResult {
       updatedAt,
       comments,
       activityEvents
-    });
+    };
+
+    validateStatusChangeActivity(issue, issuePath, errors);
+    issues.push(issue);
   });
 
   savedFilterViewsInput.forEach((viewInput, viewIndex) => {

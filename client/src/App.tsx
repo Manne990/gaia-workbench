@@ -305,6 +305,16 @@ export function App() {
         disabled: !hasActiveFilters
       },
       {
+        id: 'toggle-dashboard-density',
+        label: dashboardDensity === 'comfortable' ? 'Use compact density' : 'Use comfortable density',
+        description:
+          dashboardDensity === 'comfortable'
+            ? 'Switch dashboard rows to compact density'
+            : 'Switch dashboard rows to comfortable density',
+        commandHint: 'D',
+        disabled: false
+      },
+      {
         id: 'close-issue-detail',
         label: 'Close issue detail',
         description: 'Close issue detail panel',
@@ -312,7 +322,7 @@ export function App() {
         disabled: !selectedIssueId
       }
     ],
-    [filteredIssues.length, hasActiveFilters, selectedIssueId]
+    [dashboardDensity, filteredIssues.length, hasActiveFilters, selectedIssueId]
   );
 
   const isIssueDetailLoading = Boolean(selectedIssueId && selectedIssueLoadState === 'loading' && !selectedIssue);
@@ -403,6 +413,12 @@ export function App() {
     if (commandId === 'clear-active-filters') {
       closeCommandPalette({ restoreFocus: false, clearQuery: true });
       handleClearFilters({ restoreFocus: true });
+      return;
+    }
+
+    if (commandId === 'toggle-dashboard-density') {
+      setDashboardDensity((current) => (current === 'comfortable' ? 'compact' : 'comfortable'));
+      closeCommandPalette({ clearQuery: true });
       return;
     }
 

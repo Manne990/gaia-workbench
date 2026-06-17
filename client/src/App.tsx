@@ -1260,6 +1260,15 @@ export function App() {
       return;
     }
 
+    if (dependsOnIssueId !== dependencyIssueId) {
+      setDependencyIssueId(dependsOnIssueId);
+    }
+
+    if (dependsOnIssueId === selectedIssue.id) {
+      setDependencyError('Issue cannot depend on itself');
+      return;
+    }
+
     setIsDependencySubmitting(true);
     setDependencyError(null);
 

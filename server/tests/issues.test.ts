@@ -1658,7 +1658,7 @@ describe('issues API', () => {
       });
     await request(app)
       .post(`/api/issues/${first.body.id}/dependencies`)
-      .send({ dependsOnIssueId: first.body.id })
+      .send({ dependsOnIssueId: `  ${first.body.id}  ` })
       .expect(409, {
         error: 'Issue cannot depend on itself'
       });
@@ -1674,7 +1674,7 @@ describe('issues API', () => {
 
     await request(app)
       .post(`/api/issues/${first.body.id}/dependencies`)
-      .send({ dependsOnIssueId: second.body.id })
+      .send({ dependsOnIssueId: `  ${second.body.id}  ` })
       .expect(201);
     await request(app)
       .post(`/api/issues/${first.body.id}/dependencies`)

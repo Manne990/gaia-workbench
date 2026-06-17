@@ -121,6 +121,7 @@ const validationErrorMessages = new Set([
   'Invalid staleOnly parameter',
   'Invalid bulk issue ids',
   'Saved view name is required',
+  'Invalid saved view payload',
   'Invalid saved view name',
   'Invalid saved view search',
   'Invalid saved view status',

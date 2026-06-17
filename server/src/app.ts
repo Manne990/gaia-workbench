@@ -156,6 +156,36 @@ const emptyImportPlan = (error: ImportPlan['errors'][number]): ImportPlan => ({
       activityEvents: 0,
       savedFilterViews: 0
     },
+    categories: {
+      creates: {
+        issues: 0,
+        comments: 0,
+        editHistory: 0,
+        activityEvents: 0,
+        savedFilterViews: 0
+      },
+      updates: {
+        issues: 0,
+        comments: 0,
+        editHistory: 0,
+        activityEvents: 0,
+        savedFilterViews: 0
+      },
+      duplicates: {
+        issues: 0,
+        comments: 0,
+        editHistory: 0,
+        activityEvents: 0,
+        savedFilterViews: 0
+      },
+      conflicts: {
+        issues: 0,
+        comments: 0,
+        editHistory: 0,
+        activityEvents: 0,
+        savedFilterViews: 0
+      }
+    },
     reject: 1
   },
   decisions: [],

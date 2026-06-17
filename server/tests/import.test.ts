@@ -90,6 +90,16 @@ function countExport(payload: TrackerExport): ImportCounts {
   };
 }
 
+function emptyImportCounts(): ImportCounts {
+  return {
+    issues: 0,
+    comments: 0,
+    editHistory: 0,
+    activityEvents: 0,
+    savedFilterViews: 0
+  };
+}
+
 function getCsvLines(csv: string): string[] {
   return csv.trim().split('\r\n');
 }
@@ -1134,6 +1144,12 @@ describe('tracker import API', () => {
           activityEvents: 0,
           savedFilterViews: 0
         },
+        categories: {
+          creates: emptyImportCounts(),
+          updates: emptyImportCounts(),
+          duplicates: counts,
+          conflicts: emptyImportCounts()
+        },
         skip: counts
       }
     });
@@ -1158,6 +1174,8 @@ describe('tracker import API', () => {
 
     expect(changedPreview.body.summary.changed.issues).toBe(1);
     expect(changedPreview.body.summary.toReplace.issues).toBe(0);
+    expect(changedPreview.body.summary.categories.updates.issues).toBe(0);
+    expect(changedPreview.body.summary.categories.conflicts.issues).toBe(1);
     expect(changedIssueDecision).toMatchObject({
       decision: 'skip-existing',
       matchType: 'changed',
@@ -1207,7 +1225,13 @@ describe('tracker import API', () => {
       summary: {
         changed: expect.objectContaining({ issues: 1 }),
         toReplace: expect.objectContaining({ issues: 1 }),
-        toCreate: expect.objectContaining({ comments: 1 })
+        toCreate: expect.objectContaining({ comments: 1 }),
+        categories: {
+          creates: expect.objectContaining({ comments: 1 }),
+          updates: expect.objectContaining({ issues: 1 }),
+          duplicates: expect.any(Object),
+          conflicts: expect.objectContaining({ issues: 0 })
+        }
       }
     });
 
@@ -1223,6 +1247,7 @@ describe('tracker import API', () => {
       .expect(200);
 
     expect(applied.body.summary.toReplace.issues).toBe(1);
+    expect(applied.body.summary.categories).toEqual(preview.body.summary.categories);
     expect(detail.body).toMatchObject({
       id: changedIssue.id,
       title: 'Replaced import issue',

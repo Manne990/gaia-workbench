@@ -31,29 +31,26 @@ function totalCounts(counts: ImportCounts): number {
 function ImportCountRow({
   label,
   input,
-  exact,
-  changed,
-  toCreate,
-  toReplace,
-  skip
+  creates,
+  updates,
+  duplicates,
+  conflicts
 }: {
   label: string;
   input: number;
-  exact: number;
-  changed: number;
-  toCreate: number;
-  toReplace: number;
-  skip: number;
+  creates: number;
+  updates: number;
+  duplicates: number;
+  conflicts: number;
 }) {
   return (
     <tr>
       <th scope="row">{label}</th>
       <td>{input}</td>
-      <td>{exact}</td>
-      <td>{changed}</td>
-      <td>{toCreate}</td>
-      <td>{toReplace}</td>
-      <td>{skip}</td>
+      <td>{creates}</td>
+      <td>{updates}</td>
+      <td>{duplicates}</td>
+      <td>{conflicts}</td>
     </tr>
   );
 }
@@ -169,24 +166,20 @@ export function ImportPanel({
                 <strong>{totalCounts(importPlan.summary.input)}</strong>
               </div>
               <div>
-                <span>Exact matches</span>
-                <strong>{totalCounts(importPlan.summary.exactMatches)}</strong>
+                <span>Creates</span>
+                <strong>{totalCounts(importPlan.summary.categories.creates)}</strong>
               </div>
               <div>
-                <span>Changed</span>
-                <strong>{totalCounts(importPlan.summary.changed)}</strong>
+                <span>Updates</span>
+                <strong>{totalCounts(importPlan.summary.categories.updates)}</strong>
               </div>
               <div>
-                <span>Create</span>
-                <strong>{totalCounts(importPlan.summary.toCreate)}</strong>
+                <span>Duplicates</span>
+                <strong>{totalCounts(importPlan.summary.categories.duplicates)}</strong>
               </div>
               <div>
-                <span>Replace</span>
-                <strong>{totalCounts(importPlan.summary.toReplace)}</strong>
-              </div>
-              <div>
-                <span>Skip</span>
-                <strong>{totalCounts(importPlan.summary.skip)}</strong>
+                <span>Conflicts</span>
+                <strong>{totalCounts(importPlan.summary.categories.conflicts)}</strong>
               </div>
             </div>
             <div className="table-wrap">
@@ -195,11 +188,10 @@ export function ImportPanel({
                   <tr>
                     <th scope="col">Type</th>
                     <th scope="col">Input</th>
-                    <th scope="col">Exact</th>
-                    <th scope="col">Changed</th>
                     <th scope="col">Create</th>
-                    <th scope="col">Replace</th>
-                    <th scope="col">Skip</th>
+                    <th scope="col">Update</th>
+                    <th scope="col">Duplicate</th>
+                    <th scope="col">Conflict</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -208,11 +200,10 @@ export function ImportPanel({
                       key={key}
                       label={label}
                       input={importPlan.summary.input[key]}
-                      exact={importPlan.summary.exactMatches[key]}
-                      changed={importPlan.summary.changed[key]}
-                      toCreate={importPlan.summary.toCreate[key]}
-                      toReplace={importPlan.summary.toReplace[key]}
-                      skip={importPlan.summary.skip[key]}
+                      creates={importPlan.summary.categories.creates[key]}
+                      updates={importPlan.summary.categories.updates[key]}
+                      duplicates={importPlan.summary.categories.duplicates[key]}
+                      conflicts={importPlan.summary.categories.conflicts[key]}
                     />
                   ))}
                 </tbody>

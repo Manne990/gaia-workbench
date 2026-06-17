@@ -614,9 +614,10 @@ also accept an optional top-level `conflictPolicy` value:
   comment, edit-history, and activity IDs remain immutable.
 
 Preview validates the payload, classifies existing records as exact or changed,
-and reports what would be created, replaced, skipped, or rejected. Apply
-validates the full payload again, recomputes the plan with the selected policy,
-then writes valid records in a single SQLite transaction.
+and reports what would be created, replaced, skipped, or rejected. The response
+also includes `summary.categories` totals for creates, updates, duplicates, and
+conflicts. Apply validates the full payload again, recomputes the plan with the
+selected policy, then writes valid records in a single SQLite transaction.
 
 Import preserves exported issue, comment, edit-history, and activity IDs and
 timestamps. Existing incoming IDs are skipped unless `replace-conflicts`

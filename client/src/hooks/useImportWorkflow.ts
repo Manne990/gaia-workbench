@@ -1,7 +1,7 @@
 import type { ChangeEvent, RefObject } from 'react';
 import { useReducer } from 'react';
 import { applyImport, previewImport } from '../api';
-import type { ImportConflictPolicy, ImportPlan } from '../types';
+import type { ImportConflictPolicy, ImportCounts, ImportPlan } from '../types';
 import { restoreFocus } from '../utils/focus';
 import {
   DEFAULT_IMPORT_POLICY,
@@ -10,12 +10,16 @@ import {
   selectImportWorkflowView
 } from './importWorkflowState';
 
+function totalCounts(counts: ImportCounts): number {
+  return counts.issues + counts.comments + counts.editHistory + counts.activityEvents + counts.savedFilterViews;
+}
+
 function importReadyMessage(plan: ImportPlan): string {
-  return `Ready to create ${plan.summary.toCreate.issues} issues, replace ${plan.summary.toReplace.issues} changed issues, and skip ${plan.summary.skip.issues}.`;
+  return `Ready: ${totalCounts(plan.summary.categories.creates)} creates, ${totalCounts(plan.summary.categories.updates)} updates, ${totalCounts(plan.summary.categories.duplicates)} duplicates, ${totalCounts(plan.summary.categories.conflicts)} conflicts.`;
 }
 
 function importAppliedMessage(plan: ImportPlan): string {
-  return `Import applied: ${plan.summary.toCreate.issues} issues created, ${plan.summary.toReplace.issues} changed issues replaced, ${plan.summary.skip.issues} skipped.`;
+  return `Import applied: ${totalCounts(plan.summary.categories.creates)} created, ${totalCounts(plan.summary.categories.updates)} updated, ${totalCounts(plan.summary.categories.duplicates)} duplicates, ${totalCounts(plan.summary.categories.conflicts)} conflicts.`;
 }
 
 function importRequestErrorMessage(error: unknown, fallbackMessage: string): string {

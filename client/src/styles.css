@@ -1092,10 +1092,93 @@ td > span:not(.pill) {
   line-height: 1.45;
 }
 
+.table-wrap table {
+  min-width: 1030px;
+  table-layout: fixed;
+}
+
 .issue-description-snippet {
   max-width: 52ch;
   color: #64707c;
   line-height: 1.45;
+}
+
+.selection-column,
+.selection-cell {
+  width: 64px;
+  text-align: center;
+}
+
+.status-column,
+.status-cell {
+  width: 118px;
+}
+
+.priority-column,
+.priority-cell {
+  width: 112px;
+}
+
+.due-column,
+.due-cell {
+  width: 132px;
+}
+
+.updated-column,
+.updated-cell {
+  width: 116px;
+}
+
+.actions-column,
+.actions-cell {
+  width: 188px;
+}
+
+.issue-title-cell {
+  min-width: 300px;
+}
+
+.issue-title-line {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.issue-title-text {
+  flex: 1 1 220px;
+  min-width: 0;
+  margin-bottom: 0;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.issue-state-flags {
+  display: inline-flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+  max-width: 180px;
+}
+
+td .issue-state-flags,
+td .issue-state-flags span {
+  display: inline-flex;
+}
+
+.issue-state-flags .archived-pill,
+.issue-state-flags .blocked-pill,
+.issue-state-flags .stale-pill {
+  margin: 0;
+}
+
+.issue-title-cell .issue-description-snippet {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 6px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .issue-table-density-compact th,
@@ -1122,7 +1205,22 @@ td > span:not(.pill) {
 
 .issue-table-density-compact .label-row {
   gap: 4px;
+  max-height: 24px;
+  overflow: hidden;
   margin-top: 6px;
+}
+
+.issue-table-density-compact .issue-title-line {
+  gap: 6px;
+}
+
+.issue-table-density-compact .issue-title-cell .issue-description-snippet {
+  margin-top: 4px;
+  -webkit-line-clamp: 1;
+}
+
+.issue-table-density-compact .issue-state-flags {
+  max-width: 140px;
 }
 
 .issue-table-density-compact .pill,
@@ -1148,11 +1246,6 @@ td > span:not(.pill) {
 
 .issue-table-density-compact .row-actions {
   gap: 6px;
-}
-
-.selection-cell {
-  width: 68px;
-  text-align: center;
 }
 
 .selection-cell input {

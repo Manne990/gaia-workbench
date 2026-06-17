@@ -568,13 +568,27 @@ export function IssueListPanel({
             <table>
               <thead>
                 <tr>
-                  <th scope="col">Select</th>
-                  <th scope="col">Issue</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Priority</th>
-                  <th scope="col">Due</th>
-                  <th scope="col">Updated</th>
-                  <th scope="col">Actions</th>
+                  <th scope="col" className="selection-column">
+                    Select
+                  </th>
+                  <th scope="col" className="issue-column">
+                    Issue
+                  </th>
+                  <th scope="col" className="status-column">
+                    Status
+                  </th>
+                  <th scope="col" className="priority-column">
+                    Priority
+                  </th>
+                  <th scope="col" className="due-column">
+                    Due
+                  </th>
+                  <th scope="col" className="updated-column">
+                    Updated
+                  </th>
+                  <th scope="col" className="actions-column">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -606,11 +620,15 @@ export function IssueListPanel({
                           aria-describedby={bulkSelectionContextId}
                         />
                       </td>
-                      <td>
-                        <strong>{issue.title}</strong>
-                        {issue.archivedAt ? <span className="archived-pill">Archived</span> : null}
-                        {issue.isBlocked ? <span className="blocked-pill">Blocked</span> : null}
-                        {issueFreshness.isStale ? <span className="stale-pill">{issueFreshness.label}</span> : null}
+                      <td className="issue-title-cell">
+                        <div className="issue-title-line">
+                          <strong className="issue-title-text">{issue.title}</strong>
+                          <span className="issue-state-flags" aria-label={`State signals for ${issue.title}`}>
+                            {issue.archivedAt ? <span className="archived-pill">Archived</span> : null}
+                            {issue.isBlocked ? <span className="blocked-pill">Blocked</span> : null}
+                            {issueFreshness.isStale ? <span className="stale-pill">{issueFreshness.label}</span> : null}
+                          </span>
+                        </div>
                         {issue.description
                           ? renderMarkdownLiteInline(issue.description, { className: 'issue-description-snippet' })
                           : null}
@@ -624,13 +642,13 @@ export function IssueListPanel({
                           </div>
                         ) : null}
                       </td>
-                      <td>
+                      <td className="status-cell">
                         <span className={`pill status-${issue.status}`}>{statusLabels[issue.status]}</span>
                       </td>
-                      <td>
+                      <td className="priority-cell">
                         <span className={`pill priority-${issue.priority}`}>{priorityLabels[issue.priority]}</span>
                       </td>
-                      <td>
+                      <td className="due-cell">
                         <div className="due-date-cell">
                           <span className={issue.isOverdue ? 'due-date-text overdue' : 'due-date-text'}>
                             {formatIssueDueDate(issue.dueDate)}
@@ -638,8 +656,8 @@ export function IssueListPanel({
                           {issue.isOverdue ? <span className="overdue-pill">Overdue</span> : null}
                         </div>
                       </td>
-                      <td>{formatIssueDate(issue.updatedAt)}</td>
-                      <td>
+                      <td className="updated-cell">{formatIssueDate(issue.updatedAt)}</td>
+                      <td className="actions-cell">
                         <div className="row-actions">
                           <button
                             type="button"

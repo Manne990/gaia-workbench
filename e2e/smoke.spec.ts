@@ -2780,6 +2780,114 @@ test('dependency duplicate and cycle rejections keep UI graph state unchanged', 
   });
 });
 
+test('failed dependency cycle edit reconciles stale blocker state', async ({ page }) => {
+  const first = await createIssueThroughApi(page, {
+    title: 'Rollback cycle first issue',
+    description: 'Depends on the second issue to form a rejection path.',
+    status: 'in_progress',
+    priority: 'medium'
+  });
+  const second = await createIssueThroughApi(page, {
+    title: 'Rollback cycle second issue',
+    description: 'Depends on the target issue.',
+    status: 'todo',
+    priority: 'high'
+  });
+  const target = await createIssueThroughApi(page, {
+    title: 'Rollback cycle target issue',
+    description: 'Its stale blocker should disappear after a failed cycle edit.',
+    status: 'review',
+    priority: 'low'
+  });
+  const staleBlocker = await createIssueThroughApi(page, {
+    title: 'Rollback stale blocker issue',
+    description: 'Removed outside the current UI before the failed edit.',
+    status: 'todo',
+    priority: 'medium'
+  });
+
+  for (const [issueId, dependsOnIssueId] of [
+    [first.id, second.id],
+    [second.id, target.id],
+    [target.id, staleBlocker.id]
+  ]) {
+    const dependencyResponse = await page.request.post(`/api/issues/${issueId}/dependencies`, {
+      data: {
+        dependsOnIssueId
+      }
+    });
+
+    expect(dependencyResponse.ok()).toBe(true);
+  }
+
+  await page.goto(`/issues/${target.id}?search=${encodeURIComponent('Rollback cycle target issue')}`);
+
+  const detail = page.getByRole('region', { name: target.title });
+  const dependencyForm = detail.getByRole('form', { name: 'Dependency form' });
+  const dependencyInput = dependencyForm.getByLabel('Add blocker issue ID');
+  const blockers = detail.getByLabel('Issue blockers');
+  const staleBlockerItem = blockers.getByRole('listitem').filter({ hasText: staleBlocker.title });
+  const targetRow = page.getByRole('row', { name: /Rollback cycle target issue.*Review.*Low/ });
+
+  await expect(detail.getByText(`1 unresolved dependency remains: ${staleBlocker.title}.`)).toBeVisible();
+  await expect(staleBlockerItem.locator('.blocked-pill')).toHaveText('Blocking');
+  await expect(targetRow.locator('.blocked-pill')).toHaveText('Blocked');
+
+  const externalRemovalResponse = await page.request.delete(`/api/issues/${target.id}/dependencies/${staleBlocker.id}`);
+
+  expect(externalRemovalResponse.ok()).toBe(true);
+  await expect(staleBlockerItem).toBeVisible();
+
+  const failedCycleResponsePromise = page.waitForResponse((response) => {
+    const responseUrl = new URL(response.url());
+
+    return response.request().method() === 'POST' && responseUrl.pathname === `/api/issues/${target.id}/dependencies`;
+  });
+
+  await dependencyInput.fill(first.id);
+  await dependencyForm.getByRole('button', { name: 'Add Dependency' }).click();
+
+  const failedCycleResponse = await failedCycleResponsePromise;
+
+  expect(failedCycleResponse.status()).toBe(409);
+  await expect(dependencyForm.getByRole('alert')).toHaveText(
+    'Cannot add dependency because the selected blocker already depends on this issue'
+  );
+  await expect(dependencyInput).toHaveValue(first.id);
+  await expect(staleBlockerItem).toHaveCount(0);
+  await expect(blockers).toContainText('No blockers.');
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toHaveCount(0);
+  await expect(targetRow.locator('.blocked-pill')).toHaveCount(0);
+  await expect(detail.getByLabel('Issue activity').getByText('Dependency removed')).toBeVisible();
+
+  const reconciledStateResponse = await page.request.get(`/api/issues/${target.id}/dependencies`);
+  const reconciledState = (await reconciledStateResponse.json()) as { dependencies: unknown[]; isBlocked: boolean };
+
+  expect(reconciledStateResponse.ok()).toBe(true);
+  expect(reconciledState).toMatchObject({
+    dependencies: [],
+    isBlocked: false
+  });
+
+  const successfulDependencyResponsePromise = page.waitForResponse((response) => {
+    const responseUrl = new URL(response.url());
+
+    return response.request().method() === 'POST' && responseUrl.pathname === `/api/issues/${target.id}/dependencies`;
+  });
+
+  await dependencyInput.fill(staleBlocker.id);
+  await dependencyForm.getByRole('button', { name: 'Add Dependency' }).click();
+
+  const successfulDependencyResponse = await successfulDependencyResponsePromise;
+
+  expect(successfulDependencyResponse.ok()).toBe(true);
+  await expect(dependencyForm.getByRole('alert')).toHaveCount(0);
+  await expect(dependencyInput).toHaveValue('');
+  await expect(blockers.getByRole('listitem').filter({ hasText: staleBlocker.title })).toBeVisible();
+  await expect(detail.getByText(`1 unresolved dependency remains: ${staleBlocker.title}.`)).toBeVisible();
+  await expect(targetRow.locator('.blocked-pill')).toHaveText('Blocked');
+});
+
 test('dependency form trims whitespace and blocks self-dependency before submit', async ({ page }) => {
   const selected = await createIssueThroughApi(page, {
     title: 'Whitespace self dependency issue',

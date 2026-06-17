@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
+import { isSavedFilterStatus } from './issueStatus.js';
 import {
   NewSavedFilterView,
   SavedFilterPriority,
@@ -8,7 +9,6 @@ import {
   SavedFilterViewUpdate
 } from './types.js';
 
-const VALID_SAVED_STATUSES: SavedFilterStatus[] = ['all', 'todo', 'in_progress', 'review', 'done'];
 const VALID_SAVED_PRIORITIES: SavedFilterPriority[] = ['all', 'low', 'medium', 'high'];
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
@@ -93,11 +93,11 @@ function normalizeStatus(value: unknown): SavedFilterStatus {
     return 'all';
   }
 
-  if (typeof value !== 'string' || !VALID_SAVED_STATUSES.includes(value as SavedFilterStatus)) {
+  if (!isSavedFilterStatus(value)) {
     throw new Error('Invalid saved view status');
   }
 
-  return value as SavedFilterStatus;
+  return value;
 }
 
 function normalizePriority(value: unknown): SavedFilterPriority {

@@ -3,11 +3,14 @@ import {
   ActivityEvent,
   ActivityEventType,
   ActivityMetadata,
+  CLOSED_ISSUE_STATUS,
   Comment,
   CommentEditHistory,
   Issue,
   IssuePriority,
   IssueStatus,
+  isIssueStatus,
+  isSavedFilterStatus,
   SavedFilterPriority,
   SavedFilterStatus,
   SavedFilterView
@@ -109,9 +112,7 @@ type ValidationResult = {
 
 const DEFAULT_IMPORT_CONFLICT_POLICY: ImportConflictPolicy = 'skip-conflicts';
 const VALID_IMPORT_CONFLICT_POLICIES: ImportConflictPolicy[] = ['skip-conflicts', 'replace-conflicts'];
-const VALID_STATUSES: IssueStatus[] = ['todo', 'in_progress', 'review', 'done'];
 const VALID_PRIORITIES: IssuePriority[] = ['low', 'medium', 'high'];
-const VALID_SAVED_FILTER_STATUSES: SavedFilterStatus[] = ['all', ...VALID_STATUSES];
 const VALID_SAVED_FILTER_PRIORITIES: SavedFilterPriority[] = ['all', ...VALID_PRIORITIES];
 const VALID_ACTIVITY_TYPES: ActivityEventType[] = [
   'issue_created',
@@ -509,7 +510,7 @@ function validateDependsOnIssueIds(
 }
 
 function importedDependencyBlocks(issue: ExportedIssue): boolean {
-  return issue.archivedAt === null && issue.status !== 'done';
+  return issue.archivedAt === null && issue.status !== CLOSED_ISSUE_STATUS;
 }
 
 function validateIssueDependencyGraph(
@@ -983,7 +984,7 @@ function validateTrackerExport(input: unknown): ValidationResult {
       }
     }
 
-    if (!VALID_STATUSES.includes(status)) {
+    if (!isIssueStatus(status)) {
       pushError(errors, 'invalid_status', `${issuePath}.status`, 'Invalid issue status.', status);
     }
 
@@ -1310,7 +1311,7 @@ function validateTrackerExport(input: unknown): ValidationResult {
       }
     }
 
-    if (!VALID_SAVED_FILTER_STATUSES.includes(status)) {
+    if (!isSavedFilterStatus(status)) {
       pushError(errors, 'invalid_status', `${viewPath}.status`, 'Invalid saved view status.', status);
     }
 

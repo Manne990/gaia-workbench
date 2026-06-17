@@ -7,6 +7,16 @@ export {
   IssueDependencyRepository
 } from './issueDependencyRepository.js';
 export { IssueRepository } from './issueRepository.js';
+export {
+  assertIssueStatus,
+  CLOSED_ISSUE_STATUS,
+  createEmptyIssueStatusCounts,
+  DEFAULT_ISSUE_STATUS,
+  ISSUE_STATUSES,
+  isIssueStatus,
+  isSavedFilterStatus,
+  SAVED_FILTER_STATUSES
+} from './issueStatus.js';
 export { DuplicateSavedFilterViewNameError, SavedFilterViewRepository } from './savedFilterViewRepository.js';
 export { ensureTinyTrackerSchema, getTinyTrackerSchemaVersion, SCHEMA_VERSION, TABLE_NAMES } from './schema.js';
 export type {

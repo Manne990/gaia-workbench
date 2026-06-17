@@ -8,6 +8,7 @@ import {
   type Comment,
   type CommentEditHistory,
   CommentRepository,
+  CLOSED_ISSUE_STATUS,
   createDatabase,
   DuplicateSavedFilterViewNameError,
   type Issue,
@@ -19,7 +20,8 @@ import {
   type IssueUpdate,
   IssueRepository,
   type SavedFilterView,
-  SavedFilterViewRepository
+  SavedFilterViewRepository,
+  createEmptyIssueStatusCounts
 } from './db/index.js';
 import { buildIssueListFilterModel, buildIssueListQueryModel } from './issueListQuery.js';
 import { applyTrackerImport, ImportValidationError, previewTrackerImport, type ImportPlan } from './trackerImport.js';
@@ -383,12 +385,7 @@ function groupBy<T>(items: T[], keySelector: (item: T) => string): Map<string, T
 }
 
 function emptyStatusCounts(): Record<IssueStatus, number> {
-  return {
-    todo: 0,
-    in_progress: 0,
-    review: 0,
-    done: 0
-  };
+  return createEmptyIssueStatusCounts();
 }
 
 function emptyPriorityCounts(): Record<IssuePriority, number> {
@@ -430,7 +427,7 @@ function buildExportAuditSummary(exportPayload: TrackerExportBase): ExportAuditS
     for (const dependsOnIssueId of issue.dependsOnIssueIds) {
       const dependency = issueById.get(dependsOnIssueId);
 
-      if (dependency && dependency.archivedAt === null && dependency.status !== 'done') {
+      if (dependency && dependency.archivedAt === null && dependency.status !== CLOSED_ISSUE_STATUS) {
         blockingDependencies += 1;
       }
     }

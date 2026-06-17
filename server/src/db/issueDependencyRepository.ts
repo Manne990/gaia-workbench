@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { recordActivityEvent } from './activityRepository.js';
+import { CLOSED_ISSUE_STATUS } from './issueStatus.js';
 import { Issue, IssueDependencyReference, IssueDependencyState } from './types.js';
 
 type IssueReferenceRow = {
@@ -39,7 +40,7 @@ function mapIssueReference(row: IssueReferenceRow): IssueDependencyReference {
 }
 
 function isBlockingDependency(issue: IssueDependencyReference): boolean {
-  return issue.archivedAt === null && issue.status !== 'done';
+  return issue.archivedAt === null && issue.status !== CLOSED_ISSUE_STATUS;
 }
 
 function getIssueReference(database: Database.Database, issueId: string): IssueDependencyReference | null {
@@ -154,7 +155,7 @@ export function attachIssueDependencyState(database: Database.Database, issues: 
     ids.push(row.depends_on_issue_id);
     dependencyIdsByIssue.set(row.issue_id, ids);
 
-    if (row.archived_at === null && row.status !== 'done') {
+    if (row.archived_at === null && row.status !== CLOSED_ISSUE_STATUS) {
       blockedIssueIds.add(row.issue_id);
     }
   }

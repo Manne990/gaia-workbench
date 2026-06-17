@@ -4,10 +4,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   ActivityRepository,
+  CLOSED_ISSUE_STATUS,
   CommentRepository,
   createDatabase,
+  DEFAULT_ISSUE_STATUS,
   IssueDependencyRepository,
   IssueRepository,
+  ISSUE_STATUSES,
   SavedFilterViewRepository,
   TABLE_NAMES
 } from '../src/db/index.js';
@@ -340,10 +343,9 @@ describe('persistence layer', () => {
     const issueRepository = new IssueRepository(database);
 
     try {
-      const statuses = ['todo', 'in_progress', 'review', 'done'] as const;
       const priorities = ['low', 'medium', 'high'] as const;
 
-      for (const status of statuses) {
+      for (const status of ISSUE_STATUSES) {
         const issue = issueRepository.create({
           title: `Status ${status}`,
           status
@@ -369,12 +371,12 @@ describe('persistence layer', () => {
 
       expect(issueRepository.close(issue.id)).toMatchObject({
         id: issue.id,
-        status: 'done',
+        status: CLOSED_ISSUE_STATUS,
         priority: 'high'
       });
       expect(issueRepository.reopen(issue.id)).toMatchObject({
         id: issue.id,
-        status: 'todo',
+        status: DEFAULT_ISSUE_STATUS,
         priority: 'high'
       });
     } finally {

@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
+import { ISSUE_STATUSES } from '../src/db/index.js';
 
 const validationErrorBody = (error: string) => ({
   error,
@@ -241,7 +242,6 @@ describe('issues API', () => {
 
   it('keeps large filtered lists paginated consistently after status changes', async () => {
     const app = createApp({ databasePath: ':memory:' });
-    const statuses = ['todo', 'in_progress', 'review', 'done'] as const;
     const priorities = ['low', 'medium', 'high'] as const;
     type ListedIssue = { id: string; title: string; status: string; priority: string; labels: string[] };
     const assertLargeFilteredIssues = (issues: ListedIssue[]) => {
@@ -259,7 +259,7 @@ describe('issues API', () => {
         .send({
           title: `Large API guard ${String(index).padStart(3, '0')}`,
           description: `Deterministic large-list fixture ${index}`,
-          status: statuses[index % statuses.length],
+          status: ISSUE_STATUSES[index % ISSUE_STATUSES.length],
           priority: priorities[index % priorities.length],
           labels: ['large-api', `group-${index % 6}`]
         })

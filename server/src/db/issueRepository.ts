@@ -3,6 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { recordActivityEvent } from './activityRepository.js';
 import { attachIssueDependencyState } from './issueDependencyRepository.js';
 import {
+  assertIssueStatus,
+  CLOSED_ISSUE_STATUS,
+  createEmptyIssueStatusCounts,
+  DEFAULT_ISSUE_STATUS
+} from './issueStatus.js';
+import {
   BulkIssueStatusUpdateInput,
   BulkIssueStatusUpdateResult,
   Issue,
@@ -18,9 +24,7 @@ import {
   NewIssue
 } from './types.js';
 
-const VALID_STATUSES: IssueStatus[] = ['todo', 'in_progress', 'review', 'done'];
 const VALID_PRIORITIES: IssuePriority[] = ['low', 'medium', 'high'];
-const DEFAULT_STATUS: IssueStatus = 'todo';
 const DEFAULT_PRIORITY: IssuePriority = 'medium';
 export const STALE_ISSUE_THRESHOLD_DAYS = 30;
 const STALE_ISSUE_THRESHOLD_MS = STALE_ISSUE_THRESHOLD_DAYS * 24 * 60 * 60 * 1000;
@@ -67,12 +71,6 @@ function normalizeIssueDescription(value: unknown): string {
   }
 
   return value.trim();
-}
-
-function assertValidStatus(value: unknown): asserts value is IssueStatus {
-  if (typeof value !== 'string' || !VALID_STATUSES.includes(value as IssueStatus)) {
-    throw new Error('Invalid issue status');
-  }
 }
 
 function assertValidPriority(value: unknown): asserts value is IssuePriority {
@@ -153,7 +151,7 @@ function normalizeDueDate(value: unknown): string | null {
 }
 
 function isIssueOverdue(dueDate: string | null, status: IssueStatus): boolean {
-  return dueDate !== null && status !== 'done' && dueDate < todayLocalDate();
+  return dueDate !== null && status !== CLOSED_ISSUE_STATUS && dueDate < todayLocalDate();
 }
 
 export function getStaleIssueCutoffIso(now = new Date()): string {
@@ -304,7 +302,7 @@ function buildIssueListWhereClause(
   }
 
   if (filters.status !== undefined) {
-    assertValidStatus(filters.status);
+    assertIssueStatus(filters.status);
     clauses.push('status = @status');
     values.status = filters.status;
   }
@@ -319,10 +317,11 @@ function buildIssueListWhereClause(
           ON blocked_dependencies.id = dependencies.depends_on_issue_id
         WHERE dependencies.issue_id = issues.id
           AND blocked_dependencies.archived_at IS NULL
-          AND blocked_dependencies.status != 'done'
+          AND blocked_dependencies.status != @closedStatus
       )
       `
     );
+    values.closedStatus = CLOSED_ISSUE_STATUS;
   }
 
   if (filters.priority !== undefined) {
@@ -373,7 +372,7 @@ export class IssueRepository {
       id: randomUUID(),
       title: input.title.trim(),
       description: normalizeIssueDescription(input.description),
-      status: input.status ?? DEFAULT_STATUS,
+      status: input.status ?? DEFAULT_ISSUE_STATUS,
       priority: input.priority ?? DEFAULT_PRIORITY,
       labels: normalizeLabels(input.labels),
       dueDate: normalizeDueDate(input.dueDate),
@@ -385,7 +384,7 @@ export class IssueRepository {
       updatedAt: now
     };
 
-    assertValidStatus(issue.status);
+    assertIssueStatus(issue.status);
     assertValidPriority(issue.priority);
     issue.isOverdue = isIssueOverdue(issue.dueDate, issue.status);
 
@@ -518,12 +517,7 @@ export class IssueRepository {
       )
       .all(scopedFilters.values) as StatusCountRow[];
 
-    const byStatus: IssueAuditSummary['byStatus'] = {
-      todo: 0,
-      in_progress: 0,
-      review: 0,
-      done: 0
-    };
+    const byStatus = createEmptyIssueStatusCounts();
     for (const row of statusRows) {
       byStatus[row.status] = row.count;
     }
@@ -586,11 +580,11 @@ export class IssueRepository {
               ON blocked_dependencies.id = dependencies.depends_on_issue_id
             WHERE dependencies.issue_id = issues.id
               AND blocked_dependencies.archived_at IS NULL
-              AND blocked_dependencies.status != 'done'
+              AND blocked_dependencies.status != @closedStatus
           )
           `
         )
-        .get(scopedFilters.values) as CountRow
+        .get({ ...scopedFilters.values, closedStatus: CLOSED_ISSUE_STATUS }) as CountRow
     ).count;
 
     const totalOverdueIssues = (
@@ -601,11 +595,11 @@ export class IssueRepository {
         FROM issues
         ${scopedFilters.whereClause}
         ${scopedFilters.whereClause ? 'AND' : 'WHERE'} due_date IS NOT NULL
-        AND status != 'done'
+        AND status != @closedStatus
         AND due_date < @today
         `
         )
-        .get({ ...scopedFilters.values, today: todayLocalDate() }) as CountRow
+        .get({ ...scopedFilters.values, closedStatus: CLOSED_ISSUE_STATUS, today: todayLocalDate() }) as CountRow
     ).count;
 
     const totalStaleIssues = (
@@ -638,11 +632,11 @@ export class IssueRepository {
               ON blocked_dependencies.id = dependencies.depends_on_issue_id
             WHERE dependencies.issue_id IN (SELECT id FROM filtered_issues)
               AND blocked_dependencies.archived_at IS NULL
-              AND blocked_dependencies.status != 'done'
+              AND blocked_dependencies.status != @closedStatus
           ) AS blocked
         `
       )
-      .get(scopedFilters.values) as { total: number; blocked: number };
+      .get({ ...scopedFilters.values, closedStatus: CLOSED_ISSUE_STATUS }) as { total: number; blocked: number };
 
     return {
       totalIssues,
@@ -678,12 +672,7 @@ export class IssueRepository {
   }
 
   private getListSummary(includeArchived = false): IssueListSummary {
-    const totalByStatus: IssueListSummary['totalByStatus'] = {
-      todo: 0,
-      in_progress: 0,
-      review: 0,
-      done: 0
-    };
+    const totalByStatus = createEmptyIssueStatusCounts();
     const archiveWhereClause = includeArchived ? '' : 'WHERE archived_at IS NULL';
     const statusRows = this.database
       .prepare(
@@ -754,7 +743,7 @@ export class IssueRepository {
     }
 
     if (input.status !== undefined) {
-      assertValidStatus(input.status);
+      assertIssueStatus(input.status);
       fields.push('status = @status');
       nextStatus = input.status;
       values.status = nextStatus;
@@ -831,7 +820,7 @@ export class IssueRepository {
   }
 
   bulkUpdateStatus(input: BulkIssueStatusUpdateInput): BulkIssueStatusUpdateResult {
-    assertValidStatus(input.status);
+    assertIssueStatus(input.status);
     const { uniqueIds, duplicateIds } = normalizeBulkIssueIds(input.issueIds);
     const placeholders = uniqueIds.map(() => '?').join(', ');
     const rows = this.database
@@ -999,10 +988,10 @@ export class IssueRepository {
   }
 
   close(id: string): Issue | null {
-    return this.update(id, { status: 'done' });
+    return this.update(id, { status: CLOSED_ISSUE_STATUS });
   }
 
   reopen(id: string): Issue | null {
-    return this.update(id, { status: DEFAULT_STATUS });
+    return this.update(id, { status: DEFAULT_ISSUE_STATUS });
   }
 }

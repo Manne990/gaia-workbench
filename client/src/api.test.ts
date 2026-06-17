@@ -4,6 +4,7 @@ import {
   applyImport,
   archiveIssue,
   fetchCommentHistory,
+  fetchIssueAuditSummary,
   fetchIssue,
   fetchIssueActivity,
   fetchIssues,
@@ -131,6 +132,39 @@ describe('client API errors', () => {
 
     await expect(fetchIssues(query, controller.signal)).rejects.toThrow('Invalid page parameter');
     expect(fetch).toHaveBeenCalledWith('/api/issues?page=0&limit=20', { signal: controller.signal });
+  });
+
+  it('requests the audit summary endpoint with matching filter query params', async () => {
+    const controller = new AbortController();
+    const query = new URLSearchParams({ blockedOnly: 'true', label: 'ops' });
+    const summary = {
+      totalIssues: 1,
+      totalArchivedIssues: 0,
+      totalBlockedIssues: 1,
+      totalOverdueIssues: 1,
+      totalStaleIssues: 0,
+      byStatus: {
+        todo: 0,
+        in_progress: 1,
+        review: 0,
+        done: 0
+      },
+      byPriority: {
+        low: 0,
+        medium: 0,
+        high: 1
+      },
+      dependencyEdges: {
+        total: 1,
+        blocked: 1
+      }
+    };
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(summary, { status: 200 }));
+
+    await expect(fetchIssueAuditSummary(query, controller.signal)).resolves.toEqual(summary);
+    expect(fetch).toHaveBeenCalledWith('/api/issues/audit-summary?blockedOnly=true&label=ops', {
+      signal: controller.signal
+    });
   });
 
   it('rejects successful JSON endpoints when the response body cannot be parsed', async () => {

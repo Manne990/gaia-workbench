@@ -4,6 +4,7 @@ import type {
   CommentEditHistory,
   ImportPlan,
   ImportConflictPolicy,
+  IssueAuditSummary,
   Issue,
   IssueListResponse,
   IssueStatus,
@@ -40,6 +41,13 @@ export async function fetchIssues(query: URLSearchParams, signal?: AbortSignal):
   const response = await fetch(`/api/issues${queryString ? `?${queryString}` : ''}`, { signal });
 
   return readJsonOrThrow<IssueListResponse>(response, 'Unable to load issues.');
+}
+
+export async function fetchIssueAuditSummary(query: URLSearchParams, signal?: AbortSignal): Promise<IssueAuditSummary> {
+  const queryString = query.toString();
+  const response = await fetch(`/api/issues/audit-summary${queryString ? `?${queryString}` : ''}`, { signal });
+
+  return readJsonOrThrow<IssueAuditSummary>(response, 'Unable to load issue audit summary.');
 }
 
 export async function fetchIssueActivity(issueId: string, signal?: AbortSignal): Promise<ActivityEvent[]> {

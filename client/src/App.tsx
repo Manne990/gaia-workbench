@@ -24,6 +24,7 @@ import {
 } from './api';
 import { DashboardHeader } from './components/DashboardHeader';
 import { ImportPanel } from './components/ImportPanel';
+import { IssueAuditSummary } from './components/IssueAuditSummary';
 import { IssueDetailPanel } from './components/IssueDetailPanel';
 import { IssueFormPanel } from './components/IssueFormPanel';
 import { IssueListPanel } from './components/IssueListPanel';
@@ -168,6 +169,7 @@ export function App() {
     totalIssueCount,
     activeFilterSummaries,
     hasActiveFilters,
+    auditSummary,
     statusCounts,
     issueListSummary,
     clearFilters,
@@ -1714,6 +1716,8 @@ export function App() {
           onClose={() => closeCommandPalette()}
           commands={commandPaletteCommands}
         />
+
+        <IssueAuditSummary auditSummary={auditSummary} />
 
         <IssueStatusSummary statusCounts={statusCounts} />
 

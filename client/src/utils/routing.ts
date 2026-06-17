@@ -23,6 +23,8 @@ type RouteBuildOptions = {
   savedViewId?: string | null;
 };
 
+type SavedViewRouteState = Pick<SavedFilterView, 'id'> & DashboardFilters;
+
 export const defaultDashboardFilters: DashboardFilters = {
   search: '',
   status: 'all',
@@ -153,8 +155,25 @@ export function buildIssuePath(
   return query ? `${path}?${query}` : path;
 }
 
+export function buildSavedViewPath(view: SavedViewRouteState, issueId: string | null = null): string {
+  const filters = copyDashboardFilters(view);
+
+  return issueId
+    ? buildIssuePath(issueId, filters, { savedViewId: view.id })
+    : buildDashboardPath(filters, { savedViewId: view.id });
+}
+
 export function buildStableIssueUrl(issueId: string, origin: string): string {
   return new URL(buildIssuePath(issueId), origin).toString();
+}
+
+function writePath(nextPath: string, mode: 'push' | 'replace'): void {
+  const currentPath = `${window.location.pathname}${window.location.search}`;
+
+  if (currentPath !== nextPath || window.location.hash) {
+    const method = mode === 'replace' ? 'replaceState' : 'pushState';
+    window.history[method](null, '', nextPath);
+  }
 }
 
 export function writeRoute(
@@ -164,12 +183,12 @@ export function writeRoute(
   options: RouteBuildOptions = {}
 ): void {
   const nextPath = issueId ? buildIssuePath(issueId, filters, options) : buildDashboardPath(filters, options);
-  const currentPath = `${window.location.pathname}${window.location.search}`;
 
-  if (currentPath !== nextPath || window.location.hash) {
-    const method = mode === 'replace' ? 'replaceState' : 'pushState';
-    window.history[method](null, '', nextPath);
-  }
+  writePath(nextPath, mode);
+}
+
+export function writeSavedViewRoute(issueId: string | null, view: SavedViewRouteState, mode: 'push' | 'replace'): void {
+  writePath(buildSavedViewPath(view, issueId), mode);
 }
 
 function parseStatusFilter(value: string | null): StatusFilter {

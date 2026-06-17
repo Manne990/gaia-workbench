@@ -6,9 +6,11 @@ import {
   buildDashboardQuery,
   buildIssuePath,
   buildIssueListQuery,
+  buildSavedViewPath,
   buildStableIssueUrl,
   dashboardFiltersFromSavedView,
   dashboardFiltersToSavedViewPayload,
+  defaultDashboardFilters,
   getIssueIdFromPath,
   parseDashboardFiltersFromSearch,
   parseSavedViewIdFromSearch
@@ -211,6 +213,40 @@ describe('client routing helpers', () => {
     expect(buildIssuePath('issue id', filters, { savedViewId: 'view-123' })).toBe(
       '/issues/issue%20id?savedView=view-123&search=saved+target&status=review&priority=high&label=archive&includeArchived=true&blockedOnly=true&limit=50'
     );
+  });
+
+  it('builds saved view share paths without default-valued dashboard params', () => {
+    const defaultView = {
+      id: 'view-default',
+      ...defaultDashboardFilters
+    };
+    const reviewView = {
+      ...defaultView,
+      id: 'view-review',
+      search: 'saved target',
+      status: 'review' as const,
+      priority: 'high' as const,
+      label: 'archive',
+      includeArchived: true,
+      staleOnly: true,
+      pageSize: 50
+    };
+
+    expect(buildSavedViewPath(defaultView)).toBe('/?savedView=view-default');
+    expect(buildSavedViewPath(defaultView, 'issue id')).toBe('/issues/issue%20id?savedView=view-default');
+    expect(buildSavedViewPath(reviewView)).toBe(
+      '/?savedView=view-review&search=saved+target&status=review&priority=high&label=archive&includeArchived=true&staleOnly=true&limit=50'
+    );
+  });
+
+  it('keeps inbound saved view URLs with explicit defaults loadable and canonicalizable', () => {
+    const search =
+      '?savedView=view-default&search=%20&status=all&priority=all&includeArchived=false&blockedOnly=false&staleOnly=false&limit=25';
+    const filters = parseDashboardFiltersFromSearch(search);
+
+    expect(parseSavedViewIdFromSearch(search)).toBe('view-default');
+    expect(filters).toEqual(defaultDashboardFilters);
+    expect(buildSavedViewPath({ id: 'view-default', ...filters })).toBe('/?savedView=view-default');
   });
 
   it('parses and builds dashboard label filters', () => {

@@ -12,7 +12,7 @@ import type {
   PriorityFilter,
   StatusFilter
 } from '../types';
-import { buildDashboardQuery, defaultDashboardFilters } from '../utils/routing';
+import { buildDashboardQuery, buildIssueListQuery, defaultDashboardFilters } from '../utils/routing';
 
 const defaultPagination: IssueListPagination = {
   page: 1,
@@ -91,13 +91,33 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
       ),
     [blockedOnly, includeArchived, labelFilter, pageSize, priorityFilter, searchFilter, staleOnly, statusFilter]
   );
-  const issueListQuery = useMemo(() => {
-    const params = new URLSearchParams(filterQuery);
-    params.set('page', String(currentPage));
-    params.set('limit', String(pageSize));
-
-    return params.toString();
-  }, [currentPage, filterQuery, pageSize]);
+  const issueListQuery = useMemo(
+    () =>
+      buildIssueListQuery(
+        {
+          search: searchFilter,
+          status: statusFilter,
+          priority: priorityFilter,
+          label: labelFilter,
+          includeArchived,
+          blockedOnly,
+          staleOnly,
+          pageSize
+        },
+        currentPage
+      ),
+    [
+      blockedOnly,
+      currentPage,
+      includeArchived,
+      labelFilter,
+      pageSize,
+      priorityFilter,
+      searchFilter,
+      staleOnly,
+      statusFilter
+    ]
+  );
 
   useEffect(() => {
     const controller = new AbortController();

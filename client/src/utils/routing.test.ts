@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  areDashboardFiltersEqual,
+  buildCsvExportPath,
   buildDashboardPath,
+  buildDashboardQuery,
   buildIssuePath,
+  buildIssueListQuery,
   buildStableIssueUrl,
+  dashboardFiltersFromSavedView,
+  dashboardFiltersToSavedViewPayload,
   getIssueIdFromPath,
   parseDashboardFiltersFromSearch,
   parseSavedViewIdFromSearch
@@ -240,5 +246,49 @@ describe('client routing helpers', () => {
       pageSize: 10
     });
     expect(buildDashboardPath(filters)).toBe('/?label=blocked&blockedOnly=true&staleOnly=true&limit=10');
+  });
+
+  it('round-trips equivalent board query state through URL and saved-view paths', () => {
+    const filters = {
+      search: 'api export',
+      status: 'review' as const,
+      priority: 'high' as const,
+      label: 'ops',
+      includeArchived: true,
+      blockedOnly: true,
+      staleOnly: true,
+      pageSize: 50
+    };
+    const query = buildDashboardQuery(filters);
+    const parsedFilters = parseDashboardFiltersFromSearch(query);
+    const savedViewPayload = dashboardFiltersToSavedViewPayload('Ops board', parsedFilters);
+    const savedView = {
+      id: 'view-ops',
+      createdAt: '2026-06-17T22:00:00.000Z',
+      updatedAt: '2026-06-17T22:00:00.000Z',
+      ...savedViewPayload
+    };
+    const savedViewFilters = dashboardFiltersFromSavedView(savedView);
+
+    expect(parsedFilters).toEqual(filters);
+    expect(savedViewPayload).toEqual({ name: 'Ops board', ...filters });
+    expect(savedViewFilters).toEqual(filters);
+    expect(areDashboardFiltersEqual(savedViewFilters, filters)).toBe(true);
+    expect(buildDashboardPath(savedViewFilters, { savedViewId: savedView.id })).toBe(
+      '/?savedView=view-ops&search=api+export&status=review&priority=high&label=ops&includeArchived=true&blockedOnly=true&staleOnly=true&limit=50'
+    );
+  });
+
+  it('uses the dashboard query model for list and export API paths', () => {
+    const filters = parseDashboardFiltersFromSearch(
+      '?search=roadmap&status=todo&priority=medium&label=team&includeArchived=true&blockedOnly=true&staleOnly=true&limit=50'
+    );
+
+    expect(buildIssueListQuery(filters, 3)).toBe(
+      'search=roadmap&status=todo&priority=medium&label=team&includeArchived=true&blockedOnly=true&staleOnly=true&page=3&limit=50'
+    );
+    expect(buildCsvExportPath(filters)).toBe(
+      '/api/export.csv?search=roadmap&status=todo&priority=medium&label=team&includeArchived=true&blockedOnly=true&staleOnly=true'
+    );
   });
 });

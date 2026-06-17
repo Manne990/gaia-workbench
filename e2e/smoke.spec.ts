@@ -418,6 +418,25 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   expect(csvLines[1]).toContain('done');
   expect(csvLines[1]).toContain('low');
 
+  const settings = await expandDashboardSettings(page);
+
+  await filters.getByLabel('Label').fill('api');
+  await filters.getByLabel('Priority').selectOption('low');
+  await filters.getByLabel('Include archived').check();
+  await filters.getByLabel('Blocked only').check();
+  await filters.getByLabel('Stale only').check();
+  await settings.getByLabel('Page size').selectOption('10');
+
+  await expect(page.getByRole('link', { name: 'Download CSV' })).toHaveAttribute(
+    'href',
+    '/api/export.csv?search=Edit+issue+from+UI&status=done&priority=low&label=api&includeArchived=true&blockedOnly=true&staleOnly=true'
+  );
+
+  await filters.getByLabel('Label').fill('');
+  await filters.getByLabel('Include archived').uncheck();
+  await filters.getByLabel('Blocked only').uncheck();
+  await filters.getByLabel('Stale only').uncheck();
+
   await createIssueThroughApi(page, {
     title: '=CSV dashboard formula',
     description: '+CSV dashboard description',

@@ -477,6 +477,76 @@ describe('tracker export API', () => {
     ]);
   });
 
+  it('uses stale-only filter semantics for CSV exports', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    await request(app)
+      .post('/api/import/apply')
+      .send({
+        exportVersion: 1,
+        issues: [
+          {
+            id: '00000000-0000-4000-8000-000000000338',
+            title: 'Stale CSV issue',
+            description: 'Old enough to appear in stale exports.',
+            status: 'todo',
+            priority: 'medium',
+            labels: ['csv'],
+            dueDate: null,
+            isOverdue: false,
+            isBlocked: false,
+            dependsOnIssueIds: [],
+            archivedAt: null,
+            createdAt: '2026-04-01T00:00:00.000Z',
+            updatedAt: '2026-04-01T00:00:00.000Z',
+            comments: [],
+            activityEvents: []
+          }
+        ]
+      })
+      .expect(200);
+
+    const freshIssue = await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'Fresh CSV issue',
+        description: 'Recently updated issue should stay out of stale exports.',
+        status: 'todo',
+        priority: 'medium',
+        labels: ['csv']
+      })
+      .expect(201);
+
+    const response = await request(app)
+      .get('/api/export.csv?staleOnly=true&status=todo&label=csv')
+      .expect(200)
+      .expect('Content-Type', /text\/csv/);
+
+    const rowsById = new Map(
+      parseCsvRows(response.text)
+        .slice(1)
+        .map((row) => [row[0], row])
+    );
+
+    expect(rowsById.size).toBe(1);
+    expect(rowsById.get('00000000-0000-4000-8000-000000000338')).toEqual([
+      '00000000-0000-4000-8000-000000000338',
+      'Stale CSV issue',
+      'Old enough to appear in stale exports.',
+      'todo',
+      'medium',
+      '',
+      'false',
+      'false',
+      '',
+      '',
+      'csv',
+      '2026-04-01T00:00:00.000Z',
+      '2026-04-01T00:00:00.000Z'
+    ]);
+    expect(rowsById.has(freshIssue.body.id)).toBe(false);
+  });
+
   it('neutralizes spreadsheet formula-leading CSV cells without changing JSON export', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

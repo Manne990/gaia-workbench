@@ -113,6 +113,28 @@ function applyDependencyStateToIssue(issue: Issue, dependencies: IssueDependency
   };
 }
 
+function areIssueDetailSnapshotsEqual(left: Issue, right: Issue): boolean {
+  return (
+    left.id === right.id &&
+    left.title === right.title &&
+    left.description === right.description &&
+    left.status === right.status &&
+    left.priority === right.priority &&
+    areStringArraysEqual(left.labels, right.labels) &&
+    left.dueDate === right.dueDate &&
+    left.isOverdue === right.isOverdue &&
+    left.archivedAt === right.archivedAt &&
+    left.isBlocked === right.isBlocked &&
+    areStringArraysEqual(left.dependsOnIssueIds, right.dependsOnIssueIds) &&
+    left.createdAt === right.createdAt &&
+    left.updatedAt === right.updatedAt
+  );
+}
+
+function isIssueSnapshotOlder(left: Issue, right: Issue): boolean {
+  return left.updatedAt < right.updatedAt;
+}
+
 function parseIssueAnchorTarget(hash: string): IssueAnchorTarget | null {
   const match = /^(?:#)(comment|activity)-(.+)$/.exec(hash.trim());
 
@@ -475,6 +497,26 @@ export function App() {
   }, [filteredIssues]);
 
   useEffect(() => {
+    if (!selectedIssueId || !selectedIssue || selectedIssue.id !== selectedIssueId) {
+      return;
+    }
+
+    const refreshedSelectedIssue = filteredIssues.find((issue) => issue.id === selectedIssueId);
+
+    if (
+      !refreshedSelectedIssue ||
+      isIssueSnapshotOlder(refreshedSelectedIssue, selectedIssue) ||
+      areIssueDetailSnapshotsEqual(selectedIssue, refreshedSelectedIssue)
+    ) {
+      return;
+    }
+
+    setSelectedIssue(refreshedSelectedIssue);
+    setSelectedIssueLoadState('loaded');
+    setSelectedIssueDetailReloadToken((value) => value + 1);
+  }, [filteredIssues, selectedIssue, selectedIssueId]);
+
+  useEffect(() => {
     dashboardFiltersRef.current = dashboardFilters;
   }, [dashboardFilters]);
 
@@ -666,7 +708,7 @@ export function App() {
     if (selectedIssue) {
       issueDetailHeadingRef.current?.focus();
     }
-  }, [selectedIssue]);
+  }, [selectedIssue?.id]);
 
   useEffect(() => {
     if (isMissingSelectedIssue) {

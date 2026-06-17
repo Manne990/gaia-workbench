@@ -2,6 +2,12 @@ import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 
+const validationErrorBody = (error: string) => ({
+  error,
+  code: 'validation_error',
+  errors: [{ message: error }]
+});
+
 type IssueSnapshot = {
   id: string;
   createdAt: string;
@@ -471,7 +477,7 @@ describe('tracker export API', () => {
 
     await request(app)
       .get('/api/export?includeAuditSummary=yes')
-      .expect(400, { error: 'Invalid includeAuditSummary parameter' });
+      .expect(400, validationErrorBody('Invalid includeAuditSummary parameter'));
   });
 
   it('exports filtered issues to CSV with deterministic headers', async () => {

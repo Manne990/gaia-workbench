@@ -2,6 +2,12 @@ import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
 
+const validationErrorBody = (error: string) => ({
+  error,
+  code: 'validation_error',
+  errors: [{ message: error }]
+});
+
 describe('comments API', () => {
   it('adds and lists comments for an issue', async () => {
     const app = createApp({ databasePath: ':memory:' });
@@ -77,9 +83,10 @@ describe('comments API', () => {
 
     expect(trimStableEdit.body).toEqual(secondEdit.body);
 
-    await request(app).put(`/api/comments/${comment.body.id}`).send({ body: '   ' }).expect(400, {
-      error: 'body is required'
-    });
+    await request(app)
+      .put(`/api/comments/${comment.body.id}`)
+      .send({ body: '   ' })
+      .expect(400, validationErrorBody('body is required'));
 
     const currentComment = await request(app).get(`/api/issues/${issue.body.id}/comments`).expect(200);
     expect(currentComment.body).toEqual([secondEdit.body]);
@@ -347,17 +354,20 @@ describe('comments API', () => {
       .send({ body: 'Valid comment' })
       .expect(201);
 
-    await request(app).post(`/api/issues/${issue.body.id}/comments`).send({ body: '   ' }).expect(400, {
-      error: 'body is required'
-    });
+    await request(app)
+      .post(`/api/issues/${issue.body.id}/comments`)
+      .send({ body: '   ' })
+      .expect(400, validationErrorBody('body is required'));
 
-    await request(app).put(`/api/comments/${comment.body.id}`).send({ body: '' }).expect(400, {
-      error: 'body is required'
-    });
+    await request(app)
+      .put(`/api/comments/${comment.body.id}`)
+      .send({ body: '' })
+      .expect(400, validationErrorBody('body is required'));
 
-    await request(app).put(`/api/comments/${comment.body.id}`).send({ body: '   ' }).expect(400, {
-      error: 'body is required'
-    });
+    await request(app)
+      .put(`/api/comments/${comment.body.id}`)
+      .send({ body: '   ' })
+      .expect(400, validationErrorBody('body is required'));
   });
 
   it('returns standard JSON parse errors for comment mutations', async () => {
@@ -374,9 +384,8 @@ describe('comments API', () => {
       .send('{')
       .expect(400)
       .expect((response) => {
-        expect(response.body).toEqual({ error: 'Request body must be valid JSON.' });
+        expect(response.body).toEqual(validationErrorBody('Request body must be valid JSON.'));
         expect(response.body).not.toHaveProperty('valid');
-        expect(response.body).not.toHaveProperty('errors');
       });
 
     await request(app)
@@ -385,9 +394,8 @@ describe('comments API', () => {
       .send('{')
       .expect(400)
       .expect((response) => {
-        expect(response.body).toEqual({ error: 'Request body must be valid JSON.' });
+        expect(response.body).toEqual(validationErrorBody('Request body must be valid JSON.'));
         expect(response.body).not.toHaveProperty('valid');
-        expect(response.body).not.toHaveProperty('errors');
       });
   });
 

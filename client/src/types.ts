@@ -45,6 +45,20 @@ export type IssueListSummary = {
   totalHighPriority: number;
 };
 
+export type IssueAuditSummary = {
+  totalIssues: number;
+  totalArchivedIssues: number;
+  totalBlockedIssues: number;
+  totalOverdueIssues: number;
+  totalStaleIssues: number;
+  byStatus: Record<IssueStatus, number>;
+  byPriority: Record<IssuePriority, number>;
+  dependencyEdges: {
+    total: number;
+    blocked: number;
+  };
+};
+
 export type IssueListResponse = {
   items: Issue[];
   pagination: IssueListPagination;

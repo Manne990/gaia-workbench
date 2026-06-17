@@ -231,6 +231,10 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
   await expect(page.getByText('TinyTracker')).toBeVisible();
   await expect(page.getByRole('status', { name: 'Service status' })).toHaveText('Service: online');
+  await expect(page.getByLabel('Tracker audit summary')).toBeVisible();
+  await expect(page.getByLabel('Tracker audit summary')).toContainText('Open');
+  await expect(page.getByLabel('Tracker audit summary')).toContainText('Done');
+  await expect(page.getByLabel('Tracker audit summary')).toContainText('Blocked');
   await expect(page.getByLabel('Issue status summary')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Issue List' })).toBeVisible();
   await expect(page.getByText('No issues yet.')).toBeVisible();
@@ -255,6 +259,9 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   await expect(createdRow.locator('.label-pill').getByText('bug', { exact: true })).toBeVisible();
   await expect(createdRow.locator('.overdue-pill')).toHaveText('Overdue');
   await expect(page.getByText('1 high priority')).toBeVisible();
+  await expect(page.getByLabel('Tracker audit summary')).toContainText('Open');
+  await expect(page.getByLabel('Tracker audit summary')).toContainText('1');
+  await expect(page.getByLabel('Tracker audit summary')).toContainText('Overdue');
 
   await page.getByRole('button', { name: 'Edit Create issue from UI' }).click();
   await issueForm.getByLabel('Title').fill('Edit issue from UI');

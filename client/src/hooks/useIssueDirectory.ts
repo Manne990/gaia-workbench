@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchIssues } from '../api';
+import { fetchIssueAuditSummary, fetchIssues } from '../api';
 import { priorityLabels, statusLabels, statusOrder } from '../constants';
 import type {
   ActiveFilterSummary,
   DashboardFilters,
+  IssueAuditSummary,
   Issue,
   IssueListPagination,
   IssueListSummary,
@@ -32,6 +33,29 @@ const defaultSummary: IssueListSummary = {
   totalHighPriority: 0
 };
 
+const defaultAuditSummary: IssueAuditSummary = {
+  totalIssues: 0,
+  totalArchivedIssues: 0,
+  totalBlockedIssues: 0,
+  totalOverdueIssues: 0,
+  totalStaleIssues: 0,
+  byStatus: {
+    todo: 0,
+    in_progress: 0,
+    review: 0,
+    done: 0
+  },
+  byPriority: {
+    low: 0,
+    medium: 0,
+    high: 0
+  },
+  dependencyEdges: {
+    total: 0,
+    blocked: 0
+  }
+};
+
 export function useIssueDirectory(initialFilters: DashboardFilters = defaultDashboardFilters) {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loadState, setLoadState] = useState<LoadState>('loading');
@@ -47,6 +71,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState<IssueListPagination>(defaultPagination);
   const [summary, setSummary] = useState<IssueListSummary>(defaultSummary);
+  const [auditSummary, setAuditSummary] = useState<IssueAuditSummary>(defaultAuditSummary);
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
@@ -71,14 +96,34 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
       params.set('page', String(currentPage));
       params.set('limit', String(pageSize));
 
+      const auditParams = new URLSearchParams(
+        buildDashboardQuery(
+          {
+            search: searchFilter,
+            status: statusFilter,
+            priority: priorityFilter,
+            label: labelFilter,
+            includeArchived,
+            blockedOnly,
+            staleOnly,
+            pageSize
+          },
+          { includePageSize: false }
+        )
+      );
+
       try {
         setLoadState('loading');
         setLoadError(null);
-        const body = await fetchIssues(params, controller.signal);
+        const [body, nextAuditSummary] = await Promise.all([
+          fetchIssues(params, controller.signal),
+          fetchIssueAuditSummary(auditParams, controller.signal)
+        ]);
 
         setIssues(body.items);
         setPagination(body.pagination);
         setSummary(body.summary);
+        setAuditSummary(nextAuditSummary);
         setLoadState('loaded');
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -267,6 +312,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     currentPage,
     pagination,
     summary,
+    auditSummary,
     totalIssueCount,
     filteredIssues: issues,
     activeFilterSummaries,

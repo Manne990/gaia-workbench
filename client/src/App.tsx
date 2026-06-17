@@ -53,8 +53,11 @@ import type {
 import { restoreFocus } from './utils/focus';
 import { parseDueDateInput, parseLabelsInput } from './utils/parse';
 import {
-  buildDashboardQuery,
+  areDashboardFiltersEqual,
+  buildCsvExportPath,
   buildStableIssueUrl,
+  dashboardFiltersFromSavedView,
+  dashboardFiltersToSavedViewPayload,
   defaultDashboardFilters,
   getRouteStateFromLocation,
   type RouteState,
@@ -97,19 +100,6 @@ function writeStoredDashboardDensity(value: DashboardDensity): void {
 
 function areStringArraysEqual(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
-function savedViewMatchesDashboardFilters(view: SavedFilterView, filters: DashboardFilters): boolean {
-  return (
-    view.search === filters.search &&
-    view.status === filters.status &&
-    view.priority === filters.priority &&
-    view.label === filters.label &&
-    view.includeArchived === filters.includeArchived &&
-    view.blockedOnly === filters.blockedOnly &&
-    view.staleOnly === filters.staleOnly &&
-    view.pageSize === filters.pageSize
-  );
 }
 
 function applyDependencyStateToIssue(issue: Issue, dependencies: IssueDependencyState): Issue {
@@ -330,11 +320,7 @@ export function App() {
     }),
     [blockedOnly, includeArchived, labelFilter, pageSize, priorityFilter, searchFilter, staleOnly, statusFilter]
   );
-  const csvExportHref = useMemo(() => {
-    const query = buildDashboardQuery(dashboardFilters, { includePageSize: false });
-
-    return query ? `/api/export.csv?${query}` : '/api/export.csv';
-  }, [dashboardFilters]);
+  const csvExportHref = useMemo(() => buildCsvExportPath(dashboardFilters), [dashboardFilters]);
   const activeFilterSummaries: ActiveFilterSummary[] = useMemo(() => {
     const activeSavedView = activeSavedViewId ? savedViews.find((view) => view.id === activeSavedViewId) : null;
     const editedSavedView = editedSavedViewId ? savedViews.find((view) => view.id === editedSavedViewId) : null;
@@ -346,7 +332,7 @@ export function App() {
       ];
     }
 
-    if (editedSavedView && !savedViewMatchesDashboardFilters(editedSavedView, dashboardFilters)) {
+    if (editedSavedView && !areDashboardFiltersEqual(editedSavedView, dashboardFilters)) {
       return [
         { key: 'savedViewEdited', label: 'Saved view', value: `${editedSavedView.name} (edited)` },
         ...dashboardActiveFilterSummaries
@@ -1059,25 +1045,12 @@ export function App() {
     setSavedViewName('');
   }
 
-  function getFiltersForSavedView(view: SavedFilterView): DashboardFilters {
-    return {
-      search: view.search,
-      status: view.status,
-      priority: view.priority,
-      label: view.label,
-      includeArchived: view.includeArchived,
-      blockedOnly: view.blockedOnly,
-      staleOnly: view.staleOnly,
-      pageSize: view.pageSize
-    };
-  }
-
   function getSelectedIssueIdForSavedView(): string | null {
     return selectedIssueIdRef.current;
   }
 
   function applySavedViewState(view: SavedFilterView, mode: 'push' | 'replace') {
-    const nextFilters = getFiltersForSavedView(view);
+    const nextFilters = dashboardFiltersFromSavedView(view);
     const nextSelectedIssueId = getSelectedIssueIdForSavedView();
 
     setActiveSavedViewState(view.id);
@@ -1159,10 +1132,7 @@ export function App() {
     setSavedViewError(null);
 
     try {
-      const view = await createSavedFilterView({
-        name,
-        ...dashboardFiltersRef.current
-      });
+      const view = await createSavedFilterView(dashboardFiltersToSavedViewPayload(name, dashboardFiltersRef.current));
 
       setActiveSavedViewState(view.id);
       setEditedSavedViewId(null);

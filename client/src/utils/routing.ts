@@ -1,5 +1,13 @@
 import { priorityOrder, statusOrder } from '../constants';
-import type { DashboardFilters, IssuePriority, IssueStatus, PriorityFilter, StatusFilter } from '../types';
+import type {
+  DashboardFilters,
+  IssuePriority,
+  IssueStatus,
+  PriorityFilter,
+  SavedFilterView,
+  SavedFilterViewPayload,
+  StatusFilter
+} from '../types';
 
 export const defaultPageSize = 25;
 export const maxPageSize = 100;
@@ -25,6 +33,45 @@ export const defaultDashboardFilters: DashboardFilters = {
   staleOnly: false,
   pageSize: defaultPageSize
 };
+
+const dashboardFilterKeys = [
+  'search',
+  'status',
+  'priority',
+  'label',
+  'includeArchived',
+  'blockedOnly',
+  'staleOnly',
+  'pageSize'
+] as const satisfies ReadonlyArray<keyof DashboardFilters>;
+
+export function copyDashboardFilters(filters: DashboardFilters): DashboardFilters {
+  return {
+    search: filters.search,
+    status: filters.status,
+    priority: filters.priority,
+    label: filters.label,
+    includeArchived: filters.includeArchived,
+    blockedOnly: filters.blockedOnly,
+    staleOnly: filters.staleOnly,
+    pageSize: filters.pageSize
+  };
+}
+
+export function areDashboardFiltersEqual(left: DashboardFilters, right: DashboardFilters): boolean {
+  return dashboardFilterKeys.every((key) => left[key] === right[key]);
+}
+
+export function dashboardFiltersFromSavedView(view: SavedFilterView): DashboardFilters {
+  return copyDashboardFilters(view);
+}
+
+export function dashboardFiltersToSavedViewPayload(name: string, filters: DashboardFilters): SavedFilterViewPayload {
+  return {
+    name,
+    ...copyDashboardFilters(filters)
+  };
+}
 
 export function getIssueIdFromPath(pathname: string): string | null {
   const match = /^\/issues\/([^/]+)\/?$/.exec(pathname);
@@ -189,4 +236,19 @@ export function buildDashboardQuery(
   }
 
   return params.toString();
+}
+
+export function buildIssueListQuery(filters: DashboardFilters, page: number): string {
+  const params = new URLSearchParams(buildDashboardQuery(filters, { includePageSize: false }));
+
+  params.set('page', String(page));
+  params.set('limit', String(filters.pageSize));
+
+  return params.toString();
+}
+
+export function buildCsvExportPath(filters: DashboardFilters = defaultDashboardFilters): string {
+  const query = buildDashboardQuery(filters, { includePageSize: false });
+
+  return query ? `/api/export.csv?${query}` : '/api/export.csv';
 }

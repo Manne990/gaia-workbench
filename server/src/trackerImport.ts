@@ -59,9 +59,17 @@ export type ImportDecision = {
   matchType?: ImportMatchType;
   policyDecision?: ImportPolicyDecision;
   reasons: string[];
+  warnings?: ImportWarningDetail[];
 };
 
 export type ImportErrorDetail = {
+  code: string;
+  path: string;
+  message: string;
+  value?: unknown;
+};
+
+export type ImportWarningDetail = {
   code: string;
   path: string;
   message: string;
@@ -86,7 +94,7 @@ export type ImportPlan = {
   summary: ImportSummary;
   decisions: ImportDecision[];
   errors: ImportErrorDetail[];
-  warnings: string[];
+  warnings: ImportWarningDetail[];
 };
 
 type ValidationResult = {
@@ -96,6 +104,7 @@ type ValidationResult = {
   input: ImportCounts;
   decisions: ImportDecision[];
   errors: ImportErrorDetail[];
+  warnings: ImportWarningDetail[];
 };
 
 const DEFAULT_IMPORT_CONFLICT_POLICY: ImportConflictPolicy = 'skip-conflicts';
@@ -208,6 +217,16 @@ function pushError(errors: ImportErrorDetail[], code: string, path: string, mess
   }
 
   errors.push(error);
+}
+
+function pushWarning(warnings: ImportWarningDetail[], code: string, path: string, message: string, value?: unknown) {
+  const warning: ImportWarningDetail = { code, path, message };
+
+  if (value !== undefined) {
+    warning.value = value;
+  }
+
+  warnings.push(warning);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -496,7 +515,8 @@ function importedDependencyBlocks(issue: ExportedIssue): boolean {
 function validateIssueDependencyGraph(
   issues: ExportedIssue[],
   explicitIsBlockedByIssueId: Map<string, boolean>,
-  errors: ImportErrorDetail[]
+  errors: ImportErrorDetail[],
+  warnings: ImportWarningDetail[]
 ): void {
   const issueIds = new Set(issues.map((issue) => issue.id));
   const issueIndexById = new Map(issues.map((issue, index) => [issue.id, index]));
@@ -507,12 +527,22 @@ function validateIssueDependencyGraph(
     const issueIndex = issueIndexById.get(issue.id) ?? 0;
 
     issue.dependsOnIssueIds.forEach((dependsOnIssueId, dependencyIndex) => {
-      if (!issueIds.has(dependsOnIssueId)) {
+      const dependency = issueById.get(dependsOnIssueId);
+
+      if (!dependency) {
         pushError(
           errors,
           'dangling_reference',
           `$.issues[${issueIndex}].dependsOnIssueIds[${dependencyIndex}]`,
           'Dependency issue id must reference another issue in the import payload.',
+          dependsOnIssueId
+        );
+      } else if (!importedDependencyBlocks(dependency)) {
+        pushWarning(
+          warnings,
+          'non_blocking_dependency',
+          `$.issues[${issueIndex}].dependsOnIssueIds[${dependencyIndex}]`,
+          'Dependency target is done or archived and will be imported without blocking this issue.',
           dependsOnIssueId
         );
       }
@@ -862,6 +892,7 @@ function countInput(exportData: TrackerExport | null): ImportCounts {
 
 function validateTrackerExport(input: unknown): ValidationResult {
   const errors: ImportErrorDetail[] = [];
+  const warnings: ImportWarningDetail[] = [];
   const decisions: ImportDecision[] = [];
   const seen = new Map<ImportEntity, Set<string>>();
   const root = validateObject(input, '$', ['exportVersion', 'issues'], errors, ['conflictPolicy', 'savedFilterViews']);
@@ -873,7 +904,8 @@ function validateTrackerExport(input: unknown): ValidationResult {
       exportData: null,
       input: emptyCounts(),
       decisions,
-      errors
+      errors,
+      warnings
     };
   }
 
@@ -1314,7 +1346,7 @@ function validateTrackerExport(input: unknown): ValidationResult {
     });
   });
 
-  validateIssueDependencyGraph(issues, explicitIsBlockedByIssueId, errors);
+  validateIssueDependencyGraph(issues, explicitIsBlockedByIssueId, errors, warnings);
 
   const exportData: TrackerExport | null =
     exportVersion === 1
@@ -1331,8 +1363,25 @@ function validateTrackerExport(input: unknown): ValidationResult {
     exportData,
     input: countInput(exportData),
     decisions,
-    errors
+    errors,
+    warnings
   };
+}
+
+function warningsForDecision(decision: ImportDecision, warnings: ImportWarningDetail[]): ImportWarningDetail[] {
+  if (decision.entity !== 'issue') {
+    return [];
+  }
+
+  const warningPathPrefix = `$.issues[${decision.sourceIndex}].`;
+
+  return warnings.filter((warning) => warning.path.startsWith(warningPathPrefix));
+}
+
+function withWarnings(decision: ImportDecision, warnings: ImportWarningDetail[]): ImportDecision {
+  const decisionWarnings = warningsForDecision(decision, warnings);
+
+  return decisionWarnings.length > 0 ? { ...decision, warnings: decisionWarnings } : decision;
 }
 
 function incrementCount(counts: ImportCounts, entity: ImportEntity) {
@@ -1400,7 +1449,8 @@ function makeSummary(input: ImportCounts, decisions: ImportDecision[], errors: I
 function collectImportDecisions(
   database: Database.Database,
   exportData: TrackerExport,
-  conflictPolicy: ImportConflictPolicy
+  conflictPolicy: ImportConflictPolicy,
+  warnings: ImportWarningDetail[] = []
 ): ImportDecision[] {
   const issueIds = exportData.issues.map((issue) => issue.id);
   const comments = exportData.issues.flatMap((issue) => issue.comments);
@@ -1424,25 +1474,30 @@ function collectImportDecisions(
     const replaceIssue = conflictPolicy === 'replace-conflicts' && matchType === 'changed';
     const skipIssue = matchType !== 'new' && !replaceIssue;
 
-    decisions.push({
-      entity: 'issue',
-      sourceId: issue.id,
-      sourceIndex: issueIndex,
-      issueId: issue.id,
-      decision: matchType === 'new' ? 'import' : replaceIssue ? 'replace-existing' : 'skip-existing',
-      matchType,
-      policyDecision: matchType === 'new' ? 'import' : replaceIssue ? 'replace' : 'skip',
-      reasons:
-        matchType === 'new'
-          ? []
-          : replaceIssue
-            ? ['changed issue id already exists and replace-conflicts is selected']
-            : [
-                matchType === 'exact'
-                  ? 'issue id already exists with identical semantic data'
-                  : 'changed issue id already exists'
-              ]
-    });
+    decisions.push(
+      withWarnings(
+        {
+          entity: 'issue',
+          sourceId: issue.id,
+          sourceIndex: issueIndex,
+          issueId: issue.id,
+          decision: matchType === 'new' ? 'import' : replaceIssue ? 'replace-existing' : 'skip-existing',
+          matchType,
+          policyDecision: matchType === 'new' ? 'import' : replaceIssue ? 'replace' : 'skip',
+          reasons:
+            matchType === 'new'
+              ? []
+              : replaceIssue
+                ? ['changed issue id already exists and replace-conflicts is selected']
+                : [
+                    matchType === 'exact'
+                      ? 'issue id already exists with identical semantic data'
+                      : 'changed issue id already exists'
+                  ]
+        },
+        warnings
+      )
+    );
 
     issue.comments.forEach((comment, commentIndex) => {
       const childMatchType = commentMatchType(comment, existingComments);
@@ -1559,11 +1614,16 @@ function buildImportPlan(database: Database.Database, input: unknown): ImportPla
       summary: makeSummary(validation.input, validation.decisions, validation.errors),
       decisions: validation.decisions,
       errors: validation.errors,
-      warnings: []
+      warnings: validation.warnings
     };
   }
 
-  const decisions = collectImportDecisions(database, validation.exportData, validation.conflictPolicy);
+  const decisions = collectImportDecisions(
+    database,
+    validation.exportData,
+    validation.conflictPolicy,
+    validation.warnings
+  );
 
   return {
     valid: true,
@@ -1572,7 +1632,7 @@ function buildImportPlan(database: Database.Database, input: unknown): ImportPla
     summary: makeSummary(validation.input, decisions, validation.errors),
     decisions,
     errors: [],
-    warnings: []
+    warnings: validation.warnings
   };
 }
 

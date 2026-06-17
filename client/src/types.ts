@@ -176,9 +176,17 @@ export type ImportDecision = {
   matchType?: ImportMatchType;
   policyDecision?: ImportPolicyDecision;
   reasons: string[];
+  warnings?: ImportWarningDetail[];
 };
 
 export type ImportErrorDetail = {
+  code: string;
+  path: string;
+  message: string;
+  value?: unknown;
+};
+
+export type ImportWarningDetail = {
   code: string;
   path: string;
   message: string;
@@ -192,7 +200,7 @@ export type ImportPlan = {
   summary: ImportSummary;
   decisions: ImportDecision[];
   errors: ImportErrorDetail[];
-  warnings: string[];
+  warnings: ImportWarningDetail[];
 };
 
 export type LoadState = 'loading' | 'loaded' | 'error';

@@ -1,4 +1,4 @@
-import type { ImportConflictPolicy, ImportCounts, ImportErrorDetail, ImportPlan } from '../types';
+import type { ImportConflictPolicy, ImportCounts, ImportErrorDetail, ImportPlan, ImportWarningDetail } from '../types';
 import { formatImportErrorValue } from '../utils/importErrors';
 
 type ImportPanelProps = {
@@ -81,7 +81,7 @@ function ImportErrors({ errors }: { errors: ImportErrorDetail[] }) {
   );
 }
 
-function ImportWarnings({ warnings }: { warnings: string[] }) {
+function ImportWarnings({ warnings }: { warnings: ImportWarningDetail[] }) {
   if (warnings.length === 0) {
     return null;
   }
@@ -90,10 +90,19 @@ function ImportWarnings({ warnings }: { warnings: string[] }) {
     <div className="import-warnings">
       <h3>Warnings</h3>
       <ul>
-        {warnings.map((warning) => (
-          <li key={warning}>{warning}</li>
-        ))}
+        {warnings.slice(0, 6).map((warning) => {
+          const formattedValue = formatImportErrorValue(warning.value);
+
+          return (
+            <li key={`${warning.path}-${warning.code}-${warning.message}`}>
+              <strong>{warning.path}</strong>
+              <span>{warning.message}</span>
+              {formattedValue ? <span>Received {formattedValue}</span> : null}
+            </li>
+          );
+        })}
       </ul>
+      {warnings.length > 6 ? <p>{warnings.length - 6} more warnings</p> : null}
     </div>
   );
 }

@@ -9,9 +9,8 @@ import type {
   IssueDependencyState
 } from '../types';
 import { activityDetail, activityTitle } from '../utils/activity';
-import { formatDate, formatDueDate } from '../utils/formatters';
+import { formatIssueDate, formatIssueDueDate, getIssueFreshnessPresentation } from '../utils/issuePresentation';
 import { renderMarkdownLite } from '../utils/markdown';
-import { isIssueStale, staleIssueDescription } from '../utils/stale';
 
 type IssueDetailPanelProps = {
   isIssueDetailLoading: boolean;
@@ -96,7 +95,7 @@ export function IssueDetailPanel({
 }: IssueDetailPanelProps) {
   const blockers = issueDependencies?.dependencies ?? [];
   const dependents = issueDependencies?.dependents ?? [];
-  const selectedIssueIsStale = selectedIssue ? isIssueStale(selectedIssue.updatedAt) : false;
+  const selectedIssueFreshness = selectedIssue ? getIssueFreshnessPresentation(selectedIssue.updatedAt) : null;
   const selectedIssueCanBlockDependents = selectedIssue
     ? selectedIssue.archivedAt === null && selectedIssue.status !== 'done'
     : false;
@@ -124,7 +123,7 @@ export function IssueDetailPanel({
               <h2 id="issue-detail-heading" ref={issueDetailHeadingRef} tabIndex={-1}>
                 {selectedIssue.title}
               </h2>
-              <p>Updated {formatDate(selectedIssue.updatedAt)}</p>
+              <p>Updated {formatIssueDate(selectedIssue.updatedAt)}</p>
             </div>
             <div className="panel-actions">
               <button
@@ -166,7 +165,7 @@ export function IssueDetailPanel({
             {selectedIssue.archivedAt ? (
               <div className="archive-banner" role="status">
                 <strong>Archived</strong>
-                <span>Hidden from the active dashboard since {formatDate(selectedIssue.archivedAt)}.</span>
+                <span>Hidden from the active dashboard since {formatIssueDate(selectedIssue.archivedAt)}.</span>
               </div>
             ) : null}
 
@@ -177,10 +176,10 @@ export function IssueDetailPanel({
               </div>
             ) : null}
 
-            {selectedIssueIsStale ? (
+            {selectedIssueFreshness?.isStale ? (
               <div className="stale-banner" role="status">
-                <strong>Stale</strong>
-                <span>{staleIssueDescription()}.</span>
+                <strong>{selectedIssueFreshness.label}</strong>
+                <span>{selectedIssueFreshness.description}.</span>
               </div>
             ) : null}
 
@@ -195,17 +194,17 @@ export function IssueDetailPanel({
               </div>
               <div className={selectedIssue.isOverdue ? 'detail-overdue' : undefined}>
                 <span>Due</span>
-                <strong>{selectedIssue.dueDate ? formatDueDate(selectedIssue.dueDate) : 'No due date'}</strong>
+                <strong>{formatIssueDueDate(selectedIssue.dueDate)}</strong>
                 {selectedIssue.isOverdue ? <em>Overdue</em> : null}
               </div>
               <div>
                 <span>Created</span>
-                <strong>{formatDate(selectedIssue.createdAt)}</strong>
+                <strong>{formatIssueDate(selectedIssue.createdAt)}</strong>
               </div>
-              <div className={selectedIssueIsStale ? 'detail-stale' : undefined}>
+              <div className={selectedIssueFreshness?.isStale ? 'detail-stale' : undefined}>
                 <span>Freshness</span>
-                <strong>{selectedIssueIsStale ? 'Stale' : 'Current'}</strong>
-                {selectedIssueIsStale ? <em>{staleIssueDescription()}</em> : null}
+                <strong>{selectedIssueFreshness?.label ?? 'Current'}</strong>
+                {selectedIssueFreshness?.description ? <em>{selectedIssueFreshness.description}</em> : null}
               </div>
               <div>
                 <span>Comments</span>
@@ -400,7 +399,7 @@ export function IssueDetailPanel({
                         <strong>{activityTitle(event)}</strong>
                         <p>{activityDetail(event)}</p>
                       </div>
-                      <time dateTime={event.createdAt}>{formatDate(event.createdAt)}</time>
+                      <time dateTime={event.createdAt}>{formatIssueDate(event.createdAt)}</time>
                     </li>
                   ))}
                 </ol>
@@ -476,7 +475,7 @@ export function IssueDetailPanel({
                         tabIndex={-1}
                       >
                         <div className="comment-meta">
-                          <strong>{formatDate(comment.updatedAt)}</strong>
+                          <strong>{formatIssueDate(comment.updatedAt)}</strong>
                           {comment.updatedAt !== comment.createdAt ? <span>Edited</span> : null}
                         </div>
 
@@ -549,7 +548,7 @@ export function IssueDetailPanel({
                             <ul>
                               {history.map((entry) => (
                                 <li key={entry.id}>
-                                  <span>{formatDate(entry.editedAt)}</span>
+                                  <span>{formatIssueDate(entry.editedAt)}</span>
                                   <div className="comment-history-previous">
                                     <span className="comment-history-label">Previous:</span>
                                     {renderMarkdownLite(entry.previousBody, { className: 'comment-history-body' })}

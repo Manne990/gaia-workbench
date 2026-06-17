@@ -91,10 +91,20 @@ function writeStoredDashboardDensity(value: DashboardDensity): void {
   }
 }
 
+function areStringArraysEqual(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
 function applyDependencyStateToIssue(issue: Issue, dependencies: IssueDependencyState): Issue {
+  const dependsOnIssueIds = dependencies.dependencies.map((dependency) => dependency.id);
+
+  if (issue.isBlocked === dependencies.isBlocked && areStringArraysEqual(issue.dependsOnIssueIds, dependsOnIssueIds)) {
+    return issue;
+  }
+
   return {
     ...issue,
-    dependsOnIssueIds: dependencies.dependencies.map((dependency) => dependency.id),
+    dependsOnIssueIds,
     isBlocked: dependencies.isBlocked
   };
 }
@@ -1091,7 +1101,6 @@ export function App() {
 
     async function loadIssueDependencies() {
       setDependencyLoadState('loading');
-      setDependencyError(null);
 
       try {
         const loadedIssueDependencies = await fetchIssueDependencies(issueId, controller.signal);
@@ -1296,6 +1305,26 @@ export function App() {
     await refreshActivity(issueId);
   }
 
+  async function reconcileSelectedIssueAfterDependencyFailure(issueId: string) {
+    try {
+      const dependencies = await fetchIssueDependencies(issueId);
+
+      if (selectedIssueIdRef.current !== issueId) {
+        return;
+      }
+
+      setIssueDependencies(dependencies);
+      setDependencyLoadState('loaded');
+      setSelectedIssue((current) =>
+        current && current.id === issueId ? applyDependencyStateToIssue(current, dependencies) : current
+      );
+      refreshIssues();
+      await refreshActivity(issueId);
+    } catch {
+      // Keep the original mutation error visible; the next dependency load can retry reconciliation.
+    }
+  }
+
   async function submitIssueDependency(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -1328,7 +1357,13 @@ export function App() {
       setDependencyIssueId('');
       await refreshSelectedIssueAfterDependency(selectedIssue.id, dependencies);
     } catch (error) {
-      setDependencyError(error instanceof Error ? error.message : 'Dependency add failed.');
+      const errorMessage = error instanceof Error ? error.message : 'Dependency add failed.';
+
+      await reconcileSelectedIssueAfterDependencyFailure(selectedIssue.id);
+
+      if (selectedIssueIdRef.current === selectedIssue.id) {
+        setDependencyError(errorMessage);
+      }
     } finally {
       setIsDependencySubmitting(false);
     }
@@ -1347,7 +1382,13 @@ export function App() {
 
       await refreshSelectedIssueAfterDependency(selectedIssue.id, dependencies);
     } catch (error) {
-      setDependencyError(error instanceof Error ? error.message : 'Dependency remove failed.');
+      const errorMessage = error instanceof Error ? error.message : 'Dependency remove failed.';
+
+      await reconcileSelectedIssueAfterDependencyFailure(selectedIssue.id);
+
+      if (selectedIssueIdRef.current === selectedIssue.id) {
+        setDependencyError(errorMessage);
+      }
     } finally {
       setIsDependencySubmitting(false);
     }

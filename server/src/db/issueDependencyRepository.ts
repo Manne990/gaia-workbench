@@ -216,7 +216,9 @@ export class IssueDependencyRepository {
       }
 
       if (wouldCreateCycle(this.database, issueId, dependsOnIssueId)) {
-        throw new IssueDependencyConflictError('Issue dependency cycle detected');
+        throw new IssueDependencyConflictError(
+          'Cannot add dependency because the selected blocker already depends on this issue'
+        );
       }
 
       const timestamp = nowIso();

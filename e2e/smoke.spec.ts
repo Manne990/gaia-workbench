@@ -2445,7 +2445,9 @@ test('dependency duplicate and cycle rejections keep UI graph state unchanged', 
 
   await thirdDependencyForm.getByLabel('Add blocker issue ID').fill(first.id);
   await thirdDependencyForm.getByRole('button', { name: 'Add Dependency' }).click();
-  await expect(thirdDetail.getByRole('alert')).toHaveText('Issue dependency cycle detected');
+  await expect(thirdDetail.getByRole('alert')).toHaveText(
+    'Cannot add dependency because the selected blocker already depends on this issue'
+  );
   await expect(thirdBlockers).toContainText('No blockers.');
   await expect(thirdBlockers.getByRole('listitem')).toHaveCount(0);
   await expect(thirdDetail.getByText('Waiting on at least one active dependency.')).toHaveCount(0);

@@ -1629,7 +1629,7 @@ describe('issues API', () => {
     });
   });
 
-  it('rejects invalid dependency mutations and obvious cycles', async () => {
+  it('rejects invalid dependency mutations and explains direct or indirect cycles', async () => {
     const app = createApp({ databasePath: ':memory:' });
 
     const first = await request(app).post('/api/issues').send({ title: 'First dependency issue' }).expect(201);
@@ -1705,6 +1705,29 @@ describe('issues API', () => {
     });
     expect(firstDependenciesAfterDuplicate.body.dependencies).toHaveLength(1);
 
+    await request(app)
+      .post(`/api/issues/${second.body.id}/dependencies`)
+      .send({ dependsOnIssueId: first.body.id })
+      .expect(409, {
+        error: 'Cannot add dependency because the selected blocker already depends on this issue'
+      });
+
+    const secondDependenciesAfterDirectCycle = await request(app)
+      .get(`/api/issues/${second.body.id}/dependencies`)
+      .expect(200);
+    const secondActivityAfterRejectedDirectCycle = await request(app)
+      .get(`/api/issues/${second.body.id}/activity`)
+      .expect(200);
+
+    expect(secondDependenciesAfterDirectCycle.body).toMatchObject({
+      issueId: second.body.id,
+      isBlocked: false,
+      dependencies: []
+    });
+    expect(secondActivityAfterRejectedDirectCycle.body.map((event: { type: string }) => event.type)).toEqual([
+      'issue_created'
+    ]);
+
     await request(app).delete(`/api/issues/missing-issue/dependencies/${second.body.id}`).expect(404, {
       error: 'Issue not found'
     });
@@ -1731,7 +1754,7 @@ describe('issues API', () => {
       .post(`/api/issues/${third.body.id}/dependencies`)
       .send({ dependsOnIssueId: first.body.id })
       .expect(409, {
-        error: 'Issue dependency cycle detected'
+        error: 'Cannot add dependency because the selected blocker already depends on this issue'
       });
 
     const thirdDependenciesAfterCycle = await request(app).get(`/api/issues/${third.body.id}/dependencies`).expect(200);

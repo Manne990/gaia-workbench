@@ -536,7 +536,9 @@ describe('persistence layer', () => {
       expect(() => dependencyRepository.add(blocked.id, blocked.id)).toThrow('Issue cannot depend on itself');
 
       dependencyRepository.add(blocker.id, downstream.id);
-      expect(() => dependencyRepository.add(downstream.id, blocked.id)).toThrow('Issue dependency cycle detected');
+      expect(() => dependencyRepository.add(downstream.id, blocked.id)).toThrow(
+        'Cannot add dependency because the selected blocker already depends on this issue'
+      );
 
       issueRepository.close(blocker.id);
       expect(issueRepository.getById(blocked.id)).toMatchObject({

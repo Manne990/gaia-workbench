@@ -56,6 +56,8 @@ type IssueListPanelProps = {
   onRenameSavedView: () => void;
   onDeleteSavedView: () => void;
   issueSearchInputRef: RefObject<HTMLInputElement | null>;
+  savedViewsDetailsRef: RefObject<HTMLDetailsElement | null>;
+  savedViewSelectRef: RefObject<HTMLSelectElement | null>;
   issueListHeadingRef: RefObject<HTMLHeadingElement | null>;
   onClearFilters: () => void;
   onRetryLoad: () => void;
@@ -123,6 +125,8 @@ export function IssueListPanel({
   onRenameSavedView,
   onDeleteSavedView,
   issueSearchInputRef,
+  savedViewsDetailsRef,
+  savedViewSelectRef,
   issueListHeadingRef,
   onClearFilters,
   onRetryLoad,
@@ -309,7 +313,7 @@ export function IssueListPanel({
         ) : null}
       </div>
 
-      <details className="secondary-controls" aria-label="Saved views and page settings">
+      <details ref={savedViewsDetailsRef} className="secondary-controls" aria-label="Saved views and page settings">
         <summary>
           <span className="secondary-controls-title">Saved views & page settings</span>
           <span className="secondary-controls-state" aria-hidden="true">
@@ -338,6 +342,7 @@ export function IssueListPanel({
               <span>Saved views</span>
               <select
                 id="saved-view-select"
+                ref={savedViewSelectRef}
                 value={selectedSavedViewId}
                 onChange={(event) => onSavedViewSelect(event.target.value)}
                 disabled={isSavedViewBusy}

@@ -1250,7 +1250,7 @@ describe('issues API', () => {
       });
   });
 
-  it('rejects invalid bulk status requests without partial writes', async () => {
+  it('rejects malformed bulk status requests and reports mixed missing ids without blocking valid updates', async () => {
     const app = createApp({ databasePath: ':memory:' });
 
     const issue = await request(app).post('/api/issues').send({ title: 'Bulk validation issue' }).expect(201);
@@ -1274,10 +1274,12 @@ describe('issues API', () => {
     await request(app)
       .post('/api/issues/bulk-status')
       .send({ status: 'done', issueIds: [issue.body.id, 'missing-bulk-issue'] })
-      .expect(404)
+      .expect(200)
       .expect((response) => {
         expect(response.body).toMatchObject({
-          error: 'Issue not found',
+          status: 'done',
+          updated: [expect.objectContaining({ id: issue.body.id, status: 'done' })],
+          unchangedIds: [],
           notFoundIds: ['missing-bulk-issue'],
           duplicateIds: []
         });
@@ -1287,13 +1289,16 @@ describe('issues API', () => {
       .get(`/api/issues/${issue.body.id}`)
       .expect(200)
       .expect((response) => {
-        expect(response.body.status).toBe('todo');
+        expect(response.body.status).toBe('done');
       });
     await request(app)
       .get(`/api/issues/${issue.body.id}/activity`)
       .expect(200)
       .expect((activity) => {
-        expect(activity.body.map((event: { type: string }) => event.type)).toEqual(['issue_created']);
+        expect(activity.body.map((event: { type: string }) => event.type)).toEqual([
+          'issue_created',
+          'issue_status_changed'
+        ]);
       });
   });
 

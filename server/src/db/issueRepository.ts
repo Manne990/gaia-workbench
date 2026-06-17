@@ -25,15 +25,6 @@ const DEFAULT_PRIORITY: IssuePriority = 'medium';
 export const STALE_ISSUE_THRESHOLD_DAYS = 30;
 const STALE_ISSUE_THRESHOLD_MS = STALE_ISSUE_THRESHOLD_DAYS * 24 * 60 * 60 * 1000;
 
-export class BulkIssueStatusNotFoundError extends Error {
-  constructor(
-    readonly notFoundIds: string[],
-    readonly duplicateIds: string[]
-  ) {
-    super('Issue not found');
-  }
-}
-
 type IssueRow = {
   id: string;
   title: string;
@@ -855,10 +846,6 @@ export class IssueRepository {
     const rowsById = new Map(rows.map((row) => [row.id, row]));
     const notFoundIds = uniqueIds.filter((id) => !rowsById.has(id));
 
-    if (notFoundIds.length > 0) {
-      throw new BulkIssueStatusNotFoundError(notFoundIds, duplicateIds);
-    }
-
     const unchangedIds: string[] = [];
     const changedRows: IssueRow[] = [];
 
@@ -882,7 +869,7 @@ export class IssueRepository {
         updated: [],
         unchangedIds,
         duplicateIds,
-        notFoundIds: []
+        notFoundIds
       };
     }
 
@@ -927,7 +914,7 @@ export class IssueRepository {
       updated: attachIssueDependencyState(this.database, updatedIssues),
       unchangedIds,
       duplicateIds,
-      notFoundIds: []
+      notFoundIds
     };
   }
 

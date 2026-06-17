@@ -6,7 +6,7 @@ export {
   IssueDependencyNotFoundError,
   IssueDependencyRepository
 } from './issueDependencyRepository.js';
-export { BulkIssueStatusNotFoundError, IssueRepository } from './issueRepository.js';
+export { IssueRepository } from './issueRepository.js';
 export { DuplicateSavedFilterViewNameError, SavedFilterViewRepository } from './savedFilterViewRepository.js';
 export { ensureTinyTrackerSchema, getTinyTrackerSchemaVersion, SCHEMA_VERSION, TABLE_NAMES } from './schema.js';
 export type {

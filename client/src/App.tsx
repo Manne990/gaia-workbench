@@ -1433,6 +1433,7 @@ export function App() {
       const changedCount = result.updated.length;
       const unchangedCount = result.unchangedIds.length;
       const duplicateCount = result.duplicateIds.length;
+      const notFoundCount = result.notFoundIds.length;
       const selectedIssueIdAfterMutation = selectedIssueIdRef.current;
 
       setSelectedBulkIssueIds([]);
@@ -1448,6 +1449,7 @@ export function App() {
           unchangedCount > 0
             ? `${unchangedCount} already ${unchangedCount === 1 ? 'was' : 'were'} ${statusLabels[result.status]}.`
             : null,
+          notFoundCount > 0 ? `${notFoundCount} missing ${notFoundCount === 1 ? 'id was' : 'ids were'} skipped.` : null,
           duplicateCount > 0
             ? `${duplicateCount} duplicate ${duplicateCount === 1 ? 'id was' : 'ids were'} ignored.`
             : null

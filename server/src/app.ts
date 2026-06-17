@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   type ActivityEvent,
+  type ActivityMetadataValue,
   type ActivityEventType,
   ActivityRepository,
   type Comment,
@@ -38,6 +39,18 @@ type ExportedIssue = Issue & {
   activityEvents: ActivityEvent[];
 };
 
+type ExportAuditSnapshot = Record<string, ActivityMetadataValue>;
+
+type ExportAuditTimelineEntry = {
+  eventId: string;
+  issueId: string;
+  issueTitle: string;
+  type: ActivityEventType;
+  createdAt: string;
+  before: ExportAuditSnapshot | null;
+  after: ExportAuditSnapshot | null;
+};
+
 type ExportAuditSummary = {
   issues: {
     total: number;
@@ -67,6 +80,7 @@ type ExportAuditSummary = {
       type: ActivityEventType;
       createdAt: string;
     }>;
+    timeline: ExportAuditTimelineEntry[];
   };
   savedFilterViews: {
     total: number;
@@ -403,12 +417,103 @@ function emptyActivityTypeCounts(): Record<ActivityEventType, number> {
   return Object.fromEntries(activityEventTypes.map((type) => [type, 0])) as Record<ActivityEventType, number>;
 }
 
+function getActivityMetadataValue(event: ActivityEvent, key: string): ActivityMetadataValue {
+  return event.metadata[key] ?? null;
+}
+
+function buildFieldChangeSnapshot(
+  event: ActivityEvent,
+  field: string
+): { before: ExportAuditSnapshot; after: ExportAuditSnapshot } {
+  return {
+    before: { [field]: getActivityMetadataValue(event, 'from') },
+    after: { [field]: getActivityMetadataValue(event, 'to') }
+  };
+}
+
+function buildActivityTimelineSnapshots(
+  event: ActivityEvent,
+  issue: ExportedIssue
+): { before: ExportAuditSnapshot | null; after: ExportAuditSnapshot | null } {
+  switch (event.type) {
+    case 'issue_created':
+      return {
+        before: null,
+        after: { title: getActivityMetadataValue(event, 'title') ?? issue.title }
+      };
+    case 'issue_title_changed':
+      return buildFieldChangeSnapshot(event, 'title');
+    case 'issue_description_changed':
+      return buildFieldChangeSnapshot(event, 'description');
+    case 'issue_status_changed':
+      return buildFieldChangeSnapshot(event, 'status');
+    case 'issue_priority_changed':
+      return buildFieldChangeSnapshot(event, 'priority');
+    case 'issue_due_date_changed':
+      return buildFieldChangeSnapshot(event, 'dueDate');
+    case 'issue_labels_changed':
+      return buildFieldChangeSnapshot(event, 'labels');
+    case 'issue_archived':
+    case 'issue_unarchived':
+      return buildFieldChangeSnapshot(event, 'archivedAt');
+    case 'issue_dependency_added':
+      return {
+        before: { dependsOnIssueId: null, dependencyTitle: null },
+        after: {
+          dependsOnIssueId: getActivityMetadataValue(event, 'dependsOnIssueId'),
+          dependencyTitle: getActivityMetadataValue(event, 'title')
+        }
+      };
+    case 'issue_dependency_removed':
+      return {
+        before: {
+          dependsOnIssueId: getActivityMetadataValue(event, 'dependsOnIssueId'),
+          dependencyTitle: getActivityMetadataValue(event, 'title')
+        },
+        after: { dependsOnIssueId: null, dependencyTitle: null }
+      };
+    case 'comment_added':
+      return {
+        before: { commentId: null, commentPreview: null },
+        after: {
+          commentId: getActivityMetadataValue(event, 'commentId'),
+          commentPreview: getActivityMetadataValue(event, 'preview')
+        }
+      };
+    case 'comment_edited':
+      return {
+        before: {
+          commentId: getActivityMetadataValue(event, 'commentId'),
+          commentPreview: getActivityMetadataValue(event, 'previousPreview')
+        },
+        after: {
+          commentId: getActivityMetadataValue(event, 'commentId'),
+          commentPreview: getActivityMetadataValue(event, 'newPreview')
+        }
+      };
+  }
+}
+
+function buildActivityTimelineEntry(issue: ExportedIssue, event: ActivityEvent): ExportAuditTimelineEntry {
+  const snapshots = buildActivityTimelineSnapshots(event, issue);
+
+  return {
+    eventId: event.id,
+    issueId: issue.id,
+    issueTitle: issue.title,
+    type: event.type,
+    createdAt: event.createdAt,
+    ...snapshots
+  };
+}
+
 function buildExportAuditSummary(exportPayload: TrackerExportBase): ExportAuditSummary {
   const byStatus = emptyStatusCounts();
   const byPriority = emptyPriorityCounts();
   const byActivityType = emptyActivityTypeCounts();
   const issueById = new Map(exportPayload.issues.map((issue) => [issue.id, issue]));
   const recentActivity: ExportAuditSummary['activity']['recent'] = [];
+  const activityTimeline: ExportAuditTimelineEntry[] = [];
   let archivedIssues = 0;
   let blockedIssues = 0;
   let overdueIssues = 0;
@@ -456,12 +561,19 @@ function buildExportAuditSummary(exportPayload: TrackerExportBase): ExportAuditS
         type: event.type,
         createdAt: event.createdAt
       });
+      activityTimeline.push(buildActivityTimelineEntry(issue, event));
     }
   }
 
   recentActivity.sort(
     (left, right) =>
       right.createdAt.localeCompare(left.createdAt) ||
+      left.issueId.localeCompare(right.issueId) ||
+      left.eventId.localeCompare(right.eventId)
+  );
+  activityTimeline.sort(
+    (left, right) =>
+      left.createdAt.localeCompare(right.createdAt) ||
       left.issueId.localeCompare(right.issueId) ||
       left.eventId.localeCompare(right.eventId)
   );
@@ -488,7 +600,8 @@ function buildExportAuditSummary(exportPayload: TrackerExportBase): ExportAuditS
     activity: {
       total: activityEvents,
       byType: byActivityType,
-      recent: recentActivity.slice(0, 5)
+      recent: recentActivity.slice(0, 5),
+      timeline: activityTimeline
     },
     savedFilterViews: {
       total: exportPayload.savedFilterViews.length

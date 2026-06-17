@@ -69,6 +69,15 @@ type ExportAuditSummary = {
       type: string;
       createdAt: string;
     }>;
+    timeline: Array<{
+      eventId: string;
+      issueId: string;
+      issueTitle: string;
+      type: string;
+      createdAt: string;
+      before: Record<string, unknown> | null;
+      after: Record<string, unknown> | null;
+    }>;
   };
   savedFilterViews: {
     total: number;
@@ -454,7 +463,8 @@ describe('tracker export API', () => {
           comment_added: 1,
           comment_edited: 1
         },
-        recent: expect.any(Array)
+        recent: expect.any(Array),
+        timeline: expect.any(Array)
       },
       savedFilterViews: {
         total: 1
@@ -469,6 +479,72 @@ describe('tracker export API', () => {
         type: expect.any(String),
         createdAt: expect.any(String)
       })
+    );
+  });
+
+  it('adds before and after snapshots to audit timeline entries', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const blocker = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Timeline blocker issue', status: 'todo', priority: 'high' })
+      .expect(201);
+    const target = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Timeline target issue', status: 'todo', priority: 'medium' })
+      .expect(201);
+
+    await request(app).put(`/api/issues/${target.body.id}`).send({ status: 'review' }).expect(200);
+    await request(app)
+      .post(`/api/issues/${target.body.id}/dependencies`)
+      .send({ dependsOnIssueId: blocker.body.id })
+      .expect(201);
+    const comment = await request(app)
+      .post(`/api/issues/${target.body.id}/comments`)
+      .send({ body: 'Timeline comment creation' })
+      .expect(201);
+    const archived = await request(app).post(`/api/issues/${target.body.id}/archive`).expect(200);
+    await request(app).post(`/api/issues/${target.body.id}/unarchive`).expect(200);
+
+    const summarizedExport = await request(app).get('/api/export?includeAuditSummary=true').expect(200);
+    const timeline = (summarizedExport.body as TrackerExport).auditSummary?.activity.timeline ?? [];
+    const targetTimelineEntry = (type: string) => {
+      const entry = timeline.find((candidate) => candidate.issueId === target.body.id && candidate.type === type);
+
+      expect(entry).toBeDefined();
+
+      return entry;
+    };
+
+    expect(targetTimelineEntry('issue_status_changed')).toMatchObject({
+      issueTitle: 'Timeline target issue',
+      before: { status: 'todo' },
+      after: { status: 'review' }
+    });
+    expect(targetTimelineEntry('issue_dependency_added')).toMatchObject({
+      before: { dependsOnIssueId: null, dependencyTitle: null },
+      after: {
+        dependsOnIssueId: blocker.body.id,
+        dependencyTitle: 'Timeline blocker issue'
+      }
+    });
+    expect(targetTimelineEntry('comment_added')).toMatchObject({
+      before: { commentId: null, commentPreview: null },
+      after: {
+        commentId: comment.body.id,
+        commentPreview: 'Timeline comment creation'
+      }
+    });
+    expect(targetTimelineEntry('issue_archived')).toMatchObject({
+      before: { archivedAt: null },
+      after: { archivedAt: archived.body.archivedAt }
+    });
+    expect(targetTimelineEntry('issue_unarchived')).toMatchObject({
+      before: { archivedAt: archived.body.archivedAt },
+      after: { archivedAt: null }
+    });
+    expect(timeline.map((entry) => entry.createdAt)).toEqual(
+      [...timeline.map((entry) => entry.createdAt)].sort((left, right) => left.localeCompare(right))
     );
   });
 

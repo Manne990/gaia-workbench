@@ -138,8 +138,8 @@ export async function fetchSavedFilterViews(signal?: AbortSignal): Promise<Saved
   return readJsonOrThrow<SavedFilterView[]>(response, 'Saved views request failed');
 }
 
-export async function fetchSavedFilterView(id: string): Promise<SavedFilterView> {
-  const response = await fetch(`/api/filter-views/${id}`);
+export async function fetchSavedFilterView(id: string, signal?: AbortSignal): Promise<SavedFilterView> {
+  const response = await fetch(`/api/filter-views/${id}`, { signal });
 
   return readJsonOrThrow<SavedFilterView>(response, 'Saved view request failed');
 }

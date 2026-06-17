@@ -3570,6 +3570,9 @@ test('saved filter views persist restore and compose with detail routes', async 
   await savedViews.getByRole('button', { name: 'Save View' }).click();
 
   await expect(savedViews.getByLabel('Saved views')).toContainText('Review archive view');
+  const savedViewId = await savedViews.getByLabel('Saved views').inputValue();
+
+  expect(savedViewId).not.toBe('');
   await expect(page.getByLabel('Active filters')).toContainText('Label: archive');
   await expect(page.getByLabel('Active filters')).toContainText('Page size: 50');
   await expect(page.getByRole('row', { name: /Saved view target.*Review.*High/ })).toBeVisible();
@@ -3591,6 +3594,7 @@ test('saved filter views persist restore and compose with detail routes', async 
   await expect(filters.getByLabel('Include archived')).toBeChecked();
   await expect(settings.getByLabel('Page size')).toHaveValue('50');
   await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Saved view target');
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBe(savedViewId);
   await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('archive');
   await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('50');
 
@@ -3598,8 +3602,23 @@ test('saved filter views persist restore and compose with detail routes', async 
   settings = await expandDashboardSettings(page);
   savedViews = settings.getByLabel('Saved filter views');
   await expect(savedViews.getByLabel('Saved views')).toContainText('Review archive view');
+  await expect(savedViews.getByLabel('Saved views')).toHaveValue(savedViewId);
   await expect(filters.getByLabel('Search')).toHaveValue('Saved view target');
   await expect(filters.getByLabel('Label')).toHaveValue('archive');
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBe(savedViewId);
+
+  await page.goto(`/?savedView=${encodeURIComponent(savedViewId)}`);
+  settings = await expandDashboardSettings(page);
+  savedViews = settings.getByLabel('Saved filter views');
+  await expect(savedViews.getByLabel('Saved views')).toHaveValue(savedViewId);
+  await expect(filters.getByLabel('Search')).toHaveValue('Saved view target');
+  await expect(filters.getByLabel('Label')).toHaveValue('archive');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(filters.getByLabel('Priority')).toHaveValue('high');
+  await expect(filters.getByLabel('Include archived')).toBeChecked();
+  await expect(settings.getByLabel('Page size')).toHaveValue('50');
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBe(savedViewId);
+  await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBe('true');
 
   await savedViews.getByLabel('Saved views').selectOption({ label: 'Review archive view' });
   await savedViews.getByRole('button', { name: 'Duplicate' }).click();
@@ -3633,6 +3652,7 @@ test('saved filter views persist restore and compose with detail routes', async 
   await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Saved view active other');
   await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('other');
   await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('10');
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBeNull();
 
   await savedViews.getByRole('button', { name: 'Apply View' }).click();
   await expect(filters.getByLabel('Search')).toHaveValue('Saved view target');
@@ -3644,19 +3664,23 @@ test('saved filter views persist restore and compose with detail routes', async 
   await expect(page.getByRole('row', { name: /Saved view target.*Review.*High/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /Saved view active other.*Todo.*Low/ })).toHaveCount(0);
   await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Saved view target');
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBe(savedViewId);
   await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('archive');
   await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('50');
 
   await page.getByRole('button', { name: `Open ${targetIssue.title}` }).click();
   await expect(page.getByRole('region', { name: targetIssue.title })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBe(savedViewId);
   await filters.getByLabel('Search').fill('no matching saved view row');
   await savedViews.getByRole('button', { name: 'Apply View' }).click();
   await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${targetIssue.id}`);
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBe(savedViewId);
   await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Saved view target');
   await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('archive');
   await expect(page.getByRole('region', { name: targetIssue.title })).toBeVisible();
 
   await savedViews.getByRole('button', { name: 'Delete' }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBeNull();
   await savedViews.getByLabel('Saved views').selectOption({ label: 'Review archive view (copy)' });
   await savedViews.getByRole('button', { name: 'Delete' }).click();
   await expect(savedViews.getByRole('option', { name: 'Renamed archive view' })).toHaveCount(0);
@@ -3672,6 +3696,26 @@ test('saved filter views persist restore and compose with detail routes', async 
 
   expect(savedViewList.ok()).toBe(true);
   expect(savedViewListBody).toEqual([]);
+});
+
+test('missing saved filter view URLs fall back to explicit filters', async ({ page }) => {
+  await page.goto(
+    '/?savedView=missing-e2e-view&search=Fallback%20view&status=review&includeArchived=true&blockedOnly=true'
+  );
+
+  const filters = page.getByLabel('Issue filters');
+  const settings = await expandDashboardSettings(page);
+  const savedViews = settings.getByLabel('Saved filter views');
+
+  await expect(savedViews.getByText('Saved view not found. Showing filters from the URL instead.')).toBeVisible();
+  await expect(filters.getByLabel('Search')).toHaveValue('Fallback view');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(filters.getByLabel('Include archived')).toBeChecked();
+  await expect(filters.getByLabel('Blocked only')).toBeChecked();
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBeNull();
+  await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('review');
+  await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBe('true');
+  await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
 });
 
 test('applying an active-only saved view clears a stale archived detail selection', async ({ page }) => {

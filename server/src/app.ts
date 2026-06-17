@@ -64,7 +64,16 @@ type ExportAuditTimelineEntry = {
   after: ExportAuditSnapshot | null;
 };
 
+type ExportAuditTimestampPolicy = {
+  createdAt: {
+    valueFormat: 'ISO 8601 UTC';
+    timeZone: 'UTC';
+    uiDisplayTimeZone: 'UTC';
+  };
+};
+
 type ExportAuditSummary = {
+  timestampPolicy: ExportAuditTimestampPolicy;
   issues: {
     total: number;
     active: number;
@@ -135,6 +144,13 @@ const serviceHealth = {
   status: 'ok',
   service: 'TinyTracker'
 } as const;
+const exportAuditTimestampPolicy: ExportAuditTimestampPolicy = {
+  createdAt: {
+    valueFormat: 'ISO 8601 UTC',
+    timeZone: 'UTC',
+    uiDisplayTimeZone: 'UTC'
+  }
+};
 
 const emptyImportPlan = (error: ImportPlan['errors'][number]): ImportPlan => ({
   valid: false,
@@ -688,6 +704,7 @@ function buildExportAuditSummary(exportPayload: TrackerExportBase): ExportAuditS
   );
 
   return {
+    timestampPolicy: exportAuditTimestampPolicy,
     issues: {
       total: exportPayload.issues.length,
       active: exportPayload.issues.length - archivedIssues,

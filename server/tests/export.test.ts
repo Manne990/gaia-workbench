@@ -41,6 +41,13 @@ type SavedFilterView = {
 };
 
 type ExportAuditSummary = {
+  timestampPolicy: {
+    createdAt: {
+      valueFormat: string;
+      timeZone: string;
+      uiDisplayTimeZone: string;
+    };
+  };
   issues: {
     total: number;
     active: number;
@@ -421,6 +428,13 @@ describe('tracker export API', () => {
     expect(exported.issues).toHaveLength(3);
     expect(exported.savedFilterViews).toHaveLength(1);
     expect(exported.auditSummary).toEqual({
+      timestampPolicy: {
+        createdAt: {
+          valueFormat: 'ISO 8601 UTC',
+          timeZone: 'UTC',
+          uiDisplayTimeZone: 'UTC'
+        }
+      },
       issues: {
         total: 3,
         active: 2,
@@ -481,6 +495,9 @@ describe('tracker export API', () => {
         type: expect.any(String),
         createdAt: expect.any(String)
       })
+    );
+    expect(exported.auditSummary?.activity.recent[0].createdAt).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
     );
   });
 

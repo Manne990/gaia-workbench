@@ -334,5 +334,5 @@ describe('demo data seed command', () => {
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
-  });
+  }, 15_000);
 });

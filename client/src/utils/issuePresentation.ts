@@ -1,4 +1,4 @@
-import { formatDate, formatDueDateValue } from './formatters';
+import { formatAuditTimestamp, formatDate, formatDueDateValue } from './formatters';
 import { isIssueStale, staleIssueDescription } from './stale';
 
 export type IssueFreshnessPresentation = {
@@ -19,6 +19,10 @@ export function getIssueFreshnessPresentation(updatedAt: string, now = new Date(
 
 export function formatIssueDate(value: string): string {
   return formatDate(value);
+}
+
+export function formatIssueAuditDate(value: string): string {
+  return formatAuditTimestamp(value);
 }
 
 export function formatIssueDueDate(value: string | null): string {

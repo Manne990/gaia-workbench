@@ -19,7 +19,12 @@ import {
   filterActivityEvents
 } from '../utils/activity';
 import { blockedDependencySummary } from '../utils/dependencySummary';
-import { formatIssueDate, formatIssueDueDate, getIssueFreshnessPresentation } from '../utils/issuePresentation';
+import {
+  formatIssueAuditDate,
+  formatIssueDate,
+  formatIssueDueDate,
+  getIssueFreshnessPresentation
+} from '../utils/issuePresentation';
 import { renderMarkdownLite } from '../utils/markdown';
 
 type IssueDetailPanelProps = {
@@ -478,7 +483,9 @@ export function IssueDetailPanel({
                         <strong>{activityTitle(event)}</strong>
                         <p>{activityDetail(event)}</p>
                       </div>
-                      <time dateTime={event.createdAt}>{formatIssueDate(event.createdAt)}</time>
+                      <time dateTime={event.createdAt} title={`Persisted audit timestamp: ${event.createdAt}`}>
+                        {formatIssueAuditDate(event.createdAt)}
+                      </time>
                     </li>
                   ))}
                 </ol>

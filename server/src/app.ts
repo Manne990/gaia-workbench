@@ -14,12 +14,12 @@ import {
   IssueDependencyConflictError,
   IssueDependencyNotFoundError,
   IssueDependencyRepository,
-  IssueListFilters,
   type IssueUpdate,
   IssueRepository,
   type SavedFilterView,
   SavedFilterViewRepository
 } from './db/index.js';
+import { buildIssueListFilters, getIssueListPagination } from './issueListQuery.js';
 import { applyTrackerImport, ImportValidationError, previewTrackerImport, type ImportPlan } from './trackerImport.js';
 
 type AppConfig = {
@@ -42,9 +42,6 @@ type TrackerExport = {
   savedFilterViews: SavedFilterView[];
 };
 
-const DEFAULT_ISSUE_PAGE = 1;
-const DEFAULT_ISSUE_LIMIT = 25;
-const MAX_ISSUE_LIMIT = 100;
 const SPREADSHEET_FORMULA_PREFIX_PATTERN = /^[=+\-@\t\r\n]/;
 const serviceHealth = {
   status: 'ok',
@@ -161,22 +158,6 @@ function jsonParseErrorHandler(error: unknown, req: Request, res: Response, next
   res.status(400).json({ error: 'Request body must be valid JSON.' });
 }
 
-function getOptionalQueryString(value: unknown): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (typeof value === 'string') {
-    return value;
-  }
-
-  if (Array.isArray(value) && typeof value[0] === 'string') {
-    return value[0];
-  }
-
-  return undefined;
-}
-
 function getOptionalRequestObject(value: unknown, errorMessage: string): Record<string, unknown> {
   if (value === undefined) {
     return {};
@@ -187,51 +168,6 @@ function getOptionalRequestObject(value: unknown, errorMessage: string): Record<
   }
 
   return value as Record<string, unknown>;
-}
-
-function parsePositiveIntegerQuery(value: unknown, defaultValue: number, errorMessage: string): number {
-  const queryValue = getOptionalQueryString(value);
-
-  if (queryValue === undefined) {
-    return defaultValue;
-  }
-
-  if (!/^[1-9]\d*$/.test(queryValue)) {
-    throw new Error(errorMessage);
-  }
-
-  return Number(queryValue);
-}
-
-function getIssueListPagination(query: { page?: unknown; limit?: unknown }) {
-  const page = parsePositiveIntegerQuery(query.page, DEFAULT_ISSUE_PAGE, 'Invalid page parameter');
-  const limit = parsePositiveIntegerQuery(query.limit, DEFAULT_ISSUE_LIMIT, 'Invalid limit parameter');
-
-  if (limit > MAX_ISSUE_LIMIT) {
-    throw new Error('Invalid limit parameter');
-  }
-
-  return { page, limit };
-}
-
-function buildIssueListFilters(query: {
-  status?: unknown;
-  priority?: unknown;
-  search?: unknown;
-  label?: unknown;
-  includeArchived?: unknown;
-  blockedOnly?: unknown;
-  staleOnly?: unknown;
-}): IssueListFilters {
-  return {
-    status: getOptionalQueryString(query.status) as IssueListFilters['status'],
-    priority: getOptionalQueryString(query.priority) as IssueListFilters['priority'],
-    search: getOptionalQueryString(query.search),
-    label: getOptionalQueryString(query.label),
-    includeArchived: parseOptionalBooleanQuery(query.includeArchived, false, 'Invalid includeArchived parameter'),
-    blockedOnly: parseOptionalBooleanQuery(query.blockedOnly, false, 'Invalid blockedOnly parameter'),
-    staleOnly: parseOptionalBooleanQuery(query.staleOnly, false, 'Invalid staleOnly parameter')
-  };
 }
 
 function neutralizeSpreadsheetFormulaCell(value: string): string {
@@ -288,24 +224,6 @@ function buildIssueListCsv(issues: Issue[]): string {
   const rowsCsv = rows.map((row) => row.map(escapeCsvCell).join(','));
 
   return [header.join(','), ...rowsCsv].join('\r\n');
-}
-
-function parseOptionalBooleanQuery(value: unknown, defaultValue: boolean, errorMessage: string): boolean {
-  const queryValue = getOptionalQueryString(value);
-
-  if (queryValue === undefined) {
-    return defaultValue;
-  }
-
-  if (queryValue === 'true') {
-    return true;
-  }
-
-  if (queryValue === 'false') {
-    return false;
-  }
-
-  throw new Error(errorMessage);
 }
 
 function groupBy<T>(items: T[], keySelector: (item: T) => string): Map<string, T[]> {

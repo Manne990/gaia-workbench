@@ -3810,7 +3810,7 @@ test('missing saved filter view URLs fall back to explicit filters', async ({ pa
   await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
 });
 
-test('applying an active-only saved view clears a stale archived detail selection', async ({ page }) => {
+test('applying an active-only saved view preserves an archived detail selection', async ({ page }) => {
   const archivedTarget = await createIssueThroughApi(page, {
     title: 'Saved view archived detail target',
     description: 'Opened from an archived-including saved view.',
@@ -3862,7 +3862,8 @@ test('applying an active-only saved view clears a stale archived detail selectio
   await savedViews.getByLabel('Saved views').selectOption({ label: 'Active detail view' });
   await savedViews.getByRole('button', { name: 'Apply View' }).click();
 
-  await expect(page.getByRole('region', { name: archivedTarget.title })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: archivedTarget.title })).toBeVisible();
+  await expect(page.getByText('Hidden from the active dashboard since')).toBeVisible();
   await expect(page.getByRole('row', { name: /Saved view active detail row.*Todo.*Medium/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /Saved view archived detail target.*Review.*High/ })).toHaveCount(0);
   await expect(filters.getByLabel('Search')).toHaveValue('Saved view active detail');
@@ -3870,18 +3871,18 @@ test('applying an active-only saved view clears a stale archived detail selectio
   await expect(filters.getByLabel('Status')).toHaveValue('todo');
   await expect(filters.getByLabel('Priority')).toHaveValue('medium');
   await expect(filters.getByLabel('Include archived')).not.toBeChecked();
-  await expect.poll(() => new URL(page.url()).pathname).toBe('/');
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${archivedTarget.id}`);
   await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Saved view active detail');
   await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('active-view');
   await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBeNull();
 });
 
-test('applying a saved view clears a stale detail selection when the issue no longer matches the view filters', async ({
+test('applying a saved view preserves detail selection when the issue no longer matches the view filters', async ({
   page
 }) => {
   const detailTarget = await createIssueThroughApi(page, {
     title: 'Saved view mismatch detail target',
-    description: 'Should be cleared when a different saved view is applied.',
+    description: 'Should stay selected when a different saved view is applied.',
     status: 'review',
     priority: 'high',
     labels: ['detail-target']
@@ -3904,7 +3905,7 @@ test('applying a saved view clears a stale detail selection when the issue no lo
   await filters.getByLabel('Label').fill('saved-view-match');
   await filters.getByLabel('Status').selectOption('todo');
   await filters.getByLabel('Priority').selectOption('medium');
-  await savedViews.getByLabel('View name').fill('Mismatched detail clearing view');
+  await savedViews.getByLabel('View name').fill('Mismatched detail preserving view');
   await savedViews.getByRole('button', { name: 'Save View' }).click();
 
   await filters.getByRole('button', { name: 'Clear Filters' }).click();
@@ -3912,17 +3913,17 @@ test('applying a saved view clears a stale detail selection when the issue no lo
   await expect(page.getByRole('region', { name: detailTarget.title })).toBeVisible();
   await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${detailTarget.id}`);
 
-  await savedViews.getByLabel('Saved views').selectOption({ label: 'Mismatched detail clearing view' });
+  await savedViews.getByLabel('Saved views').selectOption({ label: 'Mismatched detail preserving view' });
   await savedViews.getByRole('button', { name: 'Apply View' }).click();
 
-  await expect(page.getByRole('region', { name: detailTarget.title })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: detailTarget.title })).toBeVisible();
   await expect(page.getByRole('row', { name: /Saved view matching row.*Todo.*Medium/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /Saved view mismatch detail target.*Review.*High/ })).toHaveCount(0);
   await expect(filters.getByLabel('Search')).toHaveValue('Saved view matching row');
   await expect(filters.getByLabel('Label')).toHaveValue('saved-view-match');
   await expect(filters.getByLabel('Status')).toHaveValue('todo');
   await expect(filters.getByLabel('Priority')).toHaveValue('medium');
-  await expect.poll(() => new URL(page.url()).pathname).toBe('/');
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${detailTarget.id}`);
   await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Saved view matching row');
   await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('saved-view-match');
 });

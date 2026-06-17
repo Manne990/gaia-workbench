@@ -841,6 +841,65 @@ test('command palette opens and closes issue detail from keyboard commands', asy
   await expect(issueListHeading).toBeFocused();
 });
 
+test('command palette changes the selected issue status and handles no selection', async ({ page }) => {
+  const issue = await createIssueThroughApi(page, {
+    title: 'Palette status shortcut issue',
+    description: 'Command palette should move selected issue status.',
+    status: 'todo',
+    priority: 'medium'
+  });
+
+  await page.goto('/');
+
+  const quickActionsButton = page.getByRole('button', { name: 'Quick Actions' });
+  const commandPalette = page.getByRole('dialog', { name: 'Command palette' });
+  const commandSearch = page.getByLabel('Search commands');
+
+  await quickActionsButton.click();
+  await commandSearch.fill('move selected issue to done');
+  await expect(
+    commandPalette.getByRole('button', {
+      name: 'Move selected issue to Done. Select an issue to change its status to Done'
+    })
+  ).toBeDisabled();
+  await page.keyboard.press('Escape');
+
+  await page.goto(`/issues/${issue.id}?search=${encodeURIComponent('Palette status shortcut')}`);
+
+  const detail = page.getByRole('region', { name: issue.title });
+
+  await expect(detail).toBeVisible();
+  await expect(detail.getByLabel('Issue details')).toContainText('Todo');
+  await expect(page.getByRole('row', { name: /Palette status shortcut issue.*Todo.*Medium/ })).toBeVisible();
+
+  await quickActionsButton.click();
+  await commandSearch.fill('move selected issue to done');
+  await expect(
+    commandPalette.getByRole('button', {
+      name: 'Move selected issue to Done. Set Palette status shortcut issue to Done'
+    })
+  ).toBeEnabled();
+
+  const statusResponsePromise = page.waitForResponse((response) => {
+    const responseUrl = new URL(response.url());
+
+    return response.request().method() === 'POST' && responseUrl.pathname === '/api/issues/bulk-status';
+  });
+
+  await page.keyboard.press('Enter');
+
+  const statusResponse = await statusResponsePromise;
+  const issueResponse = await page.request.get(`/api/issues/${issue.id}`);
+  const updatedIssue = (await issueResponse.json()) as ApiIssue;
+
+  expect(statusResponse.ok()).toBe(true);
+  expect(issueResponse.ok()).toBe(true);
+  expect(updatedIssue.status).toBe('done');
+  await expect(commandPalette).toHaveCount(0);
+  await expect(detail.getByLabel('Issue details')).toContainText('Done');
+  await expect(page.getByRole('row', { name: /Palette status shortcut issue.*Done.*Medium/ })).toBeVisible();
+});
+
 test('command palette toggles dashboard density and restores focus', async ({ page }) => {
   await page.goto('/');
 

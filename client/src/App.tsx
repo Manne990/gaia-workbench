@@ -26,7 +26,7 @@ import { IssueFormPanel } from './components/IssueFormPanel';
 import { IssueListPanel } from './components/IssueListPanel';
 import { IssueStatusSummary } from './components/IssueStatusSummary';
 import { CommandPalette } from './components/CommandPalette';
-import { emptyFormValues, statusLabels } from './constants';
+import { emptyFormValues, statusLabels, statusOrder } from './constants';
 import { useImportWorkflow } from './hooks/useImportWorkflow';
 import { useIssueDirectory } from './hooks/useIssueDirectory';
 import { useSelectedIssueDiscussion } from './hooks/useSelectedIssueDiscussion';
@@ -52,6 +52,7 @@ import { buildDashboardQuery, defaultDashboardFilters, getRouteStateFromLocation
 import { issueMatchesDashboardFilters } from './utils/savedView';
 
 const DASHBOARD_DENSITY_STORAGE_KEY = 'tinytracker.dashboardDensity';
+const SELECTED_ISSUE_STATUS_COMMAND_PREFIX = 'set-selected-issue-status:';
 type IssueAnchorTarget = {
   type: 'comment' | 'activity';
   id: string;
@@ -102,6 +103,20 @@ function parseIssueAnchorTarget(hash: string): IssueAnchorTarget | null {
   } catch {
     return { type, id };
   }
+}
+
+function selectedIssueStatusCommandId(status: IssueStatus): string {
+  return `${SELECTED_ISSUE_STATUS_COMMAND_PREFIX}${status}`;
+}
+
+function readSelectedIssueStatusCommand(commandId: string): IssueStatus | null {
+  if (!commandId.startsWith(SELECTED_ISSUE_STATUS_COMMAND_PREFIX)) {
+    return null;
+  }
+
+  const status = commandId.slice(SELECTED_ISSUE_STATUS_COMMAND_PREFIX.length);
+
+  return statusOrder.includes(status as IssueStatus) ? (status as IssueStatus) : null;
 }
 
 export function App() {
@@ -225,6 +240,30 @@ export function App() {
       }
     }
   }, []);
+  const selectedIssueStatusCommands = useMemo(
+    () =>
+      statusOrder.map((status) => {
+        const statusLabel = statusLabels[status];
+        const selectedTitle = selectedIssue?.title ?? 'the selected issue';
+        const disabled = !selectedIssue || selectedIssue.status === status || selectedIssue.archivedAt !== null;
+        const description = !selectedIssue
+          ? `Select an issue to change its status to ${statusLabel}`
+          : selectedIssue.archivedAt
+            ? 'Restore the archived issue before changing status'
+            : selectedIssue.status === status
+              ? `${selectedTitle} is already ${statusLabel}`
+              : `Set ${selectedTitle} to ${statusLabel}`;
+
+        return {
+          id: selectedIssueStatusCommandId(status),
+          label: `Move selected issue to ${statusLabel}`,
+          description,
+          commandHint: statusLabel,
+          disabled
+        };
+      }),
+    [selectedIssue]
+  );
   const commandPaletteCommands = useMemo(
     () => [
       {
@@ -248,6 +287,7 @@ export function App() {
         commandHint: 'Enter',
         disabled: filteredIssues.length === 0
       },
+      ...selectedIssueStatusCommands,
       {
         id: 'clear-active-filters',
         label: 'Clear active filters',
@@ -273,7 +313,7 @@ export function App() {
         disabled: !selectedIssueId
       }
     ],
-    [dashboardDensity, filteredIssues.length, hasActiveFilters, selectedIssueId]
+    [dashboardDensity, filteredIssues.length, hasActiveFilters, selectedIssueId, selectedIssueStatusCommands]
   );
 
   const isIssueDetailLoading = Boolean(selectedIssueId && selectedIssueLoadState === 'loading' && !selectedIssue);
@@ -382,7 +422,7 @@ export function App() {
     restoreFocus(element, () => newIssueButtonRef.current ?? issueListHeadingRef.current);
   }
 
-  function runCommandPaletteAction(commandId: string) {
+  async function runCommandPaletteAction(commandId: string) {
     if (commandId === 'new-issue') {
       closeCommandPalette({ restoreFocus: false, clearQuery: true });
       startCreate();
@@ -408,6 +448,13 @@ export function App() {
       return;
     }
 
+    const selectedIssueStatus = readSelectedIssueStatusCommand(commandId);
+
+    if (selectedIssueStatus) {
+      await changeSelectedIssueStatus(selectedIssueStatus);
+      return;
+    }
+
     if (commandId === 'clear-active-filters') {
       closeCommandPalette({ restoreFocus: false, clearQuery: true });
       handleClearFilters({ restoreFocus: true });
@@ -427,6 +474,37 @@ export function App() {
     }
 
     closeCommandPalette({ clearQuery: true });
+  }
+
+  async function changeSelectedIssueStatus(status: IssueStatus) {
+    if (!selectedIssue || selectedIssue.status === status || selectedIssue.archivedAt !== null) {
+      closeCommandPalette({ clearQuery: true });
+      return;
+    }
+
+    closeCommandPalette({ clearQuery: true });
+    setBulkStatusError(null);
+    setBulkStatusMessage(null);
+
+    try {
+      const result = await bulkUpdateIssueStatus([selectedIssue.id], status);
+      const updatedIssue = result.updated.find((issue) => issue.id === selectedIssue.id) ?? null;
+
+      refreshIssues();
+
+      if (updatedIssue) {
+        setSelectedIssue(updatedIssue);
+        setSelectedIssueLoadState('loaded');
+        await refreshSelectedIssueDetail(updatedIssue.id);
+        setBulkStatusMessage(`Changed selected issue to ${statusLabels[result.status]}.`);
+      } else if (result.unchangedIds.includes(selectedIssue.id)) {
+        setBulkStatusMessage(`Selected issue already was ${statusLabels[result.status]}.`);
+      } else {
+        setBulkStatusError('Selected issue was not found.');
+      }
+    } catch (error) {
+      setBulkStatusError(error instanceof Error ? error.message : 'Selected issue status update failed.');
+    }
   }
 
   useEffect(() => {

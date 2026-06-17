@@ -933,6 +933,140 @@ test('command palette changes the selected issue status and handles no selection
   await expect(page.getByRole('row', { name: /Palette status shortcut issue.*Done.*Medium/ })).toBeVisible();
 });
 
+test('command palette jumps to saved views and applies saved view commands', async ({ page }) => {
+  await createIssueThroughApi(page, {
+    title: 'Palette saved target',
+    description: 'Saved view command should reveal this row.',
+    status: 'review',
+    priority: 'high',
+    labels: ['palette-saved']
+  });
+  await createIssueThroughApi(page, {
+    title: 'Palette saved other',
+    description: 'Saved view command should filter this row away.',
+    status: 'todo',
+    priority: 'low',
+    labels: ['palette-other']
+  });
+
+  const savedViewResponse = await page.request.post('/api/filter-views', {
+    data: {
+      name: 'Palette review view',
+      search: 'Palette saved target',
+      status: 'review',
+      priority: 'high',
+      label: 'palette-saved',
+      includeArchived: false,
+      blockedOnly: false,
+      staleOnly: false,
+      pageSize: 25
+    }
+  });
+
+  expect(savedViewResponse.ok()).toBe(true);
+  const savedView = (await savedViewResponse.json()) as { id: string };
+
+  await page.goto('/?search=Palette%20saved%20other');
+
+  const filters = page.getByRole('search', { name: 'Issue filters' });
+  const quickActionsButton = page.getByRole('button', { name: 'Quick Actions' });
+  const commandPalette = page.getByRole('dialog', { name: 'Command palette' });
+  const commandSearch = page.getByLabel('Search commands');
+  const settings = page.getByLabel('Saved views and page settings');
+
+  await expect(page.getByRole('row', { name: /Palette saved other.*Todo.*Low/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Palette saved target.*Review.*High/ })).toHaveCount(0);
+
+  await quickActionsButton.click();
+  await commandSearch.fill('focus saved views');
+  await page.keyboard.press('Enter');
+
+  await expect(commandPalette).toHaveCount(0);
+  await expect(settings).toHaveJSProperty('open', true);
+  await expect(settings.getByLabel('Saved views')).toBeFocused();
+  await expect(settings.getByLabel('Saved views')).toContainText('Palette review view');
+
+  await quickActionsButton.click();
+  await commandSearch.fill('palette review view');
+  await page.keyboard.press('Enter');
+
+  await expect(commandPalette).toHaveCount(0);
+  await expect(filters.getByLabel('Search')).toHaveValue('Palette saved target');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(filters.getByLabel('Priority')).toHaveValue('high');
+  await expect(filters.getByLabel('Label')).toHaveValue('palette-saved');
+  await expect(settings.getByLabel('Saved views')).toHaveValue(savedView.id);
+  await expect(page.getByRole('row', { name: /Palette saved target.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Palette saved other.*Todo.*Low/ })).toHaveCount(0);
+
+  const cleanupSavedViewResponse = await page.request.delete(`/api/filter-views/${savedView.id}`);
+  expect(cleanupSavedViewResponse.ok()).toBe(true);
+});
+
+test('command palette focuses dependency actions only with a selected issue', async ({ page }) => {
+  const blocker = await createIssueThroughApi(page, {
+    title: 'Palette dependency blocker',
+    description: 'Command palette dependency action should add this blocker.',
+    status: 'todo',
+    priority: 'medium'
+  });
+  const target = await createIssueThroughApi(page, {
+    title: 'Palette dependency target',
+    description: 'Command palette should focus the dependency field.',
+    status: 'review',
+    priority: 'high'
+  });
+
+  await page.goto('/');
+
+  const quickActionsButton = page.getByRole('button', { name: 'Quick Actions' });
+  const commandPalette = page.getByRole('dialog', { name: 'Command palette' });
+  const commandSearch = page.getByLabel('Search commands');
+
+  await quickActionsButton.click();
+  await commandSearch.fill('focus dependency actions');
+  await expect(
+    commandPalette.getByRole('button', {
+      name: 'Focus dependency actions. Select an issue to manage dependencies'
+    })
+  ).toBeDisabled();
+  await page.keyboard.press('Escape');
+
+  await page.goto(`/issues/${target.id}?search=${encodeURIComponent('Palette dependency target')}`);
+
+  const detail = page.getByRole('region', { name: target.title });
+  const dependencyInput = detail.getByLabel('Add blocker issue ID');
+
+  await expect(detail).toBeVisible();
+  await expect(dependencyInput).toBeEnabled();
+
+  await quickActionsButton.click();
+  await commandSearch.fill('focus dependency actions');
+  await expect(
+    commandPalette.getByRole('button', {
+      name: 'Focus dependency actions. Add blocker dependency to Palette dependency target'
+    })
+  ).toBeEnabled();
+  await page.keyboard.press('Enter');
+
+  await expect(commandPalette).toHaveCount(0);
+  await expect(dependencyInput).toBeFocused();
+
+  const dependencyResponsePromise = page.waitForResponse((response) => {
+    const responseUrl = new URL(response.url());
+
+    return response.request().method() === 'POST' && responseUrl.pathname === `/api/issues/${target.id}/dependencies`;
+  });
+
+  await dependencyInput.fill(blocker.id);
+  await detail.getByRole('button', { name: 'Add Dependency' }).click();
+
+  const dependencyResponse = await dependencyResponsePromise;
+
+  expect(dependencyResponse.ok()).toBe(true);
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
+});
+
 test('command palette toggles dashboard density and restores focus', async ({ page }) => {
   await page.goto('/');
 

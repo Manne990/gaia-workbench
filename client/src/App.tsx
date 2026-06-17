@@ -61,6 +61,7 @@ import {
 
 const DASHBOARD_DENSITY_STORAGE_KEY = 'tinytracker.dashboardDensity';
 const SELECTED_ISSUE_STATUS_COMMAND_PREFIX = 'set-selected-issue-status:';
+const APPLY_SAVED_VIEW_COMMAND_PREFIX = 'apply-saved-view:';
 type IssueAnchorTarget = {
   type: 'comment' | 'activity';
   id: string;
@@ -135,6 +136,10 @@ function selectedIssueStatusCommandId(status: IssueStatus): string {
   return `${SELECTED_ISSUE_STATUS_COMMAND_PREFIX}${status}`;
 }
 
+function applySavedViewCommandId(viewId: string): string {
+  return `${APPLY_SAVED_VIEW_COMMAND_PREFIX}${encodeURIComponent(viewId)}`;
+}
+
 function readSelectedIssueStatusCommand(commandId: string): IssueStatus | null {
   if (!commandId.startsWith(SELECTED_ISSUE_STATUS_COMMAND_PREFIX)) {
     return null;
@@ -143,6 +148,20 @@ function readSelectedIssueStatusCommand(commandId: string): IssueStatus | null {
   const status = commandId.slice(SELECTED_ISSUE_STATUS_COMMAND_PREFIX.length);
 
   return statusOrder.includes(status as IssueStatus) ? (status as IssueStatus) : null;
+}
+
+function readApplySavedViewCommand(commandId: string): string | null {
+  if (!commandId.startsWith(APPLY_SAVED_VIEW_COMMAND_PREFIX)) {
+    return null;
+  }
+
+  const viewId = commandId.slice(APPLY_SAVED_VIEW_COMMAND_PREFIX.length);
+
+  try {
+    return decodeURIComponent(viewId);
+  } catch {
+    return viewId;
+  }
 }
 
 export function App() {
@@ -220,6 +239,9 @@ export function App() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const issueSearchInputRef = useRef<HTMLInputElement>(null);
   const commandPaletteInputRef = useRef<HTMLInputElement>(null);
+  const savedViewsDetailsRef = useRef<HTMLDetailsElement>(null);
+  const savedViewSelectRef = useRef<HTMLSelectElement>(null);
+  const dependencyIssueInputRef = useRef<HTMLInputElement>(null);
   const issueListHeadingRef = useRef<HTMLHeadingElement>(null);
   const issueTitleInputRef = useRef<HTMLInputElement>(null);
   const issueDetailHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -298,6 +320,17 @@ export function App() {
       }),
     [selectedIssue]
   );
+  const savedViewCommands = useMemo(
+    () =>
+      savedViews.map((view) => ({
+        id: applySavedViewCommandId(view.id),
+        label: `Apply saved view: ${view.name}`,
+        description: `Load filters from ${view.name}`,
+        commandHint: 'View',
+        disabled: isSavedViewBusy
+      })),
+    [isSavedViewBusy, savedViews]
+  );
   const commandPaletteCommands = useMemo(
     () => [
       {
@@ -314,6 +347,14 @@ export function App() {
         commandHint: 'S',
         disabled: false
       },
+      {
+        id: 'focus-saved-views',
+        label: 'Focus saved views',
+        description: 'Jump to saved view controls',
+        commandHint: 'Views',
+        disabled: false
+      },
+      ...savedViewCommands,
       {
         id: 'open-first-visible-issue',
         label: 'Open first visible issue',
@@ -340,6 +381,17 @@ export function App() {
         disabled: false
       },
       {
+        id: 'focus-dependency-actions',
+        label: 'Focus dependency actions',
+        description: !selectedIssue
+          ? 'Select an issue to manage dependencies'
+          : dependencyLoadState === 'loading'
+            ? 'Wait for dependencies to finish loading'
+            : `Add blocker dependency to ${selectedIssue.title}`,
+        commandHint: 'Deps',
+        disabled: !selectedIssue || dependencyLoadState === 'loading' || isDependencySubmitting
+      },
+      {
         id: 'close-issue-detail',
         label: 'Close issue detail',
         description: 'Close issue detail panel',
@@ -347,7 +399,17 @@ export function App() {
         disabled: !selectedIssueId
       }
     ],
-    [dashboardDensity, filteredIssues.length, hasActiveFilters, selectedIssueId, selectedIssueStatusCommands]
+    [
+      dashboardDensity,
+      dependencyLoadState,
+      filteredIssues.length,
+      hasActiveFilters,
+      isDependencySubmitting,
+      savedViewCommands,
+      selectedIssue,
+      selectedIssueId,
+      selectedIssueStatusCommands
+    ]
   );
 
   const isIssueDetailLoading = Boolean(selectedIssueId && selectedIssueLoadState === 'loading' && !selectedIssue);
@@ -456,6 +518,21 @@ export function App() {
     restoreFocus(element, () => newIssueButtonRef.current ?? issueListHeadingRef.current);
   }
 
+  function focusSavedViewControls() {
+    if (savedViewsDetailsRef.current && !savedViewsDetailsRef.current.open) {
+      savedViewsDetailsRef.current.open = true;
+    }
+
+    window.setTimeout(() => {
+      savedViewSelectRef.current?.focus();
+    }, 0);
+  }
+
+  function focusDependencyActions() {
+    dependencyIssueInputRef.current?.scrollIntoView({ block: 'center' });
+    dependencyIssueInputRef.current?.focus();
+  }
+
   async function runCommandPaletteAction(commandId: string) {
     if (commandId === 'new-issue') {
       closeCommandPalette({ restoreFocus: false, clearQuery: true });
@@ -466,6 +543,19 @@ export function App() {
     if (commandId === 'focus-issue-search') {
       closeCommandPalette({ restoreFocus: false, clearQuery: true });
       issueSearchInputRef.current?.focus();
+      return;
+    }
+
+    if (commandId === 'focus-saved-views') {
+      closeCommandPalette({ restoreFocus: false, clearQuery: true });
+      focusSavedViewControls();
+      return;
+    }
+
+    const savedViewCommandId = readApplySavedViewCommand(commandId);
+
+    if (savedViewCommandId) {
+      await applySavedViewFromCommand(savedViewCommandId);
       return;
     }
 
@@ -501,9 +591,15 @@ export function App() {
       return;
     }
 
-    if (commandId === 'close-issue-detail' && selectedIssueId) {
+    if (commandId === 'focus-dependency-actions') {
       closeCommandPalette({ restoreFocus: false, clearQuery: true });
+      focusDependencyActions();
+      return;
+    }
+
+    if (commandId === 'close-issue-detail' && selectedIssueId) {
       closeIssueDetail();
+      closeCommandPalette({ restoreFocus: false, clearQuery: true });
       return;
     }
 
@@ -934,19 +1030,14 @@ export function App() {
     }
   }
 
-  async function handleApplySavedView() {
-    if (!selectedSavedViewId) {
-      setSavedViewError('Choose a saved view to apply.');
-      return;
-    }
-
+  async function applySavedViewById(viewId: string) {
     setIsSavedViewBusy(true);
     setSavedViewError(null);
     savedViewRouteAbortRef.current?.abort();
     savedViewRouteAbortRef.current = null;
 
     try {
-      const view = await fetchSavedFilterView(selectedSavedViewId);
+      const view = await fetchSavedFilterView(viewId);
 
       applySavedViewState(view, 'push');
     } catch (error) {
@@ -955,11 +1046,31 @@ export function App() {
       setSavedViewError(message);
 
       if (message === 'Saved view not found') {
-        removeMissingSavedView(selectedSavedViewId);
+        removeMissingSavedView(viewId);
       }
     } finally {
       setIsSavedViewBusy(false);
     }
+  }
+
+  async function handleApplySavedView() {
+    if (!selectedSavedViewId) {
+      setSavedViewError('Choose a saved view to apply.');
+      return;
+    }
+
+    await applySavedViewById(selectedSavedViewId);
+  }
+
+  async function applySavedViewFromCommand(viewId: string) {
+    const cachedView = savedViews.find((view) => view.id === viewId);
+
+    setSelectedSavedViewId(viewId);
+    setSavedViewName(cachedView?.name ?? '');
+    closeCommandPalette({ restoreFocus: false, clearQuery: true });
+
+    await applySavedViewById(viewId);
+    restoreFocus(null, () => issueListHeadingRef.current);
   }
 
   async function handleRenameSavedView() {
@@ -1745,6 +1856,8 @@ export function App() {
           onRenameSavedView={handleRenameSavedView}
           onDeleteSavedView={handleDeleteSavedView}
           issueSearchInputRef={issueSearchInputRef}
+          savedViewsDetailsRef={savedViewsDetailsRef}
+          savedViewSelectRef={savedViewSelectRef}
           issueListHeadingRef={issueListHeadingRef}
           onClearFilters={handleClearFilters}
           onRetryLoad={refreshIssues}
@@ -1803,6 +1916,7 @@ export function App() {
           missingIssueHeadingRef={missingIssueHeadingRef}
           commentsHeadingRef={commentsHeadingRef}
           editCommentTextareaRef={editCommentTextareaRef}
+          dependencyIssueInputRef={dependencyIssueInputRef}
           issueLinkCopyFeedback={issueLinkCopyFeedback}
           onCloseIssueDetail={closeIssueDetail}
           onCopyIssueLink={(issue) => void copyIssueLink(issue, 'detail')}

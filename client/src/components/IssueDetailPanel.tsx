@@ -51,6 +51,7 @@ type IssueDetailPanelProps = {
   missingIssueHeadingRef: RefObject<HTMLHeadingElement | null>;
   commentsHeadingRef: RefObject<HTMLHeadingElement | null>;
   editCommentTextareaRef: RefObject<HTMLTextAreaElement | null>;
+  dependencyIssueInputRef: RefObject<HTMLInputElement | null>;
   issueLinkCopyFeedback: IssueLinkCopyFeedback | null;
   onCloseIssueDetail: () => void;
   onCopyIssueLink: (issue: Issue) => void;
@@ -94,6 +95,7 @@ export function IssueDetailPanel({
   missingIssueHeadingRef,
   commentsHeadingRef,
   editCommentTextareaRef,
+  dependencyIssueInputRef,
   issueLinkCopyFeedback,
   onCloseIssueDetail,
   onCopyIssueLink,
@@ -388,6 +390,7 @@ export function IssueDetailPanel({
                   <span>Add blocker issue ID</span>
                   <input
                     id="dependency-issue-id"
+                    ref={dependencyIssueInputRef}
                     value={dependencyIssueId}
                     onChange={(event) => setDependencyIssueId(event.target.value)}
                     disabled={isDependencySubmitting || dependencyLoadState === 'loading'}

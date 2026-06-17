@@ -4305,8 +4305,14 @@ test('saved filter views persist restore and compose with detail routes', async 
 
   await filters.getByLabel('Search').fill('Saved view active other');
   await filters.getByLabel('Label').fill('other');
-  await expect(page.getByLabel('Active filters')).not.toContainText('Saved view: Review archive view');
+  await expect(page.getByLabel('Active filters')).toContainText('Saved view: Review archive view (edited)');
   await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBeNull();
+
+  await page.getByRole('button', { name: 'Clear board filters' }).click();
+  await expect(page.getByLabel('Active filters')).toHaveCount(0);
+  await expect(page.getByLabel('Active filter count')).toHaveCount(0);
+  await expect(savedViews.getByLabel('Saved views')).toHaveValue(savedViewId);
+  await expect(page).toHaveURL('/');
 
   await page.goto(`/?savedView=${encodeURIComponent(savedViewId)}&search=stale-local&label=other&limit=10`);
   settings = await expandDashboardSettings(page);
@@ -4357,7 +4363,7 @@ test('saved filter views persist restore and compose with detail routes', async 
   await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('other');
   await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('10');
   await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBeNull();
-  await expect(page.getByLabel('Active filters')).not.toContainText('Saved view: Renamed archive view');
+  await expect(page.getByLabel('Active filters')).toContainText('Saved view: Review archive view (copy) (edited)');
 
   await savedViews.getByRole('button', { name: 'Apply View' }).click();
   await expect(filters.getByLabel('Search')).toHaveValue('Saved view target');

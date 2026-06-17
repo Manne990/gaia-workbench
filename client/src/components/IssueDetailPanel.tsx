@@ -1,6 +1,8 @@
+import { useEffect, useMemo, useState } from 'react';
 import type { Dispatch, FormEvent, RefObject, SetStateAction } from 'react';
 import { priorityLabels, statusLabels } from '../constants';
 import type {
+  ActivityCategory,
   ActivityEvent,
   Comment,
   CommentEditHistory,
@@ -8,7 +10,13 @@ import type {
   Issue,
   IssueDependencyState
 } from '../types';
-import { activityDetail, activityTitle } from '../utils/activity';
+import {
+  activityCategoryOptions,
+  activityDetail,
+  activityFilteredEmptyState,
+  activityTitle,
+  filterActivityEvents
+} from '../utils/activity';
 import { blockedDependencySummary } from '../utils/dependencySummary';
 import { formatIssueDate, formatIssueDueDate, getIssueFreshnessPresentation } from '../utils/issuePresentation';
 import { renderMarkdownLite } from '../utils/markdown';
@@ -94,12 +102,25 @@ export function IssueDetailPanel({
   onCancelEditComment,
   onSubmitCommentEdit
 }: IssueDetailPanelProps) {
+  const [activityCategory, setActivityCategory] = useState<ActivityCategory>('all');
   const blockers = issueDependencies?.dependencies ?? [];
   const dependents = issueDependencies?.dependents ?? [];
   const selectedIssueFreshness = selectedIssue ? getIssueFreshnessPresentation(selectedIssue.updatedAt) : null;
   const selectedIssueCanBlockDependents = selectedIssue
     ? selectedIssue.archivedAt === null && selectedIssue.status !== 'done'
     : false;
+  const filteredActivityEvents = useMemo(
+    () => filterActivityEvents(activityEvents, activityCategory),
+    [activityCategory, activityEvents]
+  );
+  const activityCountLabel =
+    activityCategory === 'all'
+      ? `${activityEvents.length}`
+      : `${filteredActivityEvents.length}/${activityEvents.length}`;
+
+  useEffect(() => {
+    setActivityCategory('all');
+  }, [selectedIssue?.id]);
 
   return (
     <>
@@ -368,7 +389,7 @@ export function IssueDetailPanel({
             <section className="activity-section" aria-labelledby="activity-heading">
               <div className="activity-header">
                 <h3 id="activity-heading">Activity</h3>
-                <span>{activityEvents.length}</span>
+                <span aria-label="Visible activity count">{activityCountLabel}</span>
               </div>
 
               {activityLoadState === 'loading' ? (
@@ -383,13 +404,31 @@ export function IssueDetailPanel({
                 </div>
               ) : null}
 
-              {activityLoadState === 'loaded' && activityEvents.length === 0 ? (
-                <div className="state-message compact">No activity yet.</div>
+              {activityLoadState === 'loaded' && activityEvents.length > 0 ? (
+                <div className="activity-filter-group" role="group" aria-label="Activity category filters">
+                  {activityCategoryOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={
+                        option.value === activityCategory ? 'activity-filter-button active' : 'activity-filter-button'
+                      }
+                      aria-pressed={option.value === activityCategory}
+                      onClick={() => setActivityCategory(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
               ) : null}
 
-              {activityEvents.length > 0 ? (
+              {activityLoadState === 'loaded' && filteredActivityEvents.length === 0 ? (
+                <div className="state-message compact">{activityFilteredEmptyState(activityCategory)}</div>
+              ) : null}
+
+              {filteredActivityEvents.length > 0 ? (
                 <ol className="activity-list" aria-label="Issue activity">
-                  {activityEvents.map((event) => (
+                  {filteredActivityEvents.map((event) => (
                     <li
                       key={event.id}
                       id={`activity-${event.id}`}

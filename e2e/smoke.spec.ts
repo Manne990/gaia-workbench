@@ -290,14 +290,18 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   await expect(page.getByText('Create issue from UI')).toHaveCount(0);
 
   const filters = page.getByLabel('Issue filters');
+  await expect(page.getByRole('button', { name: 'Clear board filters' })).toHaveCount(0);
+
   await filters.getByLabel('Search').fill('not in the tracker');
   await expect(page.getByLabel('Active filters')).toContainText('Search: not in the tracker');
   await expect(page.getByLabel('Active filter count')).toHaveText('1 active filter');
+  await expect(page.getByRole('button', { name: 'Clear board filters' })).toBeVisible();
   await expect(page.getByText('No issues match the active filters.')).toBeVisible();
-  await filters.getByRole('button', { name: 'Clear Filters' }).click();
+  await page.getByRole('button', { name: 'Clear board filters' }).click();
   await expect(updatedRow).toBeVisible();
   await expect(page.getByLabel('Active filters')).toHaveCount(0);
   await expect(page.getByLabel('Active filter count')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Clear board filters' })).toHaveCount(0);
 
   await filters.getByLabel('Search').fill('Edit issue');
   await filters.getByLabel('Label').fill('docs');
@@ -325,13 +329,23 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   await expect(page.getByLabel('Active filters')).toContainText('Priority: High');
   await expect(page.getByLabel('Active filter count')).toHaveText('4 active filters');
   await expect(page.getByText('No issues match the active filters.')).toBeVisible();
-  await filters.getByRole('button', { name: 'Clear Filters' }).click();
+  await page.getByRole('button', { name: 'Clear board filters' }).click();
   await expect(updatedRow).toBeVisible();
 
   await page.getByRole('button', { name: 'Open Edit issue from UI' }).click();
   const detail = page.getByRole('region', { name: 'Edit issue from UI' });
 
   await expect(detail.getByRole('heading', { name: 'Edit issue from UI' })).toBeVisible();
+  const detailPath = new URL(page.url()).pathname;
+
+  await filters.getByLabel('Search').fill('hidden by detail route filter');
+  await expect(page.getByLabel('Active filters')).toContainText('Search: hidden by detail route filter');
+  await page.getByRole('button', { name: 'Clear board filters' }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(detailPath);
+  await expect.poll(() => new URL(page.url()).search).toBe('');
+  await expect(detail.getByRole('heading', { name: 'Edit issue from UI' })).toBeVisible();
+  await expect(page.getByLabel('Active filters')).toHaveCount(0);
+
   await expect(detail.locator('.detail-description')).toHaveText('Updated through the dashboard form.');
   await expect(detail.getByLabel('Issue labels').getByText('docs')).toBeVisible();
   await expect(detail.getByLabel('Issue labels').getByText('api')).toBeVisible();
@@ -2211,7 +2225,7 @@ test('stale issue signal filters and persists through saved views', async ({ pag
   await savedViews.getByRole('button', { name: 'Save View' }).click();
   await expect(savedViews.getByLabel('Saved views')).toContainText('Stale triage view');
 
-  await filters.getByRole('button', { name: 'Clear Filters' }).click();
+  await page.getByRole('button', { name: 'Clear board filters' }).click();
   await expect(filters.getByLabel('Stale only')).not.toBeChecked();
   await expect(page.getByLabel('Active filters')).toHaveCount(0);
 
@@ -3643,7 +3657,7 @@ test('dashboard filters hydrate from URL and compose with issue detail routes', 
   await expect(page.getByRole('row', { name: /URL filter label mismatch.*Review.*High/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /URL filter other.*Todo.*Low/ })).toHaveCount(0);
 
-  await filters.getByRole('button', { name: 'Clear Filters' }).click();
+  await page.getByRole('button', { name: 'Clear board filters' }).click();
   await expect(page.getByLabel('Active filters')).toHaveCount(0);
   await expect(page.getByRole('row', { name: /URL filter target.*Review.*High/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /URL filter label mismatch.*Review.*High/ })).toBeVisible();
@@ -3710,8 +3724,8 @@ test('rapid dashboard filter changes keep URL controls and detail routes consist
   await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('review');
   await expect.poll(() => new URL(page.url()).searchParams.get('priority')).toBe('high');
 
-  await filters.getByRole('button', { name: 'Clear Filters' }).click();
-  await expect(page.getByRole('region', { name: targetIssue.title })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Clear board filters' }).click();
+  await expect(page.getByRole('region', { name: targetIssue.title })).toBeVisible();
   await expect(filters.getByLabel('Search')).toHaveValue('');
   await expect(filters.getByLabel('Status')).toHaveValue('all');
   await expect(filters.getByLabel('Priority')).toHaveValue('all');
@@ -3719,7 +3733,7 @@ test('rapid dashboard filter changes keep URL controls and detail routes consist
   await expect(page.getByRole('row', { name: /Rapid filter target.*Review.*High/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /Rapid filter review low.*Review.*Low/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /Rapid filter todo high.*Todo.*High/ })).toBeVisible();
-  await expect(page).toHaveURL('/');
+  await expect(page).toHaveURL(`/issues/${targetIssue.id}`);
 });
 
 test('rapid create edit search and filter changes preserve issue visibility', async ({ page }) => {
@@ -3832,7 +3846,7 @@ test('saved filter views persist restore and compose with detail routes', async 
   await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('archive');
   await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('50');
 
-  await filters.getByRole('button', { name: 'Clear Filters' }).click();
+  await page.getByRole('button', { name: 'Clear board filters' }).click();
   await expect(filters.getByLabel('Search')).toHaveValue('');
   await expect(filters.getByLabel('Label')).toHaveValue('');
   await expect(settings.getByLabel('Page size')).toHaveValue('25');
@@ -4003,7 +4017,7 @@ test('applying an active-only saved view preserves an archived detail selection'
   await savedViews.getByLabel('View name').fill('Archived detail view');
   await savedViews.getByRole('button', { name: 'Save View' }).click();
 
-  await filters.getByRole('button', { name: 'Clear Filters' }).click();
+  await page.getByRole('button', { name: 'Clear board filters' }).click();
   await filters.getByLabel('Search').fill('Saved view active detail');
   await filters.getByLabel('Label').fill('active-view');
   await filters.getByLabel('Status').selectOption('todo');
@@ -4068,7 +4082,7 @@ test('applying a saved view preserves detail selection when the issue no longer 
   await savedViews.getByLabel('View name').fill('Mismatched detail preserving view');
   await savedViews.getByRole('button', { name: 'Save View' }).click();
 
-  await filters.getByRole('button', { name: 'Clear Filters' }).click();
+  await page.getByRole('button', { name: 'Clear board filters' }).click();
   await page.getByRole('button', { name: `Open ${detailTarget.title}` }).click();
   await expect(page.getByRole('region', { name: detailTarget.title })).toBeVisible();
   await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${detailTarget.id}`);
@@ -4314,7 +4328,7 @@ test('saved filter view apply preserves the local view after transient fetch fai
   await savedViews.getByRole('button', { name: 'Save View' }).click();
   await expect(savedViewSelect).toContainText('Transient saved view');
 
-  await filters.getByRole('button', { name: 'Clear Filters' }).click();
+  await page.getByRole('button', { name: 'Clear board filters' }).click();
   await expect(filters.getByLabel('Search')).toHaveValue('');
 
   let failedApply = false;

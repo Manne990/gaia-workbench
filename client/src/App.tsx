@@ -10,9 +10,7 @@ import {
   deleteSavedFilterView,
   duplicateSavedFilterView,
   duplicateIssue,
-  fetchCommentHistory,
   fetchIssue,
-  fetchIssueActivity,
   fetchIssueDependencies,
   fetchSavedFilterView,
   fetchSavedFilterViews,
@@ -32,13 +30,10 @@ import { IssueStatusSummary } from './components/IssueStatusSummary';
 import { CommandPalette } from './components/CommandPalette';
 import { emptyFormValues, statusLabels } from './constants';
 import { useIssueDirectory } from './hooks/useIssueDirectory';
+import { useSelectedIssueDiscussion } from './hooks/useSelectedIssueDiscussion';
 import type {
   ActiveForm,
-  ActivityEvent,
   CancelOptions,
-  Comment,
-  CommentEditCancelOptions,
-  CommentEditHistory,
   CommentLoadState,
   DashboardDensity,
   DashboardFilters,
@@ -190,23 +185,11 @@ export function App() {
   const [formValues, setFormValues] = useState<IssueFormValues>(emptyFormValues);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [commentHistory, setCommentHistory] = useState<Record<string, CommentEditHistory[]>>({});
-  const [commentLoadState, setCommentLoadState] = useState<CommentLoadState>('idle');
-  const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
-  const [activityLoadState, setActivityLoadState] = useState<CommentLoadState>('idle');
   const [issueDependencies, setIssueDependencies] = useState<IssueDependencyState | null>(null);
   const [dependencyLoadState, setDependencyLoadState] = useState<CommentLoadState>('idle');
   const [dependencyIssueId, setDependencyIssueId] = useState('');
   const [dependencyError, setDependencyError] = useState<string | null>(null);
   const [isDependencySubmitting, setIsDependencySubmitting] = useState(false);
-  const [commentBody, setCommentBody] = useState('');
-  const [commentError, setCommentError] = useState<string | null>(null);
-  const [isCommentSubmitting, setIsCommentSubmitting] = useState(false);
-  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
-  const [editCommentBody, setEditCommentBody] = useState('');
-  const [editCommentError, setEditCommentError] = useState<string | null>(null);
-  const [isCommentEditing, setIsCommentEditing] = useState(false);
   const [importPayload, setImportPayload] = useState<unknown | null>(null);
   const [importFileName, setImportFileName] = useState<string | null>(null);
   const [importPlan, setImportPlan] = useState<ImportPlan | null>(null);
@@ -240,7 +223,6 @@ export function App() {
   const editCommentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const formReturnFocusRef = useRef<HTMLElement | null>(null);
   const detailReturnFocusRef = useRef<HTMLElement | null>(null);
-  const commentEditReturnFocusRef = useRef<HTMLElement | null>(null);
   const commandPaletteFocusReturnRef = useRef<HTMLElement | null>(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState('');
@@ -330,6 +312,32 @@ export function App() {
   const isIssueDetailLoading = Boolean(selectedIssueId && selectedIssueLoadState === 'loading' && !selectedIssue);
   const isIssueDetailError = Boolean(selectedIssueId && selectedIssueLoadState === 'error' && !selectedIssue);
   const isMissingSelectedIssue = selectedIssueLoadState === 'not_found';
+  const {
+    comments,
+    commentHistory,
+    commentLoadState,
+    activityEvents,
+    activityLoadState,
+    commentBody,
+    setCommentBody,
+    commentError,
+    isCommentSubmitting,
+    editingCommentId,
+    editCommentBody,
+    setEditCommentBody,
+    editCommentError,
+    isCommentEditing,
+    refreshActivity,
+    submitComment,
+    startEditComment,
+    cancelEditComment,
+    submitCommentEdit
+  } = useSelectedIssueDiscussion({
+    selectedIssueId,
+    selectedIssue,
+    selectedIssueDetailReloadToken,
+    commentsHeadingRef
+  });
   const isImportPanelVisible = Boolean(
     importFileName || importPlan || importError || isImportPreviewing || importMessage
   );
@@ -1046,21 +1054,7 @@ export function App() {
   }, [selectedIssueId]);
 
   useEffect(() => {
-    setCommentBody('');
-    setCommentError(null);
-    setEditingCommentId(null);
-    setEditCommentBody('');
-    setEditCommentError(null);
-    commentEditReturnFocusRef.current = null;
-  }, [selectedIssueId]);
-
-  useEffect(() => {
     if (!selectedIssueId || !selectedIssue || selectedIssue.id !== selectedIssueId) {
-      setComments([]);
-      setCommentHistory({});
-      setCommentLoadState('idle');
-      setActivityEvents([]);
-      setActivityLoadState('idle');
       setIssueDependencies(null);
       setDependencyLoadState('idle');
       setDependencyIssueId('');
@@ -1071,60 +1065,30 @@ export function App() {
     const issueId = selectedIssue.id;
     const controller = new AbortController();
 
-    async function loadIssueDetailData() {
-      setCommentLoadState('loading');
-      setActivityLoadState('loading');
+    async function loadIssueDependencies() {
       setDependencyLoadState('loading');
-      setCommentError(null);
       setDependencyError(null);
-      setEditingCommentId(null);
-      setEditCommentError(null);
 
       try {
-        const [commentsResponse, loadedActivityEvents, loadedIssueDependencies] = await Promise.all([
-          fetch(`/api/issues/${issueId}/comments`, {
-            signal: controller.signal
-          }),
-          fetchIssueActivity(issueId, controller.signal),
-          fetchIssueDependencies(issueId, controller.signal)
-        ]);
-
-        if (!commentsResponse.ok) {
-          throw new Error('Comment request failed');
-        }
-
-        const loadedComments = (await commentsResponse.json()) as Comment[];
-        const historyPairs = await Promise.all(
-          loadedComments.map(async (comment) => {
-            const history = await fetchCommentHistory(comment.id, controller.signal).catch(() => []);
-            return [comment.id, history] as const;
-          })
-        );
+        const loadedIssueDependencies = await fetchIssueDependencies(issueId, controller.signal);
 
         if (controller.signal.aborted) {
           return;
         }
 
-        setComments(loadedComments);
-        setCommentHistory(Object.fromEntries(historyPairs));
-        setActivityEvents(loadedActivityEvents);
         setIssueDependencies(loadedIssueDependencies);
-        setCommentLoadState('loaded');
-        setActivityLoadState('loaded');
         setDependencyLoadState('loaded');
       } catch {
         if (!controller.signal.aborted) {
-          setCommentLoadState('error');
-          setActivityLoadState('error');
           setDependencyLoadState('error');
         }
       }
     }
 
-    void loadIssueDetailData();
+    void loadIssueDependencies();
 
     return () => controller.abort();
-  }, [selectedIssueId, selectedIssue?.id, selectedIssueDetailReloadToken]);
+  }, [selectedIssueId, selectedIssue, selectedIssueDetailReloadToken]);
 
   function scrollToAnchorTarget() {
     const anchorTarget = parseIssueAnchorTarget(issueAnchorHash);
@@ -1229,24 +1193,8 @@ export function App() {
     setSelectedIssue(null);
     setSelectedIssueLoadState('idle');
     writeRouteState(null, dashboardFiltersRef.current, detailReturnFocusRef.current ? 'replace' : 'push');
-    setCommentBody('');
-    setCommentError(null);
-    setEditingCommentId(null);
-    setEditCommentBody('');
-    setEditCommentError(null);
     restoreFocus(returnFocusTarget, () => issueListHeadingRef.current);
     detailReturnFocusRef.current = null;
-  }
-
-  async function refreshActivity(issueId: string) {
-    setActivityLoadState('loading');
-
-    try {
-      setActivityEvents(await fetchIssueActivity(issueId));
-      setActivityLoadState('loaded');
-    } catch {
-      setActivityLoadState('error');
-    }
   }
 
   async function refreshSelectedIssueDetail(issueId: string) {
@@ -1574,121 +1522,6 @@ export function App() {
       setFormError(error instanceof Error ? error.message : 'Issue save failed');
     } finally {
       setIsSubmitting(false);
-    }
-  }
-
-  async function submitComment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const body = commentBody.trim();
-
-    if (body.length === 0) {
-      setCommentError('Comment is required.');
-      return;
-    }
-
-    if (!selectedIssue) {
-      return;
-    }
-
-    setIsCommentSubmitting(true);
-    setCommentError(null);
-
-    try {
-      const response = await fetch(`/api/issues/${selectedIssue.id}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body })
-      });
-
-      if (!response.ok) {
-        const responseBody = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(responseBody?.error ?? 'Comment save failed');
-      }
-
-      const savedComment = (await response.json()) as Comment;
-      setComments((current) => [...current, savedComment]);
-      setCommentHistory((current) => ({ ...current, [savedComment.id]: [] }));
-      await refreshActivity(savedComment.issueId);
-      setCommentBody('');
-      setCommentLoadState('loaded');
-    } catch (error) {
-      setCommentError(error instanceof Error ? error.message : 'Comment save failed');
-    } finally {
-      setIsCommentSubmitting(false);
-    }
-  }
-
-  function getCommentEditButton(commentId: string): HTMLElement | null {
-    return document.querySelector<HTMLElement>(`[data-comment-edit-button="${commentId}"]`);
-  }
-
-  function startEditComment(comment: Comment, trigger?: HTMLElement) {
-    commentEditReturnFocusRef.current = trigger ?? null;
-    setEditingCommentId(comment.id);
-    setEditCommentBody(comment.body);
-    setEditCommentError(null);
-  }
-
-  function cancelEditComment(options: CommentEditCancelOptions = {}) {
-    const shouldRestoreFocus = options.restoreFocus ?? true;
-    const commentId = options.commentId ?? editingCommentId;
-    const returnFocusTarget = commentEditReturnFocusRef.current;
-
-    setEditingCommentId(null);
-    setEditCommentBody('');
-    setEditCommentError(null);
-
-    if (shouldRestoreFocus) {
-      restoreFocus(returnFocusTarget, () =>
-        commentId ? (getCommentEditButton(commentId) ?? commentsHeadingRef.current) : commentsHeadingRef.current
-      );
-    }
-
-    commentEditReturnFocusRef.current = null;
-  }
-
-  async function submitCommentEdit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const body = editCommentBody.trim();
-
-    if (body.length === 0) {
-      setEditCommentError('Comment is required.');
-      return;
-    }
-
-    if (!editingCommentId) {
-      return;
-    }
-
-    const commentId = editingCommentId;
-
-    setIsCommentEditing(true);
-    setEditCommentError(null);
-
-    try {
-      const response = await fetch(`/api/comments/${commentId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body })
-      });
-
-      if (!response.ok) {
-        const responseBody = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(responseBody?.error ?? 'Comment update failed');
-      }
-
-      const savedComment = (await response.json()) as Comment;
-      const history = await fetchCommentHistory(savedComment.id);
-      setComments((current) => current.map((comment) => (comment.id === savedComment.id ? savedComment : comment)));
-      setCommentHistory((current) => ({ ...current, [savedComment.id]: history }));
-      await refreshActivity(savedComment.issueId);
-      cancelEditComment({ commentId });
-    } catch (error) {
-      setEditCommentError(error instanceof Error ? error.message : 'Comment update failed');
-    } finally {
-      setIsCommentEditing(false);
     }
   }
 

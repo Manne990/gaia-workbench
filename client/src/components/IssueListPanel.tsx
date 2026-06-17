@@ -11,9 +11,8 @@ import type {
   SavedFilterView,
   StatusFilter
 } from '../types';
-import { formatDate, formatDueDate } from '../utils/formatters';
+import { formatIssueDate, formatIssueDueDate, getIssueFreshnessPresentation } from '../utils/issuePresentation';
 import { renderMarkdownLiteInline } from '../utils/markdown';
-import { isIssueStale } from '../utils/stale';
 
 type IssueListPanelProps = {
   loadState: LoadState;
@@ -513,7 +512,7 @@ export function IssueListPanel({
               </thead>
               <tbody>
                 {filteredIssues.map((issue) => {
-                  const issueIsStale = isIssueStale(issue.updatedAt);
+                  const issueFreshness = getIssueFreshnessPresentation(issue.updatedAt);
                   const isSelected = selectedIssueIdSet.has(issue.id);
 
                   return (
@@ -525,7 +524,7 @@ export function IssueListPanel({
                           issue.isOverdue ? 'overdue-row' : '',
                           issue.isBlocked ? 'blocked-row' : '',
                           issue.archivedAt ? 'archived-row' : '',
-                          issueIsStale ? 'stale-row' : ''
+                          issueFreshness.isStale ? 'stale-row' : ''
                         ]
                           .filter(Boolean)
                           .join(' ') || undefined
@@ -543,7 +542,7 @@ export function IssueListPanel({
                         <strong>{issue.title}</strong>
                         {issue.archivedAt ? <span className="archived-pill">Archived</span> : null}
                         {issue.isBlocked ? <span className="blocked-pill">Blocked</span> : null}
-                        {issueIsStale ? <span className="stale-pill">Stale</span> : null}
+                        {issueFreshness.isStale ? <span className="stale-pill">{issueFreshness.label}</span> : null}
                         {issue.description
                           ? renderMarkdownLiteInline(issue.description, { className: 'issue-description-snippet' })
                           : null}
@@ -566,12 +565,12 @@ export function IssueListPanel({
                       <td>
                         <div className="due-date-cell">
                           <span className={issue.isOverdue ? 'due-date-text overdue' : 'due-date-text'}>
-                            {issue.dueDate ? formatDueDate(issue.dueDate) : 'No due date'}
+                            {formatIssueDueDate(issue.dueDate)}
                           </span>
                           {issue.isOverdue ? <span className="overdue-pill">Overdue</span> : null}
                         </div>
                       </td>
-                      <td>{formatDate(issue.updatedAt)}</td>
+                      <td>{formatIssueDate(issue.updatedAt)}</td>
                       <td>
                         <div className="row-actions">
                           <button

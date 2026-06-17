@@ -1690,6 +1690,131 @@ describe('issues API', () => {
     });
   });
 
+  it('bulk replaces issue dependencies atomically', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const removedBlocker = await request(app).post('/api/issues').send({ title: 'Removed bulk blocker' }).expect(201);
+    const firstBlocker = await request(app).post('/api/issues').send({ title: 'First bulk blocker' }).expect(201);
+    const secondBlocker = await request(app).post('/api/issues').send({ title: 'Second bulk blocker' }).expect(201);
+    const blocked = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Bulk dependency target', status: 'in_progress' })
+      .expect(201);
+
+    await request(app)
+      .post(`/api/issues/${blocked.body.id}/dependencies`)
+      .send({ dependsOnIssueId: removedBlocker.body.id })
+      .expect(201);
+
+    const replaced = await request(app)
+      .put(`/api/issues/${blocked.body.id}/dependencies`)
+      .send({ dependsOnIssueIds: [firstBlocker.body.id, secondBlocker.body.id] })
+      .expect(200);
+
+    expect(replaced.body).toMatchObject({
+      issueId: blocked.body.id,
+      isBlocked: true,
+      dependencies: [
+        expect.objectContaining({ id: firstBlocker.body.id, title: 'First bulk blocker' }),
+        expect.objectContaining({ id: secondBlocker.body.id, title: 'Second bulk blocker' })
+      ],
+      dependents: []
+    });
+
+    await request(app)
+      .get(`/api/issues/${blocked.body.id}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          isBlocked: true,
+          dependsOnIssueIds: [firstBlocker.body.id, secondBlocker.body.id]
+        });
+      });
+
+    await request(app)
+      .get(`/api/issues/${removedBlocker.body.id}/dependencies`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.dependents).toEqual([]);
+      });
+
+    const activity = await request(app).get(`/api/issues/${blocked.body.id}/activity`).expect(200);
+    expect(activity.body.map((event: { type: string }) => event.type)).toEqual([
+      'issue_created',
+      'issue_dependency_added',
+      'issue_dependency_removed',
+      'issue_dependency_added',
+      'issue_dependency_added'
+    ]);
+  });
+
+  it('rolls back bulk dependency replacements when validation fails', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const existingBlocker = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Existing rollback blocker' })
+      .expect(201);
+    const validBlocker = await request(app).post('/api/issues').send({ title: 'Valid rollback blocker' }).expect(201);
+    const blocked = await request(app).post('/api/issues').send({ title: 'Rollback dependency target' }).expect(201);
+    const cycleSource = await request(app).post('/api/issues').send({ title: 'Cycle source' }).expect(201);
+    const cycleTarget = await request(app).post('/api/issues').send({ title: 'Cycle target' }).expect(201);
+
+    await request(app)
+      .post(`/api/issues/${blocked.body.id}/dependencies`)
+      .send({ dependsOnIssueId: existingBlocker.body.id })
+      .expect(201);
+
+    await request(app)
+      .put(`/api/issues/${blocked.body.id}/dependencies`)
+      .send({ dependsOnIssueIds: [validBlocker.body.id, 'missing-bulk-dependency'] })
+      .expect(404, { error: 'Dependency issue not found' });
+
+    await request(app)
+      .get(`/api/issues/${blocked.body.id}/dependencies`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          issueId: blocked.body.id,
+          dependencies: [expect.objectContaining({ id: existingBlocker.body.id })],
+          isBlocked: true
+        });
+        expect(response.body.dependencies).toHaveLength(1);
+      });
+
+    await request(app)
+      .put(`/api/issues/${blocked.body.id}/dependencies`)
+      .send({ dependsOnIssueIds: [validBlocker.body.id, validBlocker.body.id] })
+      .expect(400, validationErrorBody('Invalid bulk dependency ids'));
+
+    await request(app)
+      .post(`/api/issues/${cycleTarget.body.id}/dependencies`)
+      .send({ dependsOnIssueId: cycleSource.body.id })
+      .expect(201);
+    await request(app)
+      .put(`/api/issues/${cycleSource.body.id}/dependencies`)
+      .send({ dependsOnIssueIds: [validBlocker.body.id, cycleTarget.body.id] })
+      .expect(409, {
+        error: 'Cannot add dependency because the selected blocker already depends on this issue'
+      });
+
+    await request(app)
+      .get(`/api/issues/${cycleSource.body.id}/dependencies`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.dependencies).toEqual([]);
+      });
+
+    const blockedActivity = await request(app).get(`/api/issues/${blocked.body.id}/activity`).expect(200);
+    expect(blockedActivity.body.map((event: { type: string }) => event.type)).toEqual([
+      'issue_created',
+      'issue_dependency_added'
+    ]);
+
+    const cycleSourceActivity = await request(app).get(`/api/issues/${cycleSource.body.id}/activity`).expect(200);
+    expect(cycleSourceActivity.body.map((event: { type: string }) => event.type)).toEqual(['issue_created']);
+  });
+
   it('rejects invalid dependency mutations and explains direct or indirect cycles', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

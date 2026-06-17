@@ -225,6 +225,7 @@ const validationErrorMessages = new Set([
   'Invalid staleOnly parameter',
   'Invalid includeAuditSummary parameter',
   'Invalid bulk issue ids',
+  'Invalid bulk dependency ids',
   'dependsOnIssueId is required',
   'Saved view name is required',
   'Invalid saved view payload',
@@ -253,6 +254,32 @@ function validationErrorResponse(message: string): ValidationErrorResponse {
 
 function sendValidationError(res: Response, message: string) {
   return res.status(400).json(validationErrorResponse(message));
+}
+
+function parseBulkDependencyIds(dependsOnIssueIds: unknown): string[] {
+  if (!Array.isArray(dependsOnIssueIds)) {
+    throw new Error('Invalid bulk dependency ids');
+  }
+
+  const normalizedIds: string[] = [];
+  const seen = new Set<string>();
+
+  for (const dependsOnIssueId of dependsOnIssueIds) {
+    if (typeof dependsOnIssueId !== 'string' || dependsOnIssueId.trim().length === 0) {
+      throw new Error('Invalid bulk dependency ids');
+    }
+
+    const normalizedIssueId = dependsOnIssueId.trim();
+
+    if (seen.has(normalizedIssueId)) {
+      throw new Error('Invalid bulk dependency ids');
+    }
+
+    normalizedIds.push(normalizedIssueId);
+    seen.add(normalizedIssueId);
+  }
+
+  return normalizedIds;
 }
 
 function isJsonParseError(error: unknown): error is SyntaxError & { status?: number; type?: string } {
@@ -976,6 +1003,28 @@ export function createApp(config: AppConfig = {}) {
 
       return res.status(201).json(issueDependencyRepository.add(req.params.id, dependsOnIssueId.trim()));
     } catch (error) {
+      if (error instanceof IssueDependencyNotFoundError) {
+        return res.status(404).json({ error: error.message });
+      }
+
+      if (error instanceof IssueDependencyConflictError) {
+        return res.status(409).json({ error: error.message });
+      }
+
+      throw error;
+    }
+  });
+
+  app.put('/api/issues/:id/dependencies', (req, res) => {
+    try {
+      const dependsOnIssueIds = parseBulkDependencyIds(req.body?.dependsOnIssueIds);
+
+      return res.status(200).json(issueDependencyRepository.replace(req.params.id, dependsOnIssueIds));
+    } catch (error) {
+      if (isValidationError(error)) {
+        return sendValidationError(res, error.message);
+      }
+
       if (error instanceof IssueDependencyNotFoundError) {
         return res.status(404).json({ error: error.message });
       }

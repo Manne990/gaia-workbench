@@ -103,6 +103,24 @@ function dependencyExists(database: Database.Database, issueId: string, dependsO
   return row.count > 0;
 }
 
+function normalizeDependencyIds(dependsOnIssueIds: string[]): string[] {
+  const normalizedIds: string[] = [];
+  const seen = new Set<string>();
+
+  for (const dependsOnIssueId of dependsOnIssueIds) {
+    const normalizedIssueId = dependsOnIssueId.trim();
+
+    if (normalizedIssueId.length === 0 || seen.has(normalizedIssueId)) {
+      throw new Error('Invalid bulk dependency ids');
+    }
+
+    normalizedIds.push(normalizedIssueId);
+    seen.add(normalizedIssueId);
+  }
+
+  return normalizedIds;
+}
+
 function wouldCreateCycle(database: Database.Database, issueId: string, dependsOnIssueId: string): boolean {
   const row = database
     .prepare(
@@ -249,6 +267,131 @@ export class IssueDependencyRepository {
         metadata: { dependsOnIssueId, title: dependency.title },
         createdAt: timestamp
       });
+
+      const state = this.listByIssueId(issueId);
+
+      if (!state) {
+        throw new IssueDependencyNotFoundError('Issue not found');
+      }
+
+      return state;
+    });
+
+    return transaction();
+  }
+
+  replace(issueId: string, dependsOnIssueIds: string[]): IssueDependencyState {
+    const transaction = this.database.transaction(() => {
+      const issue = getIssueReference(this.database, issueId);
+
+      if (!issue) {
+        throw new IssueDependencyNotFoundError('Issue not found');
+      }
+
+      const normalizedDependencyIds = normalizeDependencyIds(dependsOnIssueIds);
+      const currentDependencies = getIssueDependencies(this.database, issueId);
+      const currentById = new Map(currentDependencies.map((dependency) => [dependency.id, dependency]));
+      const requestedSet = new Set(normalizedDependencyIds);
+      const addedDependencyIds = normalizedDependencyIds.filter(
+        (dependsOnIssueId) => !currentById.has(dependsOnIssueId)
+      );
+      const removedDependencies = currentDependencies.filter((dependency) => !requestedSet.has(dependency.id));
+
+      if (addedDependencyIds.length === 0 && removedDependencies.length === 0) {
+        const state = this.listByIssueId(issueId);
+
+        if (!state) {
+          throw new IssueDependencyNotFoundError('Issue not found');
+        }
+
+        return state;
+      }
+
+      const addedDependenciesById = new Map<string, IssueDependencyReference>();
+
+      for (const dependsOnIssueId of normalizedDependencyIds) {
+        if (issueId === dependsOnIssueId) {
+          throw new IssueDependencyConflictError('Issue cannot depend on itself');
+        }
+
+        if (currentById.has(dependsOnIssueId)) {
+          continue;
+        }
+
+        const dependency = getIssueReference(this.database, dependsOnIssueId);
+
+        if (!dependency) {
+          throw new IssueDependencyNotFoundError('Dependency issue not found');
+        }
+
+        if (dependency.archivedAt !== null) {
+          throw new IssueDependencyConflictError('Cannot depend on archived issue');
+        }
+
+        addedDependenciesById.set(dependsOnIssueId, dependency);
+      }
+
+      const timestamp = nowIso();
+
+      this.database
+        .prepare(
+          `
+          DELETE FROM issue_dependencies
+          WHERE issue_id = @issueId
+        `
+        )
+        .run({ issueId });
+
+      const insertDependency = this.database.prepare(
+        `
+        INSERT INTO issue_dependencies (issue_id, depends_on_issue_id, created_at, updated_at)
+        VALUES (@issueId, @dependsOnIssueId, @timestamp, @timestamp)
+      `
+      );
+
+      for (const dependsOnIssueId of normalizedDependencyIds) {
+        if (wouldCreateCycle(this.database, issueId, dependsOnIssueId)) {
+          throw new IssueDependencyConflictError(
+            'Cannot add dependency because the selected blocker already depends on this issue'
+          );
+        }
+
+        insertDependency.run({ issueId, dependsOnIssueId, timestamp });
+      }
+
+      this.database
+        .prepare(
+          `
+          UPDATE issues
+          SET updated_at = @timestamp
+          WHERE id = @issueId
+        `
+        )
+        .run({ issueId, timestamp });
+
+      for (const dependency of removedDependencies) {
+        recordActivityEvent(this.database, {
+          issueId,
+          type: 'issue_dependency_removed',
+          metadata: { dependsOnIssueId: dependency.id, title: dependency.title },
+          createdAt: timestamp
+        });
+      }
+
+      for (const dependsOnIssueId of addedDependencyIds) {
+        const dependency = addedDependenciesById.get(dependsOnIssueId);
+
+        if (!dependency) {
+          continue;
+        }
+
+        recordActivityEvent(this.database, {
+          issueId,
+          type: 'issue_dependency_added',
+          metadata: { dependsOnIssueId, title: dependency.title },
+          createdAt: timestamp
+        });
+      }
 
       const state = this.listByIssueId(issueId);
 

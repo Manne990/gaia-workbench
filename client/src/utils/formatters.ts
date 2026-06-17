@@ -1,6 +1,10 @@
 import { priorityLabels, statusLabels } from '../constants';
 import type { IssuePriority, IssueStatus } from '../types';
 
+function padUtcPart(value: number): string {
+  return value.toString().padStart(2, '0');
+}
+
 export function formatDate(value: string): string {
   return new Intl.DateTimeFormat(undefined, {
     month: 'short',
@@ -18,6 +22,20 @@ export function formatDueDate(value: string): string {
     day: 'numeric',
     year: 'numeric'
   }).format(new Date(year, month - 1, day));
+}
+
+export function formatAuditTimestamp(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return 'Invalid timestamp (UTC)';
+  }
+
+  return [
+    `${date.getUTCFullYear()}-${padUtcPart(date.getUTCMonth() + 1)}-${padUtcPart(date.getUTCDate())}`,
+    `${padUtcPart(date.getUTCHours())}:${padUtcPart(date.getUTCMinutes())}:${padUtcPart(date.getUTCSeconds())}`,
+    'UTC'
+  ].join(' ');
 }
 
 export function formatOptionalText(value: string | null): string {

@@ -143,6 +143,9 @@ export function IssueListPanel({
 }: IssueListPanelProps) {
   const selectedIssueIdSet = new Set(selectedBulkIssueIds);
   const selectedCount = selectedBulkIssueIds.length;
+  const bulkSelectionContextId = 'bulk-selection-context';
+  const bulkStatusFeedbackId = 'bulk-status-feedback';
+  const bulkStatusErrorId = 'bulk-status-error';
 
   return (
     <section className="issue-panel" aria-labelledby="issue-list-heading" aria-busy={loadState === 'loading'}>
@@ -407,7 +410,20 @@ export function IssueListPanel({
       ) : null}
 
       {loadState === 'loaded' && filteredIssues.length > 0 ? (
-        <div className="bulk-status-bar" aria-label="Bulk status actions">
+        <div
+          className="bulk-status-bar"
+          aria-label="Bulk status actions"
+          aria-describedby={[
+            bulkSelectionContextId,
+            bulkStatusMessage ? bulkStatusFeedbackId : null,
+            bulkStatusError ? bulkStatusErrorId : null
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
+          <p className="sr-only" id={bulkSelectionContextId} aria-live="polite" aria-atomic="true">
+            {selectedCount} issue{selectedCount === 1 ? '' : 's'} selected from the current page.
+          </p>
           <div className="bulk-status-summary">
             <strong>{selectedCount} selected</strong>
             <span>Current page only</span>
@@ -418,6 +434,8 @@ export function IssueListPanel({
               className="ghost-button"
               onClick={onSelectAllVisibleIssues}
               disabled={selectedCount === filteredIssues.length || isBulkStatusSubmitting}
+              aria-describedby={bulkSelectionContextId}
+              aria-label={`Select all ${filteredIssues.length} visible issues`}
             >
               Select all visible
             </button>
@@ -428,6 +446,8 @@ export function IssueListPanel({
                 value={bulkStatus}
                 onChange={(event) => onBulkStatusChange(event.target.value as IssueStatus)}
                 disabled={isBulkStatusSubmitting}
+                aria-describedby={bulkSelectionContextId}
+                aria-label={`Bulk status target. ${selectedCount} issue${selectedCount === 1 ? '' : 's'} selected.`}
               >
                 {statusOrder.map((status) => (
                   <option key={status} value={status}>
@@ -441,6 +461,8 @@ export function IssueListPanel({
               className="secondary-button"
               onClick={onApplyBulkStatus}
               disabled={selectedCount === 0 || isBulkStatusSubmitting}
+              aria-describedby={bulkSelectionContextId}
+              aria-label={`Change status for ${selectedCount} selected issue${selectedCount === 1 ? '' : 's'}`}
             >
               Change Status
             </button>
@@ -449,17 +471,30 @@ export function IssueListPanel({
               className="ghost-button"
               onClick={onClearBulkSelection}
               disabled={selectedCount === 0 || isBulkStatusSubmitting}
+              aria-describedby={bulkSelectionContextId}
             >
               Clear
             </button>
           </div>
           {bulkStatusMessage ? (
-            <p className="bulk-status-feedback" role="status">
+            <p
+              className="bulk-status-feedback"
+              id={bulkStatusFeedbackId}
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
               {bulkStatusMessage}
             </p>
           ) : null}
           {bulkStatusError ? (
-            <p className="bulk-status-feedback error" role="alert">
+            <p
+              className="bulk-status-feedback error"
+              id={bulkStatusErrorId}
+              role="alert"
+              aria-live="assertive"
+              aria-atomic="true"
+            >
               {bulkStatusError}
             </p>
           ) : null}
@@ -546,6 +581,7 @@ export function IssueListPanel({
                           checked={isSelected}
                           onChange={(event) => onToggleIssueSelection(issue.id, event.target.checked)}
                           aria-label={`Select ${issue.title}`}
+                          aria-describedby={bulkSelectionContextId}
                         />
                       </td>
                       <td>

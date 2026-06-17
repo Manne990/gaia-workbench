@@ -17,6 +17,13 @@ export type Issue = {
   updatedAt: string;
 };
 
+export type IssueLinkCopyFeedback = {
+  issueId: string;
+  source: 'list' | 'detail';
+  status: 'success' | 'error';
+  message: string;
+};
+
 export type IssueDependencyReference = {
   id: string;
   title: string;

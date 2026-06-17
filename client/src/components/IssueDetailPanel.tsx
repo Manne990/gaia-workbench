@@ -8,6 +8,7 @@ import type {
   CommentEditHistory,
   CommentLoadState,
   Issue,
+  IssueLinkCopyFeedback,
   IssueDependencyState
 } from '../types';
 import {
@@ -50,7 +51,9 @@ type IssueDetailPanelProps = {
   missingIssueHeadingRef: RefObject<HTMLHeadingElement | null>;
   commentsHeadingRef: RefObject<HTMLHeadingElement | null>;
   editCommentTextareaRef: RefObject<HTMLTextAreaElement | null>;
+  issueLinkCopyFeedback: IssueLinkCopyFeedback | null;
   onCloseIssueDetail: () => void;
+  onCopyIssueLink: (issue: Issue) => void;
   onDuplicateIssue: (issue: Issue, trigger: HTMLElement) => void;
   onArchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
   onUnarchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
@@ -91,7 +94,9 @@ export function IssueDetailPanel({
   missingIssueHeadingRef,
   commentsHeadingRef,
   editCommentTextareaRef,
+  issueLinkCopyFeedback,
   onCloseIssueDetail,
+  onCopyIssueLink,
   onDuplicateIssue,
   onArchiveIssue,
   onUnarchiveIssue,
@@ -117,6 +122,10 @@ export function IssueDetailPanel({
     activityCategory === 'all'
       ? `${activityEvents.length}`
       : `${filteredActivityEvents.length}/${activityEvents.length}`;
+  const detailLinkCopyFeedback =
+    selectedIssue && issueLinkCopyFeedback?.source === 'detail' && issueLinkCopyFeedback.issueId === selectedIssue.id
+      ? issueLinkCopyFeedback
+      : null;
 
   useEffect(() => {
     setActivityCategory('all');
@@ -151,6 +160,14 @@ export function IssueDetailPanel({
               <button
                 type="button"
                 className="secondary-button"
+                onClick={() => onCopyIssueLink(selectedIssue)}
+                aria-label={`Copy issue link for ${selectedIssue.title}`}
+              >
+                Copy Link
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
                 onClick={(event) => onDuplicateIssue(selectedIssue, event.currentTarget)}
               >
                 Duplicate
@@ -182,6 +199,17 @@ export function IssueDetailPanel({
               </button>
             </div>
           </div>
+
+          {detailLinkCopyFeedback ? (
+            <p
+              className={detailLinkCopyFeedback.status === 'error' ? 'link-copy-feedback error' : 'link-copy-feedback'}
+              role={detailLinkCopyFeedback.status === 'error' ? 'alert' : 'status'}
+              aria-live={detailLinkCopyFeedback.status === 'error' ? 'assertive' : 'polite'}
+              aria-atomic="true"
+            >
+              {detailLinkCopyFeedback.message}
+            </p>
+          ) : null}
 
           <div className="detail-content">
             {selectedIssue.archivedAt ? (

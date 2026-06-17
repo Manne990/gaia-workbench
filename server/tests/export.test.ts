@@ -814,11 +814,16 @@ describe('tracker export API', () => {
 
     const blocker = await request(sourceApp)
       .post('/api/issues')
-      .send({ title: 'Export blocker issue', status: 'todo' })
+      .send({ title: 'Export blocker issue', status: 'todo', labels: ['dependency'] })
       .expect(201);
     const blocked = await request(sourceApp)
       .post('/api/issues')
-      .send({ title: 'Export blocked issue', status: 'in_progress' })
+      .send({
+        title: 'Export blocked issue',
+        status: 'in_progress',
+        priority: 'high',
+        labels: ['dependency', 'blocked-export']
+      })
       .expect(201);
 
     await request(sourceApp)
@@ -826,11 +831,31 @@ describe('tracker export API', () => {
       .send({ dependsOnIssueId: blocker.body.id })
       .expect(201);
 
+    const savedView = await request(sourceApp)
+      .post('/api/filter-views')
+      .send({
+        name: 'Blocked dependency export view',
+        search: 'Export blocked',
+        status: 'in_progress',
+        priority: 'high',
+        label: 'blocked-export',
+        includeArchived: true,
+        blockedOnly: true,
+        staleOnly: false,
+        pageSize: 25
+      })
+      .expect(201);
+
     const exported = await request(sourceApp).get('/api/export').expect(200);
     const exportedBlocked = (exported.body as TrackerExport).issues.find((issue) => issue.id === blocked.body.id);
+    const exportedSavedView = (exported.body as TrackerExport).savedFilterViews.find(
+      (view) => view.id === savedView.body.id
+    );
 
     expect(exportedBlocked).toMatchObject({
       id: blocked.body.id,
+      priority: 'high',
+      labels: ['dependency', 'blocked-export'],
       isBlocked: true,
       dependsOnIssueIds: [blocker.body.id]
     });
@@ -838,17 +863,33 @@ describe('tracker export API', () => {
       'issue_created',
       'issue_dependency_added'
     ]);
+    expect(exportedSavedView).toMatchObject({
+      id: savedView.body.id,
+      name: 'Blocked dependency export view',
+      search: 'Export blocked',
+      status: 'in_progress',
+      priority: 'high',
+      label: 'blocked-export',
+      includeArchived: true,
+      blockedOnly: true,
+      staleOnly: false,
+      pageSize: 25
+    });
 
-    await request(targetApp).post('/api/import/preview').send(exported.body).expect(200);
+    const preview = await request(targetApp).post('/api/import/preview').send(exported.body).expect(200);
     await request(targetApp).post('/api/import/apply').send(exported.body).expect(200);
 
     const importedBlocked = await request(targetApp).get(`/api/issues/${blocked.body.id}`).expect(200);
     const importedDependencies = await request(targetApp)
       .get(`/api/issues/${blocked.body.id}/dependencies`)
       .expect(200);
+    const importedSavedViews = await request(targetApp).get('/api/filter-views').expect(200);
     const exportedAfterImport = await request(targetApp).get('/api/export').expect(200);
 
+    expect(preview.body.summary.toCreate.savedFilterViews).toBe(1);
     expect(importedBlocked.body).toMatchObject({
+      priority: 'high',
+      labels: ['dependency', 'blocked-export'],
       isBlocked: true,
       dependsOnIssueIds: [blocker.body.id]
     });
@@ -863,6 +904,18 @@ describe('tracker export API', () => {
           archivedAt: null
         }
       ]
+    });
+    expect(importedSavedViews.body).toEqual((exported.body as TrackerExport).savedFilterViews);
+    expect(importedSavedViews.body[0]).toMatchObject({
+      id: savedView.body.id,
+      search: 'Export blocked',
+      status: 'in_progress',
+      priority: 'high',
+      label: 'blocked-export',
+      includeArchived: true,
+      blockedOnly: true,
+      staleOnly: false,
+      pageSize: 25
     });
     expect(exportedAfterImport.body).toEqual(exported.body);
   });

@@ -3,6 +3,17 @@ import type { DashboardFilters, IssuePriority, IssueStatus, PriorityFilter, Stat
 
 export const defaultPageSize = 25;
 export const maxPageSize = 100;
+export const savedViewQueryParam = 'savedView';
+
+export type RouteState = {
+  issueId: string | null;
+  filters: DashboardFilters;
+  savedViewId: string | null;
+};
+
+type RouteBuildOptions = {
+  savedViewId?: string | null;
+};
 
 export const defaultDashboardFilters: DashboardFilters = {
   search: '',
@@ -60,21 +71,36 @@ export function parseDashboardFiltersFromLocation(): DashboardFilters {
   return parseDashboardFiltersFromSearch(window.location.search);
 }
 
-export function getRouteStateFromLocation(): { issueId: string | null; filters: DashboardFilters } {
+export function parseSavedViewIdFromSearch(search: string | URLSearchParams): string | null {
+  const params = typeof search === 'string' ? new URLSearchParams(search) : search;
+  const savedViewId = (params.get(savedViewQueryParam) ?? '').trim();
+
+  return savedViewId || null;
+}
+
+export function getRouteStateFromLocation(): RouteState {
   return {
     issueId: getIssueIdFromLocation(),
-    filters: parseDashboardFiltersFromLocation()
+    filters: parseDashboardFiltersFromLocation(),
+    savedViewId: parseSavedViewIdFromSearch(window.location.search)
   };
 }
 
-export function buildDashboardPath(filters: DashboardFilters = defaultDashboardFilters): string {
-  const query = buildDashboardQuery(filters);
+export function buildDashboardPath(
+  filters: DashboardFilters = defaultDashboardFilters,
+  options: RouteBuildOptions = {}
+): string {
+  const query = buildDashboardQuery(filters, options);
 
   return query ? `/?${query}` : '/';
 }
 
-export function buildIssuePath(issueId: string, filters: DashboardFilters = defaultDashboardFilters): string {
-  const query = buildDashboardQuery(filters);
+export function buildIssuePath(
+  issueId: string,
+  filters: DashboardFilters = defaultDashboardFilters,
+  options: RouteBuildOptions = {}
+): string {
+  const query = buildDashboardQuery(filters, options);
   const path = `/issues/${encodeURIComponent(issueId)}`;
 
   return query ? `${path}?${query}` : path;
@@ -84,8 +110,13 @@ export function buildStableIssueUrl(issueId: string, origin: string): string {
   return new URL(buildIssuePath(issueId), origin).toString();
 }
 
-export function writeRoute(issueId: string | null, filters: DashboardFilters, mode: 'push' | 'replace'): void {
-  const nextPath = issueId ? buildIssuePath(issueId, filters) : buildDashboardPath(filters);
+export function writeRoute(
+  issueId: string | null,
+  filters: DashboardFilters,
+  mode: 'push' | 'replace',
+  options: RouteBuildOptions = {}
+): void {
+  const nextPath = issueId ? buildIssuePath(issueId, filters, options) : buildDashboardPath(filters, options);
   const currentPath = `${window.location.pathname}${window.location.search}`;
 
   if (currentPath !== nextPath || window.location.hash) {
@@ -114,9 +145,15 @@ function parsePageSize(value: string | null): number {
 
 export function buildDashboardQuery(
   filters: DashboardFilters = defaultDashboardFilters,
-  options: { includePageSize?: boolean } = {}
+  options: { includePageSize?: boolean; savedViewId?: string | null } = {}
 ): string {
   const params = new URLSearchParams();
+  const savedViewId = options.savedViewId?.trim();
+
+  if (savedViewId) {
+    params.set(savedViewQueryParam, savedViewId);
+  }
+
   const search = filters.search.trim();
 
   if (search) {

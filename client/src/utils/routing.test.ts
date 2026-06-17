@@ -4,7 +4,8 @@ import {
   buildIssuePath,
   buildStableIssueUrl,
   getIssueIdFromPath,
-  parseDashboardFiltersFromSearch
+  parseDashboardFiltersFromSearch,
+  parseSavedViewIdFromSearch
 } from './routing';
 
 describe('client routing helpers', () => {
@@ -177,6 +178,32 @@ describe('client routing helpers', () => {
       })
     ).toBe(
       '/issues/issue%20id?search=api+export&status=done&priority=low&label=docs&includeArchived=true&blockedOnly=true&staleOnly=true&limit=100'
+    );
+  });
+
+  it('parses saved view ids from route query strings', () => {
+    expect(parseSavedViewIdFromSearch('?savedView=view-123')).toBe('view-123');
+    expect(parseSavedViewIdFromSearch('?savedView=%20%20')).toBeNull();
+    expect(parseSavedViewIdFromSearch('?search=review')).toBeNull();
+  });
+
+  it('composes saved view ids with dashboard and detail filter routes', () => {
+    const filters = {
+      search: 'saved target',
+      status: 'review' as const,
+      priority: 'high' as const,
+      label: 'archive',
+      includeArchived: true,
+      blockedOnly: true,
+      staleOnly: false,
+      pageSize: 50
+    };
+
+    expect(buildDashboardPath(filters, { savedViewId: 'view-123' })).toBe(
+      '/?savedView=view-123&search=saved+target&status=review&priority=high&label=archive&includeArchived=true&blockedOnly=true&limit=50'
+    );
+    expect(buildIssuePath('issue id', filters, { savedViewId: 'view-123' })).toBe(
+      '/issues/issue%20id?savedView=view-123&search=saved+target&status=review&priority=high&label=archive&includeArchived=true&blockedOnly=true&limit=50'
     );
   });
 

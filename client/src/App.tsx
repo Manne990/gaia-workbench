@@ -54,6 +54,7 @@ import {
   buildStableIssueUrl,
   defaultDashboardFilters,
   getRouteStateFromLocation,
+  type RouteState,
   writeRoute
 } from './utils/routing';
 import { issueMatchesDashboardFilters } from './utils/savedView';
@@ -127,10 +128,7 @@ function readSelectedIssueStatusCommand(commandId: string): IssueStatus | null {
 }
 
 export function App() {
-  const initialRouteStateRef = useRef<{
-    issueId: string | null;
-    filters: DashboardFilters;
-  } | null>(null);
+  const initialRouteStateRef = useRef<RouteState | null>(null);
 
   if (!initialRouteStateRef.current) {
     initialRouteStateRef.current = getRouteStateFromLocation();
@@ -188,7 +186,7 @@ export function App() {
   const [dependencyError, setDependencyError] = useState<string | null>(null);
   const [isDependencySubmitting, setIsDependencySubmitting] = useState(false);
   const [savedViews, setSavedViews] = useState<SavedFilterView[]>([]);
-  const [selectedSavedViewId, setSelectedSavedViewId] = useState('');
+  const [selectedSavedViewId, setSelectedSavedViewId] = useState(() => initialRouteStateRef.current?.savedViewId ?? '');
   const [savedViewName, setSavedViewName] = useState('');
   const [savedViewError, setSavedViewError] = useState<string | null>(null);
   const [isSavedViewBusy, setIsSavedViewBusy] = useState(false);
@@ -220,6 +218,9 @@ export function App() {
   const didCanonicalizeInitialRouteRef = useRef(false);
   const dashboardFiltersRef = useRef<DashboardFilters>(initialRouteStateRef.current.filters);
   const selectedIssueIdRef = useRef<string | null>(initialRouteStateRef.current.issueId);
+  const selectedIssueRef = useRef<Issue | null>(null);
+  const activeSavedViewIdRef = useRef<string | null>(initialRouteStateRef.current.savedViewId);
+  const savedViewRouteAbortRef = useRef<AbortController | null>(null);
 
   const dashboardFilters: DashboardFilters = useMemo(
     () => ({
@@ -356,6 +357,10 @@ export function App() {
   useEffect(() => {
     selectedIssueIdRef.current = selectedIssueId;
   }, [selectedIssueId]);
+
+  useEffect(() => {
+    selectedIssueRef.current = selectedIssue;
+  }, [selectedIssue]);
 
   useEffect(() => {
     const visibleIds = new Set(filteredIssues.map((issue) => issue.id));
@@ -594,7 +599,7 @@ export function App() {
 
     didCanonicalizeInitialRouteRef.current = true;
     if (!window.location.hash) {
-      writeRoute(selectedIssueId, dashboardFilters, 'replace');
+      writeRoute(selectedIssueId, dashboardFilters, 'replace', { savedViewId: activeSavedViewIdRef.current });
     }
   }, []);
 
@@ -627,14 +632,38 @@ export function App() {
   }, [loadSavedViews]);
 
   useEffect(() => {
+    const routeState = initialRouteStateRef.current;
+
+    if (!routeState || !routeState.savedViewId) {
+      return;
+    }
+
+    void restoreSavedViewFromRoute(routeState.savedViewId, routeState);
+
+    return () => {
+      savedViewRouteAbortRef.current?.abort();
+      savedViewRouteAbortRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     function syncSelectedIssueFromLocation() {
       const routeState = getRouteStateFromLocation();
 
       detailReturnFocusRef.current = null;
       dashboardFiltersRef.current = routeState.filters;
+      selectedIssueIdRef.current = routeState.issueId;
       setDashboardFilters(routeState.filters);
       setSelectedIssueId(routeState.issueId);
       setIssueAnchorHash(window.location.hash);
+
+      if (routeState.savedViewId) {
+        void restoreSavedViewFromRoute(routeState.savedViewId, routeState);
+      } else {
+        activeSavedViewIdRef.current = null;
+        savedViewRouteAbortRef.current?.abort();
+        savedViewRouteAbortRef.current = null;
+      }
     }
 
     window.addEventListener('popstate', syncSelectedIssueFromLocation);
@@ -652,18 +681,30 @@ export function App() {
     return () => window.removeEventListener('hashchange', syncIssueAnchorHash);
   }, []);
 
-  function writeRouteState(issueId: string | null, filters: DashboardFilters, mode: 'push' | 'replace') {
-    writeRoute(issueId, filters, mode);
+  function writeRouteState(
+    issueId: string | null,
+    filters: DashboardFilters,
+    mode: 'push' | 'replace',
+    savedViewId: string | null = activeSavedViewIdRef.current
+  ) {
+    writeRoute(issueId, filters, mode, { savedViewId });
     setIssueAnchorHash(window.location.hash);
   }
 
-  function writeDashboardRoute(filters: DashboardFilters, mode: 'push' | 'replace') {
-    writeRouteState(selectedIssueId, filters, mode);
+  function writeDashboardRoute(
+    filters: DashboardFilters,
+    mode: 'push' | 'replace',
+    savedViewId: string | null = activeSavedViewIdRef.current
+  ) {
+    writeRouteState(selectedIssueId, filters, mode, savedViewId);
   }
 
   function commitDashboardFilterRoute(filters: DashboardFilters, mode: 'push' | 'replace') {
+    activeSavedViewIdRef.current = null;
+    savedViewRouteAbortRef.current?.abort();
+    savedViewRouteAbortRef.current = null;
     dashboardFiltersRef.current = filters;
-    writeDashboardRoute(filters, mode);
+    writeDashboardRoute(filters, mode, null);
   }
 
   function handleSearchFilterChange(value: string) {
@@ -724,8 +765,11 @@ export function App() {
 
   function handleClearFilters(options: { restoreFocus?: boolean } = {}) {
     dashboardFiltersRef.current = defaultDashboardFilters;
+    activeSavedViewIdRef.current = null;
+    savedViewRouteAbortRef.current?.abort();
+    savedViewRouteAbortRef.current = null;
     clearFilters();
-    writeRouteState(null, defaultDashboardFilters, 'replace');
+    writeRouteState(null, defaultDashboardFilters, 'replace', null);
     setSelectedIssueId(null);
     setSelectedIssue(null);
     setSelectedIssueLoadState('idle');
@@ -756,6 +800,97 @@ export function App() {
     setSavedViews((current) => current.filter((view) => view.id !== viewId));
     setSelectedSavedViewId('');
     setSavedViewName('');
+  }
+
+  function getFiltersForSavedView(view: SavedFilterView): DashboardFilters {
+    return {
+      search: view.search,
+      status: view.status,
+      priority: view.priority,
+      label: view.label,
+      includeArchived: view.includeArchived,
+      blockedOnly: view.blockedOnly,
+      staleOnly: view.staleOnly,
+      pageSize: view.pageSize
+    };
+  }
+
+  function getSelectedIssueIdForFilters(filters: DashboardFilters): string | null {
+    const currentIssueId = selectedIssueIdRef.current;
+    const currentIssue = selectedIssueRef.current;
+
+    return currentIssueId && currentIssue?.id === currentIssueId && !issueMatchesDashboardFilters(currentIssue, filters)
+      ? null
+      : currentIssueId;
+  }
+
+  function applySavedViewState(view: SavedFilterView, mode: 'push' | 'replace') {
+    const nextFilters = getFiltersForSavedView(view);
+    const nextSelectedIssueId = getSelectedIssueIdForFilters(nextFilters);
+
+    activeSavedViewIdRef.current = view.id;
+    upsertSavedView(view);
+    dashboardFiltersRef.current = nextFilters;
+    selectedIssueIdRef.current = nextSelectedIssueId;
+    setDashboardFilters(nextFilters);
+    setSelectedIssueId(nextSelectedIssueId);
+
+    if (!nextSelectedIssueId) {
+      setSelectedIssue(null);
+      setSelectedIssueLoadState('idle');
+      detailReturnFocusRef.current = null;
+    }
+
+    writeRouteState(nextSelectedIssueId, nextFilters, mode, view.id);
+  }
+
+  async function restoreSavedViewFromRoute(savedViewId: string, fallbackRouteState: RouteState) {
+    savedViewRouteAbortRef.current?.abort();
+
+    const controller = new AbortController();
+    savedViewRouteAbortRef.current = controller;
+    activeSavedViewIdRef.current = savedViewId;
+    setSelectedSavedViewId(savedViewId);
+    setIsSavedViewBusy(true);
+    setSavedViewError(null);
+
+    try {
+      const view = await fetchSavedFilterView(savedViewId, controller.signal);
+
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      applySavedViewState(view, 'replace');
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      const message = error instanceof Error ? error.message : 'Saved view restore failed.';
+
+      if (message === 'Saved view not found') {
+        activeSavedViewIdRef.current = null;
+        dashboardFiltersRef.current = fallbackRouteState.filters;
+        selectedIssueIdRef.current = fallbackRouteState.issueId;
+        setDashboardFilters(fallbackRouteState.filters);
+        setSelectedIssueId(fallbackRouteState.issueId);
+        removeMissingSavedView(savedViewId);
+        setSavedViewError('Saved view not found. Showing filters from the URL instead.');
+        writeRouteState(fallbackRouteState.issueId, fallbackRouteState.filters, 'replace', null);
+      } else {
+        activeSavedViewIdRef.current = null;
+        setSavedViewError(message);
+      }
+    } finally {
+      if (savedViewRouteAbortRef.current === controller) {
+        savedViewRouteAbortRef.current = null;
+      }
+
+      if (!controller.signal.aborted) {
+        setIsSavedViewBusy(false);
+      }
+    }
   }
 
   async function handleSaveCurrentView() {
@@ -791,38 +926,13 @@ export function App() {
 
     setIsSavedViewBusy(true);
     setSavedViewError(null);
+    savedViewRouteAbortRef.current?.abort();
+    savedViewRouteAbortRef.current = null;
 
     try {
       const view = await fetchSavedFilterView(selectedSavedViewId);
-      const nextFilters: DashboardFilters = {
-        search: view.search,
-        status: view.status,
-        priority: view.priority,
-        label: view.label,
-        includeArchived: view.includeArchived,
-        blockedOnly: view.blockedOnly,
-        staleOnly: view.staleOnly,
-        pageSize: view.pageSize
-      };
-      const nextSelectedIssueId =
-        selectedIssueId &&
-        selectedIssue?.id === selectedIssueId &&
-        !issueMatchesDashboardFilters(selectedIssue, nextFilters)
-          ? null
-          : selectedIssueId;
 
-      upsertSavedView(view);
-      dashboardFiltersRef.current = nextFilters;
-      setDashboardFilters(nextFilters);
-      setSelectedIssueId(nextSelectedIssueId);
-
-      if (!nextSelectedIssueId) {
-        setSelectedIssue(null);
-        setSelectedIssueLoadState('idle');
-        detailReturnFocusRef.current = null;
-      }
-
-      writeRouteState(nextSelectedIssueId, nextFilters, 'push');
+      applySavedViewState(view, 'push');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Saved view apply failed.';
 
@@ -903,6 +1013,12 @@ export function App() {
     try {
       await deleteSavedFilterView(selectedSavedViewId);
       setSavedViews((current) => current.filter((view) => view.id !== selectedSavedViewId));
+
+      if (activeSavedViewIdRef.current === selectedSavedViewId) {
+        activeSavedViewIdRef.current = null;
+        writeRouteState(selectedIssueIdRef.current, dashboardFiltersRef.current, 'replace', null);
+      }
+
       setSelectedSavedViewId('');
       setSavedViewName('');
     } catch (error) {

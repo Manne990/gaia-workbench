@@ -186,4 +186,20 @@ describe('client routing helpers', () => {
       })
     ).toBe('/?label=backend');
   });
+
+  it('drops page from canonical dashboard paths after filter-driven pagination resets', () => {
+    const filters = parseDashboardFiltersFromSearch('?page=3&limit=10&label=blocked&blockedOnly=true&staleOnly=true');
+
+    expect(filters).toEqual({
+      search: '',
+      status: 'all',
+      priority: 'all',
+      label: 'blocked',
+      includeArchived: false,
+      blockedOnly: true,
+      staleOnly: true,
+      pageSize: 10
+    });
+    expect(buildDashboardPath(filters)).toBe('/?label=blocked&blockedOnly=true&staleOnly=true&limit=10');
+  });
 });

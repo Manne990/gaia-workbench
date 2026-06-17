@@ -34,10 +34,46 @@ type SavedFilterView = {
   updatedAt: string;
 };
 
+type ExportAuditSummary = {
+  issues: {
+    total: number;
+    active: number;
+    archived: number;
+    blocked: number;
+    overdue: number;
+    byStatus: Record<string, number>;
+    byPriority: Record<string, number>;
+  };
+  comments: {
+    total: number;
+    edited: number;
+    editHistoryEntries: number;
+  };
+  dependencies: {
+    total: number;
+    blocking: number;
+  };
+  activity: {
+    total: number;
+    byType: Record<string, number>;
+    recent: Array<{
+      eventId: string;
+      issueId: string;
+      issueTitle: string;
+      type: string;
+      createdAt: string;
+    }>;
+  };
+  savedFilterViews: {
+    total: number;
+  };
+};
+
 type TrackerExport = {
   exportVersion: number;
   issues: ExportedIssue[];
   savedFilterViews: SavedFilterView[];
+  auditSummary?: ExportAuditSummary;
 };
 
 function getCsvLines(csv: string): string[] {
@@ -300,6 +336,142 @@ describe('tracker export API', () => {
     await request(app).get(`/api/issues/${createdSecond.body.id}/activity`).expect(200, secondIssueActivityBefore.body);
     await request(app).get(`/api/issues/${createdEmpty.body.id}/activity`).expect(200, emptyIssueActivityBefore.body);
     await request(app).get('/api/filter-views').expect(200, savedFilterViewsBefore.body);
+  });
+
+  it('can include a compact audit summary without replacing the full JSON export', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const blocker = await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'Blocking audit issue',
+        status: 'todo',
+        priority: 'high'
+      })
+      .expect(201);
+    const blocked = await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'Blocked audit issue',
+        status: 'in_progress',
+        priority: 'medium'
+      })
+      .expect(201);
+    const archived = await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'Archived audit issue',
+        status: 'done',
+        priority: 'low'
+      })
+      .expect(201);
+
+    await request(app).post(`/api/issues/${archived.body.id}/archive`).expect(200);
+    await request(app)
+      .post(`/api/issues/${blocked.body.id}/dependencies`)
+      .send({ dependsOnIssueId: blocker.body.id })
+      .expect(201);
+    const comment = await request(app)
+      .post(`/api/issues/${blocked.body.id}/comments`)
+      .send({ body: 'Audit summary should count this comment.' })
+      .expect(201);
+    await request(app)
+      .put(`/api/comments/${comment.body.id}`)
+      .send({ body: 'Audit summary should count this edited comment.' })
+      .expect(200);
+    await request(app)
+      .post('/api/filter-views')
+      .send({
+        name: 'Audit export view',
+        status: 'all',
+        priority: 'all',
+        pageSize: 25
+      })
+      .expect(201);
+
+    const defaultExport = await request(app).get('/api/export').expect(200);
+    const summarizedExport = await request(app).get('/api/export?includeAuditSummary=true').expect(200);
+    const exported = summarizedExport.body as TrackerExport;
+
+    expect(defaultExport.body).not.toHaveProperty('auditSummary');
+    expect(Object.keys(defaultExport.body).sort()).toEqual(['exportVersion', 'issues', 'savedFilterViews']);
+    expect(Object.keys(summarizedExport.body).sort()).toEqual([
+      'auditSummary',
+      'exportVersion',
+      'issues',
+      'savedFilterViews'
+    ]);
+    expect(exported.issues).toHaveLength(3);
+    expect(exported.savedFilterViews).toHaveLength(1);
+    expect(exported.auditSummary).toEqual({
+      issues: {
+        total: 3,
+        active: 2,
+        archived: 1,
+        blocked: 1,
+        overdue: 0,
+        byStatus: {
+          todo: 1,
+          in_progress: 1,
+          review: 0,
+          done: 1
+        },
+        byPriority: {
+          low: 1,
+          medium: 1,
+          high: 1
+        }
+      },
+      comments: {
+        total: 1,
+        edited: 1,
+        editHistoryEntries: 1
+      },
+      dependencies: {
+        total: 1,
+        blocking: 1
+      },
+      activity: {
+        total: 7,
+        byType: {
+          issue_created: 3,
+          issue_title_changed: 0,
+          issue_description_changed: 0,
+          issue_status_changed: 0,
+          issue_priority_changed: 0,
+          issue_due_date_changed: 0,
+          issue_labels_changed: 0,
+          issue_archived: 1,
+          issue_unarchived: 0,
+          issue_dependency_added: 1,
+          issue_dependency_removed: 0,
+          comment_added: 1,
+          comment_edited: 1
+        },
+        recent: expect.any(Array)
+      },
+      savedFilterViews: {
+        total: 1
+      }
+    });
+    expect(exported.auditSummary?.activity.recent).toHaveLength(5);
+    expect(exported.auditSummary?.activity.recent[0]).toEqual(
+      expect.objectContaining({
+        eventId: expect.any(String),
+        issueId: expect.any(String),
+        issueTitle: expect.any(String),
+        type: expect.any(String),
+        createdAt: expect.any(String)
+      })
+    );
+  });
+
+  it('rejects invalid audit summary export options', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    await request(app)
+      .get('/api/export?includeAuditSummary=yes')
+      .expect(400, { error: 'Invalid includeAuditSummary parameter' });
   });
 
   it('exports filtered issues to CSV with deterministic headers', async () => {

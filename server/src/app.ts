@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   type ActivityEvent,
+  type ActivityEventType,
   ActivityRepository,
   type Comment,
   type CommentEditHistory,
@@ -13,6 +14,8 @@ import {
   IssueDependencyConflictError,
   IssueDependencyNotFoundError,
   IssueDependencyRepository,
+  type IssuePriority,
+  type IssueStatus,
   type IssueUpdate,
   IssueRepository,
   type SavedFilterView,
@@ -35,13 +38,66 @@ type ExportedIssue = Issue & {
   activityEvents: ActivityEvent[];
 };
 
+type ExportAuditSummary = {
+  issues: {
+    total: number;
+    active: number;
+    archived: number;
+    blocked: number;
+    overdue: number;
+    byStatus: Record<IssueStatus, number>;
+    byPriority: Record<IssuePriority, number>;
+  };
+  comments: {
+    total: number;
+    edited: number;
+    editHistoryEntries: number;
+  };
+  dependencies: {
+    total: number;
+    blocking: number;
+  };
+  activity: {
+    total: number;
+    byType: Record<ActivityEventType, number>;
+    recent: Array<{
+      eventId: string;
+      issueId: string;
+      issueTitle: string;
+      type: ActivityEventType;
+      createdAt: string;
+    }>;
+  };
+  savedFilterViews: {
+    total: number;
+  };
+};
+
 type TrackerExport = {
   exportVersion: 1;
   issues: ExportedIssue[];
   savedFilterViews: SavedFilterView[];
+  auditSummary?: ExportAuditSummary;
 };
 
+type TrackerExportBase = Omit<TrackerExport, 'auditSummary'>;
+
 const SPREADSHEET_FORMULA_PREFIX_PATTERN = /^[=+\-@\t\r\n]/;
+const activityEventTypes: ActivityEventType[] = [
+  'issue_created',
+  'issue_title_changed',
+  'issue_description_changed',
+  'issue_status_changed',
+  'issue_priority_changed',
+  'issue_due_date_changed',
+  'issue_labels_changed',
+  'issue_archived',
+  'issue_unarchived',
+  'issue_dependency_added',
+  'issue_dependency_removed',
+  'comment_added',
+  'comment_edited'
+];
 const serviceHealth = {
   status: 'ok',
   service: 'TinyTracker'
@@ -115,6 +171,7 @@ const validationErrorMessages = new Set([
   'Invalid includeArchived parameter',
   'Invalid blockedOnly parameter',
   'Invalid staleOnly parameter',
+  'Invalid includeAuditSummary parameter',
   'Invalid bulk issue ids',
   'Saved view name is required',
   'Invalid saved view payload',
@@ -188,6 +245,40 @@ function escapeCsvCell(value: string): string {
   return `"${cellValue.replaceAll('"', '""')}"`;
 }
 
+function getOptionalQueryString(value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (Array.isArray(value) && typeof value[0] === 'string') {
+    return value[0];
+  }
+
+  return undefined;
+}
+
+function parseOptionalBooleanQuery(value: unknown, defaultValue: boolean, errorMessage: string): boolean {
+  const queryValue = getOptionalQueryString(value);
+
+  if (queryValue === undefined) {
+    return defaultValue;
+  }
+
+  if (queryValue === 'true') {
+    return true;
+  }
+
+  if (queryValue === 'false') {
+    return false;
+  }
+
+  throw new Error(errorMessage);
+}
+
 function buildIssueListCsv(issues: Issue[]): string {
   const header = [
     'id',
@@ -242,11 +333,126 @@ function groupBy<T>(items: T[], keySelector: (item: T) => string): Map<string, T
   return groups;
 }
 
+function emptyStatusCounts(): Record<IssueStatus, number> {
+  return {
+    todo: 0,
+    in_progress: 0,
+    review: 0,
+    done: 0
+  };
+}
+
+function emptyPriorityCounts(): Record<IssuePriority, number> {
+  return {
+    low: 0,
+    medium: 0,
+    high: 0
+  };
+}
+
+function emptyActivityTypeCounts(): Record<ActivityEventType, number> {
+  return Object.fromEntries(activityEventTypes.map((type) => [type, 0])) as Record<ActivityEventType, number>;
+}
+
+function buildExportAuditSummary(exportPayload: TrackerExportBase): ExportAuditSummary {
+  const byStatus = emptyStatusCounts();
+  const byPriority = emptyPriorityCounts();
+  const byActivityType = emptyActivityTypeCounts();
+  const issueById = new Map(exportPayload.issues.map((issue) => [issue.id, issue]));
+  const recentActivity: ExportAuditSummary['activity']['recent'] = [];
+  let archivedIssues = 0;
+  let blockedIssues = 0;
+  let overdueIssues = 0;
+  let comments = 0;
+  let editedComments = 0;
+  let editHistoryEntries = 0;
+  let dependencies = 0;
+  let blockingDependencies = 0;
+  let activityEvents = 0;
+
+  for (const issue of exportPayload.issues) {
+    byStatus[issue.status] += 1;
+    byPriority[issue.priority] += 1;
+    archivedIssues += issue.archivedAt === null ? 0 : 1;
+    blockedIssues += issue.isBlocked ? 1 : 0;
+    overdueIssues += issue.isOverdue ? 1 : 0;
+    dependencies += issue.dependsOnIssueIds.length;
+
+    for (const dependsOnIssueId of issue.dependsOnIssueIds) {
+      const dependency = issueById.get(dependsOnIssueId);
+
+      if (dependency && dependency.archivedAt === null && dependency.status !== 'done') {
+        blockingDependencies += 1;
+      }
+    }
+
+    comments += issue.comments.length;
+
+    for (const comment of issue.comments) {
+      if (comment.editHistory.length > 0) {
+        editedComments += 1;
+      }
+
+      editHistoryEntries += comment.editHistory.length;
+    }
+
+    activityEvents += issue.activityEvents.length;
+
+    for (const event of issue.activityEvents) {
+      byActivityType[event.type] += 1;
+      recentActivity.push({
+        eventId: event.id,
+        issueId: issue.id,
+        issueTitle: issue.title,
+        type: event.type,
+        createdAt: event.createdAt
+      });
+    }
+  }
+
+  recentActivity.sort(
+    (left, right) =>
+      right.createdAt.localeCompare(left.createdAt) ||
+      left.issueId.localeCompare(right.issueId) ||
+      left.eventId.localeCompare(right.eventId)
+  );
+
+  return {
+    issues: {
+      total: exportPayload.issues.length,
+      active: exportPayload.issues.length - archivedIssues,
+      archived: archivedIssues,
+      blocked: blockedIssues,
+      overdue: overdueIssues,
+      byStatus,
+      byPriority
+    },
+    comments: {
+      total: comments,
+      edited: editedComments,
+      editHistoryEntries
+    },
+    dependencies: {
+      total: dependencies,
+      blocking: blockingDependencies
+    },
+    activity: {
+      total: activityEvents,
+      byType: byActivityType,
+      recent: recentActivity.slice(0, 5)
+    },
+    savedFilterViews: {
+      total: exportPayload.savedFilterViews.length
+    }
+  };
+}
+
 function buildTrackerExport(
   issueRepository: IssueRepository,
   commentRepository: CommentRepository,
   activityRepository: ActivityRepository,
-  savedFilterViewRepository: SavedFilterViewRepository
+  savedFilterViewRepository: SavedFilterViewRepository,
+  options: { includeAuditSummary?: boolean } = {}
 ): TrackerExport {
   const issues = issueRepository.listForExport();
   const issueIds = issues.map((issue) => issue.id);
@@ -257,8 +463,7 @@ function buildTrackerExport(
     (history) => history.commentId
   );
   const activityByIssueId = groupBy(activityRepository.listByIssueIds(issueIds), (event) => event.issueId);
-
-  return {
+  const exportPayload: TrackerExportBase = {
     exportVersion: 1,
     issues: issues.map((issue) => {
       const exportedComments = (commentsByIssueId.get(issue.id) ?? []).map((comment) => ({
@@ -273,6 +478,15 @@ function buildTrackerExport(
       };
     }),
     savedFilterViews: savedFilterViewRepository.list()
+  };
+
+  if (!options.includeAuditSummary) {
+    return exportPayload;
+  }
+
+  return {
+    ...exportPayload,
+    auditSummary: buildExportAuditSummary(exportPayload)
   };
 }
 
@@ -297,10 +511,27 @@ export function createApp(config: AppConfig = {}) {
     res.json(serviceHealth);
   });
 
-  app.get('/api/export', (_req, res) => {
-    res
-      .status(200)
-      .json(buildTrackerExport(issueRepository, commentRepository, activityRepository, savedFilterViewRepository));
+  app.get('/api/export', (req, res) => {
+    try {
+      const includeAuditSummary = parseOptionalBooleanQuery(
+        req.query.includeAuditSummary,
+        false,
+        'Invalid includeAuditSummary parameter'
+      );
+
+      res.status(200).json(
+        buildTrackerExport(issueRepository, commentRepository, activityRepository, savedFilterViewRepository, {
+          includeAuditSummary
+        })
+      );
+      return;
+    } catch (error) {
+      if (isValidationError(error)) {
+        return res.status(400).json({ error: error.message });
+      }
+
+      throw error;
+    }
   });
 
   app.get('/api/export.csv', (req, res) => {

@@ -91,6 +91,14 @@ function writeStoredDashboardDensity(value: DashboardDensity): void {
   }
 }
 
+function applyDependencyStateToIssue(issue: Issue, dependencies: IssueDependencyState): Issue {
+  return {
+    ...issue,
+    dependsOnIssueIds: dependencies.dependencies.map((dependency) => dependency.id),
+    isBlocked: dependencies.isBlocked
+  };
+}
+
 function parseIssueAnchorTarget(hash: string): IssueAnchorTarget | null {
   const match = /^(?:#)(comment|activity)-(.+)$/.exec(hash.trim());
 
@@ -1264,15 +1272,29 @@ export function App() {
   async function refreshSelectedIssueAfterDependency(issueId: string, dependencies: IssueDependencyState) {
     setIssueDependencies(dependencies);
     setDependencyLoadState('loaded');
+    setSelectedIssue((current) =>
+      current && current.id === issueId ? applyDependencyStateToIssue(current, dependencies) : current
+    );
+    refreshIssues();
 
-    const refreshedIssue = await fetchIssue(issueId);
+    try {
+      const refreshedIssue = await fetchIssue(issueId);
 
-    if (refreshedIssue) {
-      setSelectedIssue(refreshedIssue);
-      setSelectedIssueLoadState('loaded');
+      if (selectedIssueIdRef.current === issueId) {
+        if (refreshedIssue) {
+          setSelectedIssue(refreshedIssue);
+          setSelectedIssueLoadState('loaded');
+        } else {
+          setSelectedIssue(null);
+          setSelectedIssueLoadState('not_found');
+        }
+      }
+    } catch {
+      if (selectedIssueIdRef.current === issueId) {
+        setSelectedIssueLoadState('loaded');
+      }
     }
 
-    refreshIssues();
     await refreshActivity(issueId);
   }
 

@@ -2369,6 +2369,158 @@ test('dependency links show and clear blocked issue visibility', async ({ page }
   await expect(dependentsSection.getByText(dependent.title)).toBeVisible();
 });
 
+test('dependency removal clears final blocker banner when selected issue refresh fails', async ({ page }) => {
+  const blocker = await createIssueThroughApi(page, {
+    title: 'Final refresh failure blocker',
+    description: 'Removing this dependency should unblock the selected detail immediately.',
+    status: 'todo',
+    priority: 'high'
+  });
+  const blocked = await createIssueThroughApi(page, {
+    title: 'Final refresh failure blocked issue',
+    description: 'Should not keep a stale blocked banner after the final blocker is removed.',
+    status: 'in_progress',
+    priority: 'medium'
+  });
+  const dependencyResponse = await page.request.post(`/api/issues/${blocked.id}/dependencies`, {
+    data: {
+      dependsOnIssueId: blocker.id
+    }
+  });
+
+  expect(dependencyResponse.ok()).toBe(true);
+
+  await page.goto(`/issues/${blocked.id}?search=${encodeURIComponent('Final refresh failure blocked issue')}`);
+
+  const detail = page.getByRole('region', { name: blocked.title });
+  const blockedRow = page.getByRole('row', { name: /Final refresh failure blocked issue.*In Progress.*Medium/ });
+  const blockerItem = detail.getByLabel('Issue blockers').getByRole('listitem').filter({ hasText: blocker.title });
+
+  await expect(detail.getByText(`1 unresolved dependency remains: ${blocker.title}.`)).toBeVisible();
+  await expect(blockerItem.locator('.blocked-pill')).toHaveText('Blocking');
+  await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
+
+  let failNextSelectedIssueRefresh = false;
+  await page.route(`**/api/issues/${blocked.id}`, async (route) => {
+    const requestUrl = new URL(route.request().url());
+
+    if (
+      route.request().method() === 'GET' &&
+      requestUrl.pathname === `/api/issues/${blocked.id}` &&
+      failNextSelectedIssueRefresh
+    ) {
+      failNextSelectedIssueRefresh = false;
+
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Transient selected issue refresh failure' })
+      });
+      return;
+    }
+
+    await route.continue();
+  });
+
+  const removeDependencyResponsePromise = page.waitForResponse((response) => {
+    const responseUrl = new URL(response.url());
+
+    return (
+      response.request().method() === 'DELETE' &&
+      responseUrl.pathname === `/api/issues/${blocked.id}/dependencies/${blocker.id}`
+    );
+  });
+
+  failNextSelectedIssueRefresh = true;
+  await blockerItem.getByRole('button', { name: `Remove dependency ${blocker.title}` }).click();
+
+  const removeDependencyResponse = await removeDependencyResponsePromise;
+
+  expect(removeDependencyResponse.ok()).toBe(true);
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toHaveCount(0);
+  await expect(detail.getByLabel('Issue blockers')).toContainText('No blockers.');
+  await expect(blockedRow.locator('.blocked-pill')).toHaveCount(0);
+  await expect(detail.getByLabel('Issue activity').getByText('Dependency removed')).toBeVisible();
+
+  await page.reload();
+
+  await expect(detail.getByText('Waiting on at least one active dependency.')).toHaveCount(0);
+  await expect(detail.getByLabel('Issue blockers')).toContainText('No blockers.');
+  await expect(blockedRow.locator('.blocked-pill')).toHaveCount(0);
+});
+
+test('dependency removal preserves blocked banner while another active blocker remains', async ({ page }) => {
+  const removedBlocker = await createIssueThroughApi(page, {
+    title: 'Remaining banner removed blocker',
+    description: 'This blocker is removed while another blocker still blocks the issue.',
+    status: 'todo',
+    priority: 'medium'
+  });
+  const remainingBlocker = await createIssueThroughApi(page, {
+    title: 'Remaining banner active blocker',
+    description: 'This blocker should keep the selected issue blocked.',
+    status: 'in_progress',
+    priority: 'high'
+  });
+  const blocked = await createIssueThroughApi(page, {
+    title: 'Remaining banner blocked issue',
+    description: 'Removing one dependency must not hide a valid blocked banner.',
+    status: 'review',
+    priority: 'medium'
+  });
+
+  for (const dependsOnIssueId of [removedBlocker.id, remainingBlocker.id]) {
+    const dependencyResponse = await page.request.post(`/api/issues/${blocked.id}/dependencies`, {
+      data: {
+        dependsOnIssueId
+      }
+    });
+
+    expect(dependencyResponse.ok()).toBe(true);
+  }
+
+  await page.goto(`/issues/${blocked.id}?search=${encodeURIComponent('Remaining banner blocked issue')}`);
+
+  const detail = page.getByRole('region', { name: blocked.title });
+  const blockedRow = page.getByRole('row', { name: /Remaining banner blocked issue.*Review.*Medium/ });
+  const blockersSection = detail.getByLabel('Issue blockers');
+  const removedBlockerItem = blockersSection.getByRole('listitem').filter({ hasText: removedBlocker.title });
+  const remainingBlockerItem = blockersSection.getByRole('listitem').filter({ hasText: remainingBlocker.title });
+
+  await expect(
+    detail.getByText(`2 unresolved dependencies remain: ${removedBlocker.title} and ${remainingBlocker.title}.`)
+  ).toBeVisible();
+  await expect(removedBlockerItem.locator('.blocked-pill')).toHaveText('Blocking');
+  await expect(remainingBlockerItem.locator('.blocked-pill')).toHaveText('Blocking');
+  await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
+
+  const removeDependencyResponsePromise = page.waitForResponse((response) => {
+    const responseUrl = new URL(response.url());
+
+    return (
+      response.request().method() === 'DELETE' &&
+      responseUrl.pathname === `/api/issues/${blocked.id}/dependencies/${removedBlocker.id}`
+    );
+  });
+
+  await removedBlockerItem.getByRole('button', { name: `Remove dependency ${removedBlocker.title}` }).click();
+
+  const removeDependencyResponse = await removeDependencyResponsePromise;
+
+  expect(removeDependencyResponse.ok()).toBe(true);
+  await expect(detail.getByText(`1 unresolved dependency remains: ${remainingBlocker.title}.`)).toBeVisible();
+  await expect(removedBlockerItem).toHaveCount(0);
+  await expect(remainingBlockerItem.locator('.blocked-pill')).toHaveText('Blocking');
+  await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
+
+  await page.reload();
+
+  await expect(detail.getByText(`1 unresolved dependency remains: ${remainingBlocker.title}.`)).toBeVisible();
+  await expect(blockersSection).not.toContainText(removedBlocker.title);
+  await expect(remainingBlockerItem.locator('.blocked-pill')).toHaveText('Blocking');
+  await expect(blockedRow.locator('.blocked-pill')).toHaveText('Blocked');
+});
+
 test('dependency add refreshes blocked-only list while preserving detail route', async ({ page }) => {
   const blocker = await createIssueThroughApi(page, {
     title: 'Blocked-only live blocker',

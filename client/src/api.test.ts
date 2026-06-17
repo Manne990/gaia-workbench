@@ -28,6 +28,12 @@ function invalidImportPlan(code = 'invalid_json'): ImportPlan {
     activityEvents: 0,
     savedFilterViews: 0
   };
+  const emptyCategories = {
+    creates: emptyCounts,
+    updates: emptyCounts,
+    duplicates: emptyCounts,
+    conflicts: emptyCounts
+  };
 
   return {
     valid: false,
@@ -40,6 +46,7 @@ function invalidImportPlan(code = 'invalid_json'): ImportPlan {
       skip: emptyCounts,
       exactMatches: emptyCounts,
       changed: emptyCounts,
+      categories: emptyCategories,
       reject: 1
     },
     decisions: [],

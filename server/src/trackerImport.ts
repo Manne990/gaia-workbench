@@ -42,6 +42,13 @@ type ImportCounts = {
   savedFilterViews: number;
 };
 
+type ImportPreviewCategories = {
+  creates: ImportCounts;
+  updates: ImportCounts;
+  duplicates: ImportCounts;
+  conflicts: ImportCounts;
+};
+
 export type ImportDecision = {
   entity: ImportEntity;
   sourceId: string | null;
@@ -68,6 +75,7 @@ export type ImportSummary = {
   skip: ImportCounts;
   exactMatches: ImportCounts;
   changed: ImportCounts;
+  categories: ImportPreviewCategories;
   reject: number;
 };
 
@@ -1347,6 +1355,8 @@ function makeSummary(input: ImportCounts, decisions: ImportDecision[], errors: I
   const skip = emptyCounts();
   const exactMatches = emptyCounts();
   const changed = emptyCounts();
+  const duplicates = emptyCounts();
+  const conflicts = emptyCounts();
 
   for (const decision of decisions) {
     if (decision.decision === 'import') {
@@ -1355,6 +1365,12 @@ function makeSummary(input: ImportCounts, decisions: ImportDecision[], errors: I
       incrementCount(toReplace, decision.entity);
     } else if (decision.decision === 'skip-existing') {
       incrementCount(skip, decision.entity);
+
+      if (decision.matchType === 'exact') {
+        incrementCount(duplicates, decision.entity);
+      } else {
+        incrementCount(conflicts, decision.entity);
+      }
     }
 
     if (decision.matchType === 'exact') {
@@ -1371,6 +1387,12 @@ function makeSummary(input: ImportCounts, decisions: ImportDecision[], errors: I
     skip,
     exactMatches,
     changed,
+    categories: {
+      creates: toCreate,
+      updates: toReplace,
+      duplicates,
+      conflicts
+    },
     reject: errors.length
   };
 }

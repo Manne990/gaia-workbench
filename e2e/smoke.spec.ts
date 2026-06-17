@@ -1086,9 +1086,9 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
 
   await expect(importPanel.getByRole('heading', { name: 'Import Preview' })).toBeVisible();
   await expect(importPanel.getByRole('radio', { name: 'Skip existing conflicts (default)' })).toBeChecked();
-  await expect(importPanel.getByText('Ready to create 2 issues, replace 0 changed issues, and skip 0.')).toBeVisible();
-  await expect(importPanel.getByRole('row', { name: /Issues\s+2\s+0\s+0\s+2\s+0\s+0/ })).toBeVisible();
-  await expect(importPanel.getByRole('row', { name: /Saved Views\s+1\s+0\s+0\s+1\s+0\s+0/ })).toBeVisible();
+  await expect(importPanel.getByText('Ready: 10 creates, 0 updates, 0 duplicates, 0 conflicts.')).toBeVisible();
+  await expect(importPanel.getByRole('row', { name: /Issues\s+2\s+2\s+0\s+0\s+0/ })).toBeVisible();
+  await expect(importPanel.getByRole('row', { name: /Saved Views\s+1\s+1\s+0\s+0\s+0/ })).toBeVisible();
   const reportDownloadPromise = page.waitForEvent('download');
 
   await importPanel.getByRole('button', { name: 'Download report' }).click();
@@ -1105,6 +1105,15 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
         activityEvents: number;
         savedFilterViews: number;
       };
+      categories: {
+        creates: {
+          issues: number;
+          comments: number;
+          editHistory: number;
+          activityEvents: number;
+          savedFilterViews: number;
+        };
+      };
     };
     decisions: unknown[];
     warnings: string[];
@@ -1120,6 +1129,7 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
     activityEvents: 5,
     savedFilterViews: 1
   });
+  expect(reportData.summary.categories.creates).toEqual(reportData.summary.toCreate);
   expect(Array.isArray(reportData.decisions)).toBe(true);
   expect(reportData.errors).toEqual([]);
   expect(reportData.warnings).toEqual([]);
@@ -1127,7 +1137,7 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
   await importPanel.getByRole('button', { name: 'Apply Import' }).click();
 
   await expect(
-    importPanel.getByText('Import applied: 2 issues created, 0 changed issues replaced, 0 skipped.')
+    importPanel.getByText('Import applied: 10 created, 0 updated, 0 duplicates, 0 conflicts.')
   ).toBeVisible();
 
   const importedRow = page.getByRole('row', { name: /Imported issue from JSON.*Review.*High/ });
@@ -1292,19 +1302,17 @@ test('imports changed issue conflicts with an explicit replace policy', async ({
 
   const importPanel = page.getByRole('region', { name: 'Import preview' });
 
-  await expect(importPanel.getByText('Ready to create 0 issues, replace 0 changed issues, and skip 1.')).toBeVisible();
-  await expect(importPanel.getByRole('row', { name: /Issues\s+1\s+0\s+1\s+0\s+0\s+1/ })).toBeVisible();
+  await expect(importPanel.getByText('Ready: 0 creates, 0 updates, 0 duplicates, 1 conflicts.')).toBeVisible();
+  await expect(importPanel.getByRole('row', { name: /Issues\s+1\s+0\s+0\s+0\s+1/ })).toBeVisible();
 
   await importPanel.getByRole('radio', { name: 'Replace changed issues' }).check();
 
-  await expect(importPanel.getByText('Ready to create 0 issues, replace 1 changed issues, and skip 0.')).toBeVisible();
-  await expect(importPanel.getByRole('row', { name: /Issues\s+1\s+0\s+1\s+0\s+1\s+0/ })).toBeVisible();
+  await expect(importPanel.getByText('Ready: 0 creates, 1 updates, 0 duplicates, 0 conflicts.')).toBeVisible();
+  await expect(importPanel.getByRole('row', { name: /Issues\s+1\s+0\s+1\s+0\s+0/ })).toBeVisible();
 
   await importPanel.getByRole('button', { name: 'Apply Import' }).click();
 
-  await expect(
-    importPanel.getByText('Import applied: 0 issues created, 1 changed issues replaced, 0 skipped.')
-  ).toBeVisible();
+  await expect(importPanel.getByText('Import applied: 0 created, 1 updated, 0 duplicates, 0 conflicts.')).toBeVisible();
 
   const replacedRow = page.getByRole('row', { name: /Conflict issue replaced from JSON.*Review.*High/ });
 
@@ -1388,15 +1396,13 @@ test('import replace refreshes an already open issue detail route', async ({ pag
 
   const importPanel = page.getByRole('region', { name: 'Import preview' });
 
-  await expect(importPanel.getByText('Ready to create 0 issues, replace 0 changed issues, and skip 1.')).toBeVisible();
+  await expect(importPanel.getByText('Ready: 0 creates, 0 updates, 0 duplicates, 3 conflicts.')).toBeVisible();
   await importPanel.getByRole('radio', { name: 'Replace changed issues' }).check();
-  await expect(importPanel.getByText('Ready to create 0 issues, replace 1 changed issues, and skip 0.')).toBeVisible();
+  await expect(importPanel.getByText('Ready: 2 creates, 1 updates, 0 duplicates, 0 conflicts.')).toBeVisible();
 
   await importPanel.getByRole('button', { name: 'Apply Import' }).click();
 
-  await expect(
-    importPanel.getByText('Import applied: 0 issues created, 1 changed issues replaced, 0 skipped.')
-  ).toBeVisible();
+  await expect(importPanel.getByText('Import applied: 2 created, 1 updated, 0 duplicates, 0 conflicts.')).toBeVisible();
 
   const refreshedDetail = page.getByRole('region', { name: 'Selected import replaced issue' });
 
@@ -1464,11 +1470,9 @@ test('import skip keeps an already open issue detail route aligned to persisted 
 
   const importPanel = page.getByRole('region', { name: 'Import preview' });
 
-  await expect(importPanel.getByText('Ready to create 0 issues, replace 0 changed issues, and skip 1.')).toBeVisible();
+  await expect(importPanel.getByText('Ready: 0 creates, 0 updates, 0 duplicates, 1 conflicts.')).toBeVisible();
   await importPanel.getByRole('button', { name: 'Apply Import' }).click();
-  await expect(
-    importPanel.getByText('Import applied: 0 issues created, 0 changed issues replaced, 1 skipped.')
-  ).toBeVisible();
+  await expect(importPanel.getByText('Import applied: 0 created, 0 updated, 0 duplicates, 1 conflicts.')).toBeVisible();
 
   await expect(detail.getByRole('heading', { name: existing.title })).toBeVisible();
   await expect(detail.locator('.detail-description')).toHaveText('Local detail that should remain after skip.');
@@ -1534,7 +1538,7 @@ test('import reject keeps an already open issue detail route aligned to persiste
 
   const importPanel = page.getByRole('region', { name: 'Import preview' });
 
-  await expect(importPanel.getByText('Ready to create 0 issues, replace 0 changed issues, and skip 1.')).toBeVisible();
+  await expect(importPanel.getByText('Ready: 0 creates, 0 updates, 0 duplicates, 1 conflicts.')).toBeVisible();
 
   await page.route('**/api/import/apply', async (route) => {
     await route.fulfill({
@@ -1551,6 +1555,12 @@ test('import reject keeps an already open issue detail route aligned to persiste
           skip: { issues: 0, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 },
           exactMatches: { issues: 0, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 },
           changed: { issues: 1, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 },
+          categories: {
+            creates: { issues: 0, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 },
+            updates: { issues: 0, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 },
+            duplicates: { issues: 0, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 },
+            conflicts: { issues: 0, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 }
+          },
           reject: 1
         },
         decisions: [

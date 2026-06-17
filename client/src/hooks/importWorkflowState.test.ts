@@ -14,6 +14,12 @@ const emptyCounts: ImportCounts = {
   activityEvents: 0,
   savedFilterViews: 0
 };
+const emptyCategories = {
+  creates: emptyCounts,
+  updates: emptyCounts,
+  duplicates: emptyCounts,
+  conflicts: emptyCounts
+};
 
 function createImportPlan(overrides: Partial<ImportPlan> = {}): ImportPlan {
   return {
@@ -27,6 +33,10 @@ function createImportPlan(overrides: Partial<ImportPlan> = {}): ImportPlan {
       skip: emptyCounts,
       exactMatches: emptyCounts,
       changed: emptyCounts,
+      categories: {
+        ...emptyCategories,
+        creates: { ...emptyCounts, issues: 1 }
+      },
       reject: 0
     },
     decisions: [],
@@ -88,7 +98,7 @@ describe('importWorkflowReducer', () => {
       payload,
       plan: validPlan,
       error: null,
-      message: 'Ready to create 1 issues, replace 0 changed issues, and skip 0.'
+      message: 'Ready: 1 creates, 0 updates, 0 duplicates, 0 conflicts.'
     });
     const invalidState = importWorkflowReducer(started, {
       type: 'file-preview-succeeded',
@@ -113,7 +123,7 @@ describe('importWorkflowReducer', () => {
       payload,
       fileName: 'tracker.json',
       plan,
-      message: 'Ready to create 1 issues, replace 0 changed issues, and skip 0.'
+      message: 'Ready: 1 creates, 0 updates, 0 duplicates, 0 conflicts.'
     };
     const loadingState = importWorkflowReducer(previewedState, {
       type: 'policy-preview-started',
@@ -149,7 +159,7 @@ describe('importWorkflowReducer', () => {
         ...initialImportWorkflowState,
         fileName: 'tracker.json',
         plan,
-        message: 'Import applied: 1 issues created, 0 changed issues replaced, 0 skipped.'
+        message: 'Import applied: 1 created, 0 updated, 0 duplicates, 0 conflicts.'
       },
       { type: 'policy-selected', policy: 'replace-conflicts' }
     );
@@ -159,7 +169,7 @@ describe('importWorkflowReducer', () => {
       fileName: 'tracker.json',
       plan,
       policy: 'replace-conflicts',
-      message: 'Import applied: 1 issues created, 0 changed issues replaced, 0 skipped.'
+      message: 'Import applied: 1 created, 0 updated, 0 duplicates, 0 conflicts.'
     });
     expect(selectImportWorkflowView(state)).toEqual({
       isPanelVisible: true,
@@ -183,7 +193,7 @@ describe('importWorkflowReducer', () => {
       {
         type: 'apply-succeeded',
         plan: appliedPlan,
-        message: 'Import applied: 1 issues created, 0 changed issues replaced, 0 skipped.'
+        message: 'Import applied: 1 created, 0 updated, 0 duplicates, 0 conflicts.'
       }
     );
 
@@ -192,7 +202,7 @@ describe('importWorkflowReducer', () => {
       fileName: 'tracker.json',
       plan: appliedPlan,
       policy: 'replace-conflicts',
-      message: 'Import applied: 1 issues created, 0 changed issues replaced, 0 skipped.',
+      message: 'Import applied: 1 created, 0 updated, 0 duplicates, 0 conflicts.',
       isApplying: false
     });
     expect(selectImportWorkflowView(state).canApply).toBe(false);

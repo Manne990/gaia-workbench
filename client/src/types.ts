@@ -148,6 +148,13 @@ export type ImportCounts = {
   savedFilterViews: number;
 };
 
+export type ImportPreviewCategories = {
+  creates: ImportCounts;
+  updates: ImportCounts;
+  duplicates: ImportCounts;
+  conflicts: ImportCounts;
+};
+
 export type ImportSummary = {
   input: ImportCounts;
   toCreate: ImportCounts;
@@ -155,6 +162,7 @@ export type ImportSummary = {
   skip: ImportCounts;
   exactMatches: ImportCounts;
   changed: ImportCounts;
+  categories: ImportPreviewCategories;
   reject: number;
 };
 

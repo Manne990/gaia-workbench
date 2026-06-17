@@ -57,6 +57,7 @@ type IssueListPanelProps = {
   issueSearchInputRef: RefObject<HTMLInputElement | null>;
   issueListHeadingRef: RefObject<HTMLHeadingElement | null>;
   onClearFilters: () => void;
+  onRetryLoad: () => void;
   onPreviousPage: () => void;
   onNextPage: () => void;
   onOpenIssue: (issue: Issue, trigger: HTMLElement) => void;
@@ -121,6 +122,7 @@ export function IssueListPanel({
   issueSearchInputRef,
   issueListHeadingRef,
   onClearFilters,
+  onRetryLoad,
   onPreviousPage,
   onNextPage,
   onOpenIssue,
@@ -474,7 +476,10 @@ export function IssueListPanel({
 
       {loadState === 'error' ? (
         <div className="state-message error" role="alert">
-          {loadError ?? 'Unable to load issues.'}
+          <strong>{loadError ?? 'Unable to load issues.'}</strong>
+          <button type="button" className="secondary-button" onClick={onRetryLoad}>
+            Retry
+          </button>
         </div>
       ) : null}
 

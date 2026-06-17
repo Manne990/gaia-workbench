@@ -1783,6 +1783,7 @@ export function App() {
           issueSearchInputRef={issueSearchInputRef}
           issueListHeadingRef={issueListHeadingRef}
           onClearFilters={handleClearFilters}
+          onRetryLoad={refreshIssues}
           onPreviousPage={goToPreviousPage}
           onNextPage={goToNextPage}
           onOpenIssue={openIssue}

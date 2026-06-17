@@ -443,6 +443,47 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   expect(formulaCsvLines[1]).toContain("'-risk|safe");
 });
 
+test('dashboard issue-list error state preserves the API error and recovers on retry', async ({ page }) => {
+  const issue = await createIssueThroughApi(page, {
+    title: 'Retryable dashboard issue',
+    description: 'Should appear after the dashboard list retries.',
+    status: 'todo',
+    priority: 'medium'
+  });
+
+  let issueListAttempts = 0;
+
+  await page.route('**/api/issues**', async (route) => {
+    issueListAttempts += 1;
+
+    if (issueListAttempts === 1) {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Temporary issue list outage' })
+      });
+      return;
+    }
+
+    await route.continue();
+  });
+
+  await page.goto('/');
+
+  const alert = page.getByRole('alert');
+  await expect(alert).toContainText('Temporary issue list outage');
+  await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Retry' }).click();
+
+  await expect(page.getByRole('row', { name: /Retryable dashboard issue.*Todo.*Medium/ })).toBeVisible();
+  await expect(alert).toHaveCount(0);
+  expect(issueListAttempts).toBeGreaterThanOrEqual(2);
+
+  const issueResponse = await page.request.get(`/api/issues/${issue.id}`);
+  expect(issueResponse.ok()).toBe(true);
+});
+
 test('duplicates an issue from detail without copying history or dependencies', async ({ page }) => {
   const blocker = await createIssueThroughApi(page, {
     title: 'Duplicate source blocker'

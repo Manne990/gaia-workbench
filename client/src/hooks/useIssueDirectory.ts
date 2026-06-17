@@ -74,56 +74,43 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
   const [auditSummary, setAuditSummary] = useState<IssueAuditSummary>(defaultAuditSummary);
   const [reloadToken, setReloadToken] = useState(0);
 
+  const filterQuery = useMemo(
+    () =>
+      buildDashboardQuery(
+        {
+          search: searchFilter,
+          status: statusFilter,
+          priority: priorityFilter,
+          label: labelFilter,
+          includeArchived,
+          blockedOnly,
+          staleOnly,
+          pageSize
+        },
+        { includePageSize: false }
+      ),
+    [blockedOnly, includeArchived, labelFilter, pageSize, priorityFilter, searchFilter, staleOnly, statusFilter]
+  );
+  const issueListQuery = useMemo(() => {
+    const params = new URLSearchParams(filterQuery);
+    params.set('page', String(currentPage));
+    params.set('limit', String(pageSize));
+
+    return params.toString();
+  }, [currentPage, filterQuery, pageSize]);
+
   useEffect(() => {
     const controller = new AbortController();
 
     async function loadIssues() {
-      const params = new URLSearchParams(
-        buildDashboardQuery(
-          {
-            search: searchFilter,
-            status: statusFilter,
-            priority: priorityFilter,
-            label: labelFilter,
-            includeArchived,
-            blockedOnly,
-            staleOnly,
-            pageSize
-          },
-          { includePageSize: false }
-        )
-      );
-      params.set('page', String(currentPage));
-      params.set('limit', String(pageSize));
-
-      const auditParams = new URLSearchParams(
-        buildDashboardQuery(
-          {
-            search: searchFilter,
-            status: statusFilter,
-            priority: priorityFilter,
-            label: labelFilter,
-            includeArchived,
-            blockedOnly,
-            staleOnly,
-            pageSize
-          },
-          { includePageSize: false }
-        )
-      );
-
       try {
         setLoadState('loading');
         setLoadError(null);
-        const [body, nextAuditSummary] = await Promise.all([
-          fetchIssues(params, controller.signal),
-          fetchIssueAuditSummary(auditParams, controller.signal)
-        ]);
+        const body = await fetchIssues(new URLSearchParams(issueListQuery), controller.signal);
 
         setIssues(body.items);
         setPagination(body.pagination);
         setSummary(body.summary);
-        setAuditSummary(nextAuditSummary);
         setLoadState('loaded');
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -136,18 +123,26 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     void loadIssues();
 
     return () => controller.abort();
-  }, [
-    blockedOnly,
-    currentPage,
-    includeArchived,
-    labelFilter,
-    pageSize,
-    priorityFilter,
-    reloadToken,
-    searchFilter,
-    staleOnly,
-    statusFilter
-  ]);
+  }, [issueListQuery, reloadToken]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadAuditSummary() {
+      try {
+        setAuditSummary(await fetchIssueAuditSummary(new URLSearchParams(filterQuery), controller.signal));
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setLoadError(error instanceof Error ? error.message : 'Unable to load issue audit summary.');
+          setLoadState('error');
+        }
+      }
+    }
+
+    void loadAuditSummary();
+
+    return () => controller.abort();
+  }, [filterQuery, reloadToken]);
 
   const activeFilterSummaries = useMemo(() => {
     const filters: ActiveFilterSummary[] = [];

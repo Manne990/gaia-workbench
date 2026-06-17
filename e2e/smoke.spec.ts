@@ -4637,6 +4637,16 @@ test('large issue lists remain filterable and can open detail', async ({ page })
   await expect(directDetail.locator('.detail-description')).toHaveText('Large-list guardrail item 0420');
   await expect(page).toHaveURL(new RegExp(`/issues/${targetIssue.id}$`));
 
+  const auditSummaryRequests: string[] = [];
+
+  page.on('request', (request) => {
+    const requestUrl = new URL(request.url());
+
+    if (requestUrl.pathname === '/api/issues/audit-summary') {
+      auditSummaryRequests.push(requestUrl.search);
+    }
+  });
+
   await page.goto('/');
 
   const filters = page.getByLabel('Issue filters');
@@ -4646,10 +4656,13 @@ test('large issue lists remain filterable and can open detail', async ({ page })
   await expect(page.getByLabel('25 issues shown')).toBeVisible();
 
   const pagination = page.getByLabel('Issue pagination');
+  const auditRequestsBeforePagination = auditSummaryRequests.length;
+
   await expect(pagination).toContainText('Page 1 of 20');
   await pagination.getByRole('button', { name: 'Next' }).click();
   await expect(pagination).toContainText('Page 2 of 20');
   await expect(page.getByRole('row', { name: new RegExp(`${secondPageTarget.title}.*`) })).toBeVisible();
+  expect(auditSummaryRequests).toHaveLength(auditRequestsBeforePagination);
 
   await page.getByRole('button', { name: `Open ${secondPageTarget.title}` }).click();
   const pagedDetail = page.getByRole('region', { name: secondPageTarget.title });

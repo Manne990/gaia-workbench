@@ -225,6 +225,9 @@ export function App() {
   const [isDependencySubmitting, setIsDependencySubmitting] = useState(false);
   const [savedViews, setSavedViews] = useState<SavedFilterView[]>([]);
   const [selectedSavedViewId, setSelectedSavedViewId] = useState(() => initialRouteStateRef.current?.savedViewId ?? '');
+  const [activeSavedViewId, setActiveSavedViewId] = useState<string | null>(
+    () => initialRouteStateRef.current?.savedViewId ?? null
+  );
   const [savedViewName, setSavedViewName] = useState('');
   const [savedViewError, setSavedViewError] = useState<string | null>(null);
   const [isSavedViewBusy, setIsSavedViewBusy] = useState(false);
@@ -281,13 +284,12 @@ export function App() {
     return query ? `/api/export.csv?${query}` : '/api/export.csv';
   }, [dashboardFilters]);
   const activeFilterSummaries: ActiveFilterSummary[] = useMemo(() => {
-    const activeSavedViewId = activeSavedViewIdRef.current;
     const activeSavedView = activeSavedViewId ? savedViews.find((view) => view.id === activeSavedViewId) : null;
 
     return activeSavedView
       ? [{ key: 'savedView', label: 'Saved view', value: activeSavedView.name }, ...dashboardActiveFilterSummaries]
       : dashboardActiveFilterSummaries;
-  }, [dashboardActiveFilterSummaries, savedViews, selectedSavedViewId]);
+  }, [activeSavedViewId, dashboardActiveFilterSummaries, savedViews]);
   const hasActiveFilters = activeFilterSummaries.length > 0;
   const loadSavedViews = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -779,7 +781,7 @@ export function App() {
       if (routeState.savedViewId) {
         void restoreSavedViewFromRoute(routeState.savedViewId, routeState);
       } else {
-        activeSavedViewIdRef.current = null;
+        setActiveSavedViewState(null);
         savedViewRouteAbortRef.current?.abort();
         savedViewRouteAbortRef.current = null;
       }
@@ -818,8 +820,13 @@ export function App() {
     writeRouteState(selectedIssueId, filters, mode, savedViewId);
   }
 
+  function setActiveSavedViewState(viewId: string | null) {
+    activeSavedViewIdRef.current = viewId;
+    setActiveSavedViewId(viewId);
+  }
+
   function commitDashboardFilterRoute(filters: DashboardFilters, mode: 'push' | 'replace') {
-    activeSavedViewIdRef.current = null;
+    setActiveSavedViewState(null);
     savedViewRouteAbortRef.current?.abort();
     savedViewRouteAbortRef.current = null;
     dashboardFiltersRef.current = filters;
@@ -886,7 +893,7 @@ export function App() {
     const currentSelectedIssueId = selectedIssueIdRef.current;
 
     dashboardFiltersRef.current = defaultDashboardFilters;
-    activeSavedViewIdRef.current = null;
+    setActiveSavedViewState(null);
     savedViewRouteAbortRef.current?.abort();
     savedViewRouteAbortRef.current = null;
     clearFilters();
@@ -940,7 +947,7 @@ export function App() {
     const nextFilters = getFiltersForSavedView(view);
     const nextSelectedIssueId = getSelectedIssueIdForSavedView();
 
-    activeSavedViewIdRef.current = view.id;
+    setActiveSavedViewState(view.id);
     upsertSavedView(view);
     dashboardFiltersRef.current = nextFilters;
     selectedIssueIdRef.current = nextSelectedIssueId;
@@ -961,7 +968,7 @@ export function App() {
 
     const controller = new AbortController();
     savedViewRouteAbortRef.current = controller;
-    activeSavedViewIdRef.current = savedViewId;
+    setActiveSavedViewState(savedViewId);
     setSelectedSavedViewId(savedViewId);
     setIsSavedViewBusy(true);
     setSavedViewError(null);
@@ -982,7 +989,7 @@ export function App() {
       const message = error instanceof Error ? error.message : 'Saved view restore failed.';
 
       if (message === 'Saved view not found') {
-        activeSavedViewIdRef.current = null;
+        setActiveSavedViewState(null);
         dashboardFiltersRef.current = fallbackRouteState.filters;
         selectedIssueIdRef.current = fallbackRouteState.issueId;
         setDashboardFilters(fallbackRouteState.filters);
@@ -991,7 +998,7 @@ export function App() {
         setSavedViewError('Saved view not found. Showing filters from the URL instead.');
         writeRouteState(fallbackRouteState.issueId, fallbackRouteState.filters, 'replace', null);
       } else {
-        activeSavedViewIdRef.current = null;
+        setActiveSavedViewState(null);
         setSavedViewError(message);
       }
     } finally {
@@ -1022,7 +1029,7 @@ export function App() {
         ...dashboardFiltersRef.current
       });
 
-      activeSavedViewIdRef.current = view.id;
+      setActiveSavedViewState(view.id);
       upsertSavedView(view);
       writeRouteState(selectedIssueIdRef.current, dashboardFiltersRef.current, 'replace', view.id);
     } catch (error) {
@@ -1144,7 +1151,7 @@ export function App() {
       setSavedViews((current) => current.filter((view) => view.id !== selectedSavedViewId));
 
       if (activeSavedViewIdRef.current === selectedSavedViewId) {
-        activeSavedViewIdRef.current = null;
+        setActiveSavedViewState(null);
         writeRouteState(selectedIssueIdRef.current, dashboardFiltersRef.current, 'replace', null);
       }
 

@@ -746,6 +746,48 @@ test('command palette opens and closes issue detail from keyboard commands', asy
   await expect(issueListHeading).toBeFocused();
 });
 
+test('command palette toggles dashboard density and restores focus', async ({ page }) => {
+  await page.goto('/');
+
+  const quickActionsButton = page.getByRole('button', { name: 'Quick Actions' });
+  const commandPalette = page.getByRole('dialog', { name: 'Command palette' });
+  const commandSearch = page.getByLabel('Search commands');
+  const densityControls = page.getByLabel('Dashboard density');
+  const compactButton = densityControls.getByRole('button', { name: 'Compact' });
+  const comfortableButton = densityControls.getByRole('button', { name: 'Comfortable' });
+
+  await expect(comfortableButton).toHaveAttribute('aria-pressed', 'true');
+  await quickActionsButton.click();
+  await expect(commandPalette).toBeVisible();
+  await expect(commandSearch).toBeFocused();
+  await commandSearch.fill('compact density');
+  await page.keyboard.press('Enter');
+
+  await expect(commandPalette).toHaveCount(0);
+  await expect(compactButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(quickActionsButton).toBeFocused();
+
+  await quickActionsButton.click();
+  await expect(commandPalette).toBeVisible();
+  await expect(commandSearch).toBeFocused();
+  await commandSearch.fill('comfortable density');
+  await page.keyboard.press('Enter');
+
+  await expect(commandPalette).toHaveCount(0);
+  await expect(comfortableButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(quickActionsButton).toBeFocused();
+
+  await quickActionsButton.click();
+  await expect(commandPalette).toBeVisible();
+  await expect(commandSearch).toBeFocused();
+  await commandSearch.fill('compact density');
+  await page.keyboard.press('Enter');
+  await expect(compactButton).toHaveAttribute('aria-pressed', 'true');
+
+  await page.reload();
+  await expect(compactButton).toHaveAttribute('aria-pressed', 'true');
+});
+
 test('imports tracker JSON through preview and apply', async ({ page }, testInfo) => {
   await page.goto('/');
 

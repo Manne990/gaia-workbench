@@ -1040,6 +1040,93 @@ test('command palette changes the selected issue status and handles no selection
   await expect(page.getByRole('row', { name: /Palette status shortcut issue.*Done.*Medium/ })).toBeVisible();
 });
 
+test('issue detail undoes the latest status transition with audit evidence', async ({ page }) => {
+  const issue = await createIssueThroughApi(page, {
+    title: 'Undo status detail issue',
+    description: 'Detail action should restore the previous status.',
+    status: 'todo',
+    priority: 'medium'
+  });
+  const statusUpdateResponse = await page.request.put(`/api/issues/${issue.id}`, {
+    data: { status: 'review' }
+  });
+
+  expect(statusUpdateResponse.ok()).toBe(true);
+
+  await page.goto(`/issues/${issue.id}?search=${encodeURIComponent('Undo status detail')}`);
+
+  const detail = page.getByRole('region', { name: issue.title });
+
+  await expect(detail).toBeVisible();
+  await expect(detail.getByLabel('Issue details')).toContainText('Review');
+  await expect(page.getByRole('row', { name: /Undo status detail issue.*Review.*Medium/ })).toBeVisible();
+
+  const undoResponsePromise = page.waitForResponse((response) => {
+    const responseUrl = new URL(response.url());
+
+    return response.request().method() === 'POST' && responseUrl.pathname === `/api/issues/${issue.id}/undo-status`;
+  });
+
+  await detail.getByRole('button', { name: `Undo last status change for ${issue.title}` }).click();
+
+  const undoResponse = await undoResponsePromise;
+  const activityResponse = await page.request.get(`/api/issues/${issue.id}/activity`);
+  const activity = (await activityResponse.json()) as Array<{
+    id: string;
+    type: string;
+    metadata: Record<string, string>;
+  }>;
+  const statusEvents = activity.filter((event) => event.type === 'issue_status_changed');
+
+  expect(undoResponse.ok()).toBe(true);
+  expect(activityResponse.ok()).toBe(true);
+  expect(statusEvents).toHaveLength(2);
+  expect(statusEvents[0].metadata).toEqual({ from: 'todo', to: 'review' });
+  expect(statusEvents[1].metadata).toEqual({
+    from: 'review',
+    to: 'todo',
+    undoOfEventId: statusEvents[0].id
+  });
+  await expect(detail.getByLabel('Issue details')).toContainText('Todo');
+  await expect(page.getByRole('row', { name: /Undo status detail issue.*Todo.*Medium/ })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Restored status to Todo.' })).toBeVisible();
+  await expect(detail.getByLabel('Issue activity')).toContainText('Review -> Todo');
+});
+
+test('issue detail reports blocked status undo without mutating the issue', async ({ page }) => {
+  const issue = await createIssueThroughApi(page, {
+    title: 'Undo status unavailable issue',
+    description: 'No prior status transition exists.',
+    status: 'todo',
+    priority: 'high'
+  });
+
+  await page.goto(`/issues/${issue.id}?search=${encodeURIComponent('Undo status unavailable')}`);
+
+  const detail = page.getByRole('region', { name: issue.title });
+
+  await expect(detail).toBeVisible();
+  await expect(detail.getByLabel('Issue details')).toContainText('Todo');
+
+  const undoResponsePromise = page.waitForResponse((response) => {
+    const responseUrl = new URL(response.url());
+
+    return response.request().method() === 'POST' && responseUrl.pathname === `/api/issues/${issue.id}/undo-status`;
+  });
+
+  await detail.getByRole('button', { name: `Undo last status change for ${issue.title}` }).click();
+
+  const undoResponse = await undoResponsePromise;
+  const issueResponse = await page.request.get(`/api/issues/${issue.id}`);
+  const unchangedIssue = (await issueResponse.json()) as ApiIssue;
+
+  expect(undoResponse.status()).toBe(409);
+  expect(issueResponse.ok()).toBe(true);
+  expect(unchangedIssue.status).toBe('todo');
+  await expect(detail.getByRole('alert')).toContainText('No status transition to undo.');
+  await expect(detail.getByLabel('Issue details')).toContainText('Todo');
+});
+
 test('command palette jumps to saved views and applies saved view commands', async ({ page }) => {
   await createIssueThroughApi(page, {
     title: 'Palette saved target',

@@ -1254,6 +1254,83 @@ describe('issues API', () => {
       });
   });
 
+  it('undoes the latest issue status transition with audit evidence', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const created = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Undo status API issue', status: 'todo' })
+      .expect(201);
+    const moved = await request(app).put(`/api/issues/${created.body.id}`).send({ status: 'review' }).expect(200);
+    const undone = await request(app).post(`/api/issues/${created.body.id}/undo-status`).expect(200);
+
+    expect(moved.body).toMatchObject({
+      id: created.body.id,
+      status: 'review'
+    });
+    expect(undone.body).toMatchObject({
+      id: created.body.id,
+      status: 'todo'
+    });
+
+    await request(app)
+      .get(`/api/issues/${created.body.id}/activity`)
+      .expect(200)
+      .expect((activity) => {
+        expect(activity.body.map((event: { type: string }) => event.type)).toEqual([
+          'issue_created',
+          'issue_status_changed',
+          'issue_status_changed'
+        ]);
+        expect(activity.body[1].metadata).toEqual({ from: 'todo', to: 'review' });
+        expect(activity.body[2].metadata).toEqual({
+          from: 'review',
+          to: 'todo',
+          undoOfEventId: activity.body[1].id
+        });
+      });
+  });
+
+  it('blocks status undo when the previous status is not known', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const created = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Undo status blocked issue', status: 'todo' })
+      .expect(201);
+
+    await request(app).post(`/api/issues/${created.body.id}/undo-status`).expect(409, {
+      error: 'No status transition to undo.'
+    });
+    await request(app)
+      .get(`/api/issues/${created.body.id}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.status).toBe('todo');
+      });
+    await request(app)
+      .get(`/api/issues/${created.body.id}/activity`)
+      .expect(200)
+      .expect((activity) => {
+        expect(activity.body.map((event: { type: string }) => event.type)).toEqual(['issue_created']);
+      });
+  });
+
+  it('blocks status undo while an issue is archived', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const created = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Archived undo status issue', status: 'todo' })
+      .expect(201);
+
+    await request(app).put(`/api/issues/${created.body.id}`).send({ status: 'review' }).expect(200);
+    await request(app).post(`/api/issues/${created.body.id}/archive`).expect(200);
+    await request(app).post(`/api/issues/${created.body.id}/undo-status`).expect(409, {
+      error: 'Restore archived issues before undoing status.'
+    });
+  });
+
   it('rejects malformed bulk status requests and reports mixed missing ids without blocking valid updates', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

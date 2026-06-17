@@ -4497,6 +4497,97 @@ test('saved filter views persist restore and compose with detail routes', async 
   expect(savedViewListBody).toEqual([]);
 });
 
+test('saved view route restore keeps active filter chips aligned with restored filters', async ({ page }) => {
+  await createIssueThroughApi(page, {
+    title: 'Saved chip restore target',
+    description: 'Target issue restored by a saved view route.',
+    status: 'review',
+    priority: 'high',
+    labels: ['chip-restore']
+  });
+
+  const savedViewResponse = await page.request.post('/api/filter-views', {
+    data: {
+      name: 'Chip restore view',
+      search: 'Saved chip restore target',
+      status: 'review',
+      priority: 'high',
+      label: 'chip-restore',
+      includeArchived: true,
+      blockedOnly: false,
+      staleOnly: false,
+      pageSize: 50
+    }
+  });
+
+  expect(savedViewResponse.ok()).toBe(true);
+
+  const savedView = (await savedViewResponse.json()) as { id: string };
+  let resolveSavedViewDetailIntercepted = () => {};
+  let releaseSavedViewDetail: (() => void) | null = null;
+  const savedViewDetailIntercepted = new Promise<void>((resolve) => {
+    resolveSavedViewDetailIntercepted = resolve;
+  });
+  const savedViewDetailRelease = new Promise<void>((resolve) => {
+    releaseSavedViewDetail = resolve;
+  });
+
+  await page.route(`**/api/filter-views/${savedView.id}`, async (route) => {
+    if (route.request().method() === 'GET') {
+      resolveSavedViewDetailIntercepted();
+      await savedViewDetailRelease;
+    }
+
+    await route.continue();
+  });
+
+  await page.goto(
+    `/?savedView=${encodeURIComponent(savedView.id)}&search=stale-route-filter&status=todo&priority=low&label=stale-label&limit=10`
+  );
+
+  const filters = page.getByLabel('Issue filters');
+  const settings = await expandDashboardSettings(page);
+  const savedViews = settings.getByLabel('Saved filter views');
+  const activeFilters = page.getByLabel('Active filters');
+
+  await savedViewDetailIntercepted;
+  await expect(savedViews.getByLabel('Saved views')).toContainText('Chip restore view');
+  await expect(filters.getByLabel('Search')).toHaveValue('stale-route-filter');
+  await expect(filters.getByLabel('Status')).toHaveValue('todo');
+  await expect(settings.getByLabel('Page size')).toHaveValue('10');
+  await expect(activeFilters).toContainText('Search: stale-route-filter');
+  await expect(activeFilters).toContainText('Label: stale-label');
+  await expect(activeFilters).not.toContainText('Saved view: Chip restore view');
+
+  if (!releaseSavedViewDetail) {
+    throw new Error('Expected saved view detail request to be intercepted.');
+  }
+
+  releaseSavedViewDetail();
+
+  await expect(filters.getByLabel('Search')).toHaveValue('Saved chip restore target');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(filters.getByLabel('Priority')).toHaveValue('high');
+  await expect(filters.getByLabel('Label')).toHaveValue('chip-restore');
+  await expect(filters.getByLabel('Include archived')).toBeChecked();
+  await expect(settings.getByLabel('Page size')).toHaveValue('50');
+  await expect(activeFilters).toContainText('Saved view: Chip restore view');
+  await expect(activeFilters).toContainText('Search: Saved chip restore target');
+  await expect(activeFilters).toContainText('Status: Review');
+  await expect(activeFilters).toContainText('Priority: High');
+  await expect(activeFilters).toContainText('Label: chip-restore');
+  await expect(activeFilters).toContainText('Archived: Included');
+  await expect(activeFilters).toContainText('Page size: 50');
+  await expect(activeFilters).not.toContainText('stale-route-filter');
+  await expect(activeFilters).not.toContainText('stale-label');
+
+  await page.getByRole('button', { name: 'Clear board filters' }).click();
+
+  await expect(page.getByLabel('Active filters')).toHaveCount(0);
+  await expect(page.getByLabel('Active filter count')).toHaveCount(0);
+  await expect(page).toHaveURL('/');
+});
+
 test('clearing a default saved view removes the active filter summary', async ({ page }) => {
   await page.goto('/');
 

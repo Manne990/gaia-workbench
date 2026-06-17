@@ -884,6 +884,64 @@ test('command palette opens and closes issue detail from keyboard commands', asy
   await expect(issueListHeading).toBeFocused();
 });
 
+test('keyboard shortcuts move detail focus through visible issues without stealing search focus', async ({ page }) => {
+  const firstCreated = await createIssueThroughApi(page, {
+    title: 'Keyboard focus path alpha',
+    description: 'Keyboard navigation candidate alpha.'
+  });
+  const secondCreated = await createIssueThroughApi(page, {
+    title: 'Keyboard focus path beta',
+    description: 'Keyboard navigation candidate beta.'
+  });
+  const thirdCreated = await createIssueThroughApi(page, {
+    title: 'Keyboard focus path gamma',
+    description: 'Keyboard navigation candidate gamma.'
+  });
+  const issuesByTitle = new Map(
+    [firstCreated, secondCreated, thirdCreated].map((issue) => [issue.title, issue] as const)
+  );
+
+  await page.goto(`/?search=${encodeURIComponent('Keyboard focus path')}`);
+
+  const issueTitleCells = page.locator('tbody .issue-title-text');
+  await expect(issueTitleCells).toHaveCount(3);
+  const visibleTitles = await issueTitleCells.allTextContents();
+  const firstVisibleIssue = issuesByTitle.get(visibleTitles[0]);
+  const secondVisibleIssue = issuesByTitle.get(visibleTitles[1]);
+
+  expect(firstVisibleIssue).toBeDefined();
+  expect(secondVisibleIssue).toBeDefined();
+
+  await page.keyboard.press('Alt+ArrowDown');
+
+  const firstDetail = page.getByRole('region', { name: firstVisibleIssue!.title });
+  const firstHeading = firstDetail.getByRole('heading', { name: firstVisibleIssue!.title });
+
+  await expect(page).toHaveURL(new RegExp(`/issues/${firstVisibleIssue!.id}`));
+  await expect(firstHeading).toBeFocused();
+
+  await page.keyboard.press('Alt+ArrowDown');
+
+  const secondDetail = page.getByRole('region', { name: secondVisibleIssue!.title });
+  const secondHeading = secondDetail.getByRole('heading', { name: secondVisibleIssue!.title });
+
+  await expect(page).toHaveURL(new RegExp(`/issues/${secondVisibleIssue!.id}`));
+  await expect(secondHeading).toBeFocused();
+
+  await page.keyboard.press('Alt+ArrowUp');
+  await expect(page).toHaveURL(new RegExp(`/issues/${firstVisibleIssue!.id}`));
+  await expect(firstHeading).toBeFocused();
+
+  const issueSearch = page.getByRole('search', { name: 'Issue filters' }).getByLabel('Search');
+
+  await issueSearch.focus();
+  await expect(issueSearch).toBeFocused();
+  await page.keyboard.press('Alt+ArrowDown');
+
+  await expect(page).toHaveURL(new RegExp(`/issues/${firstVisibleIssue!.id}`));
+  await expect(issueSearch).toBeFocused();
+});
+
 test('command palette changes the selected issue status and handles no selection', async ({ page }) => {
   const issue = await createIssueThroughApi(page, {
     title: 'Palette status shortcut issue',

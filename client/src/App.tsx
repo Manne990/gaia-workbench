@@ -166,6 +166,21 @@ function readApplySavedViewCommand(commandId: string): string | null {
   }
 }
 
+function isEditableKeyboardTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    target.isContentEditable ||
+    target.contentEditable === 'true' ||
+    Boolean(target.closest('form'))
+  );
+}
+
 export function App() {
   const initialRouteStateRef = useRef<RouteState | null>(null);
 
@@ -681,15 +696,10 @@ export function App() {
         return;
       }
 
-      const target = event.target as HTMLElement | null;
-      const isEditableTarget =
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement ||
-        target?.isContentEditable ||
-        target?.contentEditable === 'true';
+      const focusReturnTarget =
+        event.target instanceof HTMLElement ? event.target : (document.activeElement as HTMLElement | null);
 
-      if (isEditableTarget) {
+      if (isEditableKeyboardTarget(event.target)) {
         return;
       }
 
@@ -700,7 +710,7 @@ export function App() {
         return;
       }
 
-      commandPaletteFocusReturnRef.current = target ?? (document.activeElement as HTMLElement | null);
+      commandPaletteFocusReturnRef.current = focusReturnTarget;
       setIsCommandPaletteOpen(true);
     }
 
@@ -710,6 +720,44 @@ export function App() {
       window.removeEventListener('keydown', handlePaletteShortcut);
     };
   }, [isCommandPaletteOpen]);
+
+  useEffect(() => {
+    function handleVisibleIssueShortcut(event: globalThis.KeyboardEvent) {
+      if (
+        !event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')
+      ) {
+        return;
+      }
+
+      if (isCommandPaletteOpen || isEditableKeyboardTarget(event.target) || filteredIssues.length === 0) {
+        return;
+      }
+
+      const selectedIssueIndex = selectedIssueIdRef.current
+        ? filteredIssues.findIndex((issue) => issue.id === selectedIssueIdRef.current)
+        : -1;
+      const fallbackIndex = event.key === 'ArrowDown' ? 0 : filteredIssues.length - 1;
+      const nextIssueIndex =
+        selectedIssueIndex === -1
+          ? fallbackIndex
+          : event.key === 'ArrowDown'
+            ? Math.min(selectedIssueIndex + 1, filteredIssues.length - 1)
+            : Math.max(selectedIssueIndex - 1, 0);
+
+      event.preventDefault();
+      openIssue(filteredIssues[nextIssueIndex]);
+    }
+
+    window.addEventListener('keydown', handleVisibleIssueShortcut);
+
+    return () => {
+      window.removeEventListener('keydown', handleVisibleIssueShortcut);
+    };
+  }, [filteredIssues, isCommandPaletteOpen]);
 
   useEffect(() => {
     if (didCanonicalizeInitialRouteRef.current) {

@@ -21,7 +21,7 @@ import {
   type SavedFilterView,
   SavedFilterViewRepository
 } from './db/index.js';
-import { buildIssueListFilters, getIssueListPagination } from './issueListQuery.js';
+import { buildIssueListFilterModel, buildIssueListQueryModel } from './issueListQuery.js';
 import { applyTrackerImport, ImportValidationError, previewTrackerImport, type ImportPlan } from './trackerImport.js';
 
 type AppConfig = {
@@ -585,8 +585,8 @@ export function createApp(config: AppConfig = {}) {
 
   app.get('/api/export.csv', (req, res) => {
     try {
-      const filters = buildIssueListFilters(req.query);
-      const issues = issueRepository.listForExport(filters);
+      const queryModel = buildIssueListFilterModel(req.query);
+      const issues = issueRepository.listForExport(queryModel.filters);
 
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', 'attachment; filename="tinytracker-issues.csv"');
@@ -693,9 +693,9 @@ export function createApp(config: AppConfig = {}) {
 
   app.get('/api/issues', (req, res) => {
     try {
-      const filters = buildIssueListFilters(req.query);
+      const queryModel = buildIssueListQueryModel(req.query);
 
-      return res.status(200).json(issueRepository.list(filters, getIssueListPagination(req.query)));
+      return res.status(200).json(issueRepository.list(queryModel.filters, queryModel.pagination));
     } catch (error) {
       if (isValidationError(error)) {
         return sendValidationError(res, error.message);
@@ -706,9 +706,9 @@ export function createApp(config: AppConfig = {}) {
 
   app.get('/api/issues/audit-summary', (req, res) => {
     try {
-      const filters = buildIssueListFilters(req.query);
+      const queryModel = buildIssueListFilterModel(req.query);
 
-      return res.status(200).json(issueRepository.getAuditSummary(filters));
+      return res.status(200).json(issueRepository.getAuditSummary(queryModel.filters));
     } catch (error) {
       if (isValidationError(error)) {
         return sendValidationError(res, error.message);

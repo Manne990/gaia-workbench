@@ -1,4 +1,4 @@
-import type { IssueListFilters } from './db/index.js';
+import type { IssueListFilters, IssueListPaginationInput } from './db/index.js';
 
 const DEFAULT_ISSUE_PAGE = 1;
 const DEFAULT_ISSUE_LIMIT = 25;
@@ -14,6 +14,14 @@ type IssueListQuery = {
   includeArchived?: unknown;
   blockedOnly?: unknown;
   staleOnly?: unknown;
+};
+
+export type IssueListFilterModel = {
+  filters: IssueListFilters;
+};
+
+export type IssueListQueryModel = IssueListFilterModel & {
+  pagination: IssueListPaginationInput;
 };
 
 function getOptionalQueryString(value: unknown): string | undefined {
@@ -73,6 +81,19 @@ export function getIssueListPagination(query: Pick<IssueListQuery, 'page' | 'lim
   }
 
   return { page, limit };
+}
+
+export function buildIssueListQueryModel(query: IssueListQuery): IssueListQueryModel {
+  return {
+    filters: buildIssueListFilters(query),
+    pagination: getIssueListPagination(query)
+  };
+}
+
+export function buildIssueListFilterModel(query: IssueListQuery): IssueListFilterModel {
+  return {
+    filters: buildIssueListFilters(query)
+  };
 }
 
 export function buildIssueListFilters(

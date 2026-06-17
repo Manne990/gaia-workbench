@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildIssueListFilters, getIssueListPagination } from '../src/issueListQuery.js';
+import {
+  buildIssueListFilterModel,
+  buildIssueListFilters,
+  buildIssueListQueryModel,
+  getIssueListPagination
+} from '../src/issueListQuery.js';
 
 describe('issue list query helpers', () => {
   it('parses issue-list pagination with defaults and valid integers', () => {
@@ -58,5 +63,54 @@ describe('issue list query helpers', () => {
     expect(() => buildIssueListFilters({ includeArchived: 'yes' })).toThrow('Invalid includeArchived parameter');
     expect(() => buildIssueListFilters({ blockedOnly: 'yes' })).toThrow('Invalid blockedOnly parameter');
     expect(() => buildIssueListFilters({ staleOnly: 'yes' })).toThrow('Invalid staleOnly parameter');
+  });
+
+  it('builds a shared query model for paginated issue-list endpoints', () => {
+    expect(
+      buildIssueListQueryModel({
+        page: '2',
+        limit: '10',
+        search: 'api',
+        status: 'review',
+        includeArchived: 'true',
+        blockedOnly: 'true',
+        staleOnly: 'false'
+      })
+    ).toEqual({
+      filters: {
+        status: 'review',
+        priority: undefined,
+        search: 'api',
+        label: undefined,
+        includeArchived: true,
+        blockedOnly: true,
+        staleOnly: false
+      },
+      pagination: {
+        page: 2,
+        limit: 10
+      }
+    });
+  });
+
+  it('builds a filter-only model for summary and export endpoints', () => {
+    expect(
+      buildIssueListFilterModel({
+        page: '0',
+        limit: '101',
+        label: ['ops'],
+        blockedOnly: 'true'
+      })
+    ).toEqual({
+      filters: {
+        status: undefined,
+        priority: undefined,
+        search: undefined,
+        label: 'ops',
+        includeArchived: false,
+        blockedOnly: true,
+        staleOnly: false
+      }
+    });
   });
 });

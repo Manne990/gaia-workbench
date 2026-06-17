@@ -99,6 +99,19 @@ function areStringArraysEqual(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
+function savedViewMatchesDashboardFilters(view: SavedFilterView, filters: DashboardFilters): boolean {
+  return (
+    view.search === filters.search &&
+    view.status === filters.status &&
+    view.priority === filters.priority &&
+    view.label === filters.label &&
+    view.includeArchived === filters.includeArchived &&
+    view.blockedOnly === filters.blockedOnly &&
+    view.staleOnly === filters.staleOnly &&
+    view.pageSize === filters.pageSize
+  );
+}
+
 function applyDependencyStateToIssue(issue: Issue, dependencies: IssueDependencyState): Issue {
   const dependsOnIssueIds = dependencies.dependencies.map((dependency) => dependency.id);
 
@@ -266,6 +279,7 @@ export function App() {
   const [activeSavedViewId, setActiveSavedViewId] = useState<string | null>(
     () => initialRouteStateRef.current?.savedViewId ?? null
   );
+  const [editedSavedViewId, setEditedSavedViewId] = useState<string | null>(null);
   const [savedViewName, setSavedViewName] = useState('');
   const [savedViewError, setSavedViewError] = useState<string | null>(null);
   const [isSavedViewBusy, setIsSavedViewBusy] = useState(false);
@@ -323,11 +337,24 @@ export function App() {
   }, [dashboardFilters]);
   const activeFilterSummaries: ActiveFilterSummary[] = useMemo(() => {
     const activeSavedView = activeSavedViewId ? savedViews.find((view) => view.id === activeSavedViewId) : null;
+    const editedSavedView = editedSavedViewId ? savedViews.find((view) => view.id === editedSavedViewId) : null;
 
-    return activeSavedView
-      ? [{ key: 'savedView', label: 'Saved view', value: activeSavedView.name }, ...dashboardActiveFilterSummaries]
-      : dashboardActiveFilterSummaries;
-  }, [activeSavedViewId, dashboardActiveFilterSummaries, savedViews]);
+    if (activeSavedView) {
+      return [
+        { key: 'savedView', label: 'Saved view', value: activeSavedView.name },
+        ...dashboardActiveFilterSummaries
+      ];
+    }
+
+    if (editedSavedView && !savedViewMatchesDashboardFilters(editedSavedView, dashboardFilters)) {
+      return [
+        { key: 'savedViewEdited', label: 'Saved view', value: `${editedSavedView.name} (edited)` },
+        ...dashboardActiveFilterSummaries
+      ];
+    }
+
+    return dashboardActiveFilterSummaries;
+  }, [activeSavedViewId, dashboardActiveFilterSummaries, dashboardFilters, editedSavedViewId, savedViews]);
   const hasActiveFilters = activeFilterSummaries.length > 0;
   const loadSavedViews = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -872,7 +899,7 @@ export function App() {
       if (routeState.savedViewId) {
         void restoreSavedViewFromRoute(routeState.savedViewId, routeState);
       } else {
-        setActiveSavedViewState(null);
+        clearSavedViewState();
         savedViewRouteAbortRef.current?.abort();
         savedViewRouteAbortRef.current = null;
       }
@@ -916,8 +943,23 @@ export function App() {
     setActiveSavedViewId(viewId);
   }
 
-  function commitDashboardFilterRoute(filters: DashboardFilters, mode: 'push' | 'replace') {
+  function clearSavedViewState() {
     setActiveSavedViewState(null);
+    setEditedSavedViewId(null);
+  }
+
+  function detachActiveSavedViewForEdit() {
+    const activeViewId = activeSavedViewIdRef.current;
+
+    setActiveSavedViewState(null);
+
+    if (activeViewId) {
+      setEditedSavedViewId(activeViewId);
+    }
+  }
+
+  function commitDashboardFilterRoute(filters: DashboardFilters, mode: 'push' | 'replace') {
+    detachActiveSavedViewForEdit();
     savedViewRouteAbortRef.current?.abort();
     savedViewRouteAbortRef.current = null;
     dashboardFiltersRef.current = filters;
@@ -984,7 +1026,7 @@ export function App() {
     const currentSelectedIssueId = selectedIssueIdRef.current;
 
     dashboardFiltersRef.current = defaultDashboardFilters;
-    setActiveSavedViewState(null);
+    clearSavedViewState();
     savedViewRouteAbortRef.current?.abort();
     savedViewRouteAbortRef.current = null;
     clearFilters();
@@ -1039,6 +1081,7 @@ export function App() {
     const nextSelectedIssueId = getSelectedIssueIdForSavedView();
 
     setActiveSavedViewState(view.id);
+    setEditedSavedViewId(null);
     upsertSavedView(view);
     dashboardFiltersRef.current = nextFilters;
     selectedIssueIdRef.current = nextSelectedIssueId;
@@ -1060,6 +1103,7 @@ export function App() {
     const controller = new AbortController();
     savedViewRouteAbortRef.current = controller;
     setActiveSavedViewState(savedViewId);
+    setEditedSavedViewId(null);
     setSelectedSavedViewId(savedViewId);
     setIsSavedViewBusy(true);
     setSavedViewError(null);
@@ -1080,7 +1124,7 @@ export function App() {
       const message = error instanceof Error ? error.message : 'Saved view restore failed.';
 
       if (message === 'Saved view not found') {
-        setActiveSavedViewState(null);
+        clearSavedViewState();
         dashboardFiltersRef.current = fallbackRouteState.filters;
         selectedIssueIdRef.current = fallbackRouteState.issueId;
         setDashboardFilters(fallbackRouteState.filters);
@@ -1089,7 +1133,7 @@ export function App() {
         setSavedViewError('Saved view not found. Showing filters from the URL instead.');
         writeRouteState(fallbackRouteState.issueId, fallbackRouteState.filters, 'replace', null);
       } else {
-        setActiveSavedViewState(null);
+        clearSavedViewState();
         setSavedViewError(message);
       }
     } finally {
@@ -1121,6 +1165,7 @@ export function App() {
       });
 
       setActiveSavedViewState(view.id);
+      setEditedSavedViewId(null);
       upsertSavedView(view);
       writeRouteState(selectedIssueIdRef.current, dashboardFiltersRef.current, 'replace', view.id);
     } catch (error) {
@@ -1244,6 +1289,10 @@ export function App() {
       if (activeSavedViewIdRef.current === selectedSavedViewId) {
         setActiveSavedViewState(null);
         writeRouteState(selectedIssueIdRef.current, dashboardFiltersRef.current, 'replace', null);
+      }
+
+      if (editedSavedViewId === selectedSavedViewId) {
+        setEditedSavedViewId(null);
       }
 
       setSelectedSavedViewId('');

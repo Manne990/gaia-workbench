@@ -253,6 +253,31 @@ async function createArchivedExportFixture(): Promise<TrackerExport> {
   return exported.body as TrackerExport;
 }
 
+function findStatusChangeEvent(payload: TrackerExport): {
+  issueIndex: number;
+  eventIndex: number;
+  event: ExportedIssue['activityEvents'][number];
+} {
+  const issueIndex = payload.issues.findIndex((issue) =>
+    issue.activityEvents.some((event) => event.type === 'issue_status_changed')
+  );
+
+  if (issueIndex < 0) {
+    throw new Error('Expected fixture to include status change activity');
+  }
+
+  const eventIndex = payload.issues[issueIndex].activityEvents.findIndex(
+    (event) => event.type === 'issue_status_changed'
+  );
+  const event = payload.issues[issueIndex].activityEvents[eventIndex];
+
+  if (!event) {
+    throw new Error('Expected fixture to include status change activity');
+  }
+
+  return { issueIndex, eventIndex, event };
+}
+
 describe('tracker import API', () => {
   it('previews a valid export without mutating the target database', async () => {
     const targetApp = createApp({ databasePath: ':memory:' });
@@ -1768,6 +1793,45 @@ describe('tracker import API', () => {
         })
       ])
     );
+    expect(afterImport.body).toEqual(beforeImport.body);
+  });
+
+  it('rejects invalid imported status-change activity metadata without mutating existing data', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const invalid = cloneExport(payload);
+    const { issueIndex, eventIndex, event } = findStatusChangeEvent(invalid);
+
+    await request(app).post('/api/issues').send({ title: 'Keep status metadata validation intact' }).expect(201);
+    const beforeImport = await request(app).get('/api/export').expect(200);
+
+    event.metadata = {
+      ...(event.metadata ?? {}),
+      from: 'blocked',
+      to: 'triage'
+    };
+
+    const preview = await request(app).post('/api/import/preview').send(invalid).expect(400);
+    const applied = await request(app).post('/api/import/apply').send(invalid).expect(400);
+    const afterImport = await request(app).get('/api/export').expect(200);
+
+    expect(preview.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'invalid_status_transition_metadata',
+          path: `$.issues[${issueIndex}].activityEvents[${eventIndex}].metadata.from`,
+          message: 'Status change activity metadata must reference valid issue statuses.',
+          value: 'blocked'
+        }),
+        expect.objectContaining({
+          code: 'invalid_status_transition_metadata',
+          path: `$.issues[${issueIndex}].activityEvents[${eventIndex}].metadata.to`,
+          message: 'Status change activity metadata must reference valid issue statuses.',
+          value: 'triage'
+        })
+      ])
+    );
+    expect(applied.body.errors).toEqual(preview.body.errors);
     expect(afterImport.body).toEqual(beforeImport.body);
   });
 

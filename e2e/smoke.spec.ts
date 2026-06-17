@@ -1241,9 +1241,11 @@ test('archive action offers undo recovery in active and include-archived modes',
 
   const filters = page.getByLabel('Issue filters');
   const includeArchived = filters.getByLabel('Include archived');
+  const issueListHeading = page.getByRole('heading', { name: 'Issue List' });
   const issueRow = page.getByRole('row', { name: new RegExp(`Undo archive recovery issue.*Todo.*Medium`) });
   const undoArchiveButton = page.getByRole('button', { name: `Undo archive of ${issue.title}` });
   const archiveNotice = page.getByRole('status').filter({ hasText: `Issue "${issue.title}" archived.` });
+  const dismissArchiveButton = page.getByRole('button', { name: 'Dismiss' });
 
   await expect(includeArchived).not.toBeChecked();
   await expect(issueRow).toBeVisible();
@@ -1260,12 +1262,16 @@ test('archive action offers undo recovery in active and include-archived modes',
   await expect(undoArchiveButton).toBeVisible();
   await expect(issueRow).toHaveCount(0);
 
+  await undoArchiveButton.focus();
+  await expect(undoArchiveButton).toBeFocused();
+
   const activeUndoResponse = waitForIssueActionResponse(page, issue.id, 'unarchive');
   await undoArchiveButton.click();
   await activeUndoResponse;
 
   await expect(archiveNotice).toHaveCount(0);
   await expect(issueRow).toBeVisible();
+  await expect(issueListHeading).toBeFocused();
 
   await includeArchived.check();
 
@@ -1280,11 +1286,18 @@ test('archive action offers undo recovery in active and include-archived modes',
   await expect(archiveNotice).toBeVisible();
   await expect(issueRow.locator('.archived-pill')).toHaveText('Archived');
 
-  const includedUndoResponse = waitForIssueActionResponse(page, issue.id, 'unarchive');
-  await undoArchiveButton.click();
-  await includedUndoResponse;
+  await dismissArchiveButton.focus();
+  await expect(dismissArchiveButton).toBeFocused();
+  await dismissArchiveButton.click();
 
   await expect(archiveNotice).toHaveCount(0);
+  await expect(issueListHeading).toBeFocused();
+  await expect(issueRow.locator('.archived-pill')).toHaveText('Archived');
+
+  const includedUndoResponse = waitForIssueActionResponse(page, issue.id, 'unarchive');
+  await page.getByRole('button', { name: `Unarchive ${issue.title}` }).click();
+  await includedUndoResponse;
+
   await expect(issueRow.locator('.archived-pill')).toHaveCount(0);
 });
 

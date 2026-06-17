@@ -65,7 +65,7 @@ type IssueListPanelProps = {
   onUnarchiveIssue: (issue: Issue, trigger: HTMLElement) => void;
   recentlyArchivedIssue: { id: string; title: string } | null;
   onUndoArchiveIssue: (trigger: HTMLElement) => void;
-  onDismissArchiveRecovery: () => void;
+  onDismissArchiveRecovery: (trigger: HTMLElement) => void;
   selectedBulkIssueIds: string[];
   bulkStatus: IssueStatus;
   bulkStatusMessage: string | null;
@@ -157,7 +157,11 @@ export function IssueListPanel({
             >
               Undo archive
             </button>
-            <button type="button" className="ghost-button" onClick={onDismissArchiveRecovery}>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={(event) => onDismissArchiveRecovery(event.currentTarget)}
+            >
               Dismiss
             </button>
           </div>

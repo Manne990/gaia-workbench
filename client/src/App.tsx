@@ -1318,7 +1318,7 @@ export function App() {
     }
   }
 
-  async function handleUndoArchiveIssue(trigger: HTMLElement) {
+  async function handleUndoArchiveIssue(_trigger: HTMLElement) {
     if (!recentlyArchivedIssue) {
       return;
     }
@@ -1334,9 +1334,9 @@ export function App() {
 
       refreshIssues();
       setRecentlyArchivedIssue(null);
-      restoreFocus(trigger, () => issueListHeadingRef.current);
+      restoreFocus(null, () => issueListHeadingRef.current);
     } catch {
-      restoreFocus(trigger, () => issueListHeadingRef.current);
+      restoreFocus(null, () => issueListHeadingRef.current);
     }
   }
 
@@ -1373,8 +1373,9 @@ export function App() {
     }
   }
 
-  function clearArchiveRecovery() {
+  function clearArchiveRecovery(_trigger: HTMLElement) {
     setRecentlyArchivedIssue(null);
+    restoreFocus(null, () => issueListHeadingRef.current);
   }
 
   function clearBulkSelection() {
@@ -1753,7 +1754,7 @@ export function App() {
           onUnarchiveIssue={handleUnarchiveIssue}
           recentlyArchivedIssue={recentlyArchivedIssue}
           onUndoArchiveIssue={(trigger) => handleUndoArchiveIssue(trigger)}
-          onDismissArchiveRecovery={clearArchiveRecovery}
+          onDismissArchiveRecovery={(trigger) => clearArchiveRecovery(trigger)}
           selectedBulkIssueIds={selectedBulkIssueIds}
           bulkStatus={bulkStatus}
           bulkStatusMessage={bulkStatusMessage}

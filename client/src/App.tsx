@@ -69,6 +69,7 @@ import {
 const DASHBOARD_DENSITY_STORAGE_KEY = 'tinytracker.dashboardDensity';
 const SELECTED_ISSUE_STATUS_COMMAND_PREFIX = 'set-selected-issue-status:';
 const APPLY_SAVED_VIEW_COMMAND_PREFIX = 'apply-saved-view:';
+const OPEN_VISIBLE_ISSUE_COMMAND_PREFIX = 'open-visible-issue:';
 type IssueAnchorTarget = {
   type: 'comment' | 'activity';
   id: string;
@@ -169,6 +170,10 @@ function applySavedViewCommandId(viewId: string): string {
   return `${APPLY_SAVED_VIEW_COMMAND_PREFIX}${encodeURIComponent(viewId)}`;
 }
 
+function openVisibleIssueCommandId(issueId: string): string {
+  return `${OPEN_VISIBLE_ISSUE_COMMAND_PREFIX}${encodeURIComponent(issueId)}`;
+}
+
 function readSelectedIssueStatusCommand(commandId: string): IssueStatus | null {
   if (!commandId.startsWith(SELECTED_ISSUE_STATUS_COMMAND_PREFIX)) {
     return null;
@@ -190,6 +195,20 @@ function readApplySavedViewCommand(commandId: string): string | null {
     return decodeURIComponent(viewId);
   } catch {
     return viewId;
+  }
+}
+
+function readOpenVisibleIssueCommand(commandId: string): string | null {
+  if (!commandId.startsWith(OPEN_VISIBLE_ISSUE_COMMAND_PREFIX)) {
+    return null;
+  }
+
+  const issueId = commandId.slice(OPEN_VISIBLE_ISSUE_COMMAND_PREFIX.length);
+
+  try {
+    return decodeURIComponent(issueId);
+  } catch {
+    return issueId;
   }
 }
 
@@ -403,6 +422,18 @@ export function App() {
       })),
     [isSavedViewBusy, savedViews]
   );
+  const visibleIssueCommands = useMemo(
+    () =>
+      filteredIssues.map((issue) => ({
+        id: openVisibleIssueCommandId(issue.id),
+        label: `Open issue: ${issue.title}`,
+        description: `Open ${issue.title}`,
+        commandHint: 'Issue',
+        searchText: [issue.id, ...issue.labels],
+        disabled: false
+      })),
+    [filteredIssues]
+  );
   const commandPaletteCommands = useMemo(
     () => [
       {
@@ -469,6 +500,7 @@ export function App() {
         commandHint: 'Esc',
         disabled: !selectedIssueId
       },
+      ...visibleIssueCommands,
       ...savedViewCommands
     ],
     [
@@ -480,7 +512,8 @@ export function App() {
       savedViewCommands,
       selectedIssue,
       selectedIssueId,
-      selectedIssueStatusCommands
+      selectedIssueStatusCommands,
+      visibleIssueCommands
     ]
   );
 
@@ -653,6 +686,21 @@ export function App() {
 
     if (savedViewCommandId) {
       await applySavedViewFromCommand(savedViewCommandId);
+      return;
+    }
+
+    const visibleIssueCommandId = readOpenVisibleIssueCommand(commandId);
+
+    if (visibleIssueCommandId) {
+      const issue = filteredIssues.find((visibleIssue) => visibleIssue.id === visibleIssueCommandId);
+
+      if (!issue) {
+        closeCommandPalette();
+        return;
+      }
+
+      closeCommandPalette({ restoreFocus: false, clearQuery: true });
+      openIssue(issue);
       return;
     }
 

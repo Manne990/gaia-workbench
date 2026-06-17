@@ -1174,6 +1174,186 @@ test('import replace refreshes an already open issue detail route', async ({ pag
   await expect(page).toHaveURL(new RegExp(`/issues/${existing.id}$`));
 });
 
+test('import skip keeps an already open issue detail route aligned to persisted issue state', async ({
+  page
+}, testInfo) => {
+  const existingResponse = await page.request.post('/api/issues', {
+    data: {
+      title: 'Selected import skipped issue',
+      description: 'Local detail that should remain after skip.',
+      status: 'todo',
+      priority: 'medium',
+      labels: ['local-skip']
+    }
+  });
+
+  expect(existingResponse.ok()).toBe(true);
+  const existing = (await existingResponse.json()) as ApiIssue;
+
+  await page.goto('/');
+  await page.getByRole('button', { name: `Open ${existing.title}` }).click();
+
+  const detail = page.getByRole('region', { name: existing.title });
+
+  await expect(detail.getByRole('heading', { name: existing.title })).toBeVisible();
+  await expect(detail.locator('.detail-description')).toHaveText('Local detail that should remain after skip.');
+
+  const importPayload = {
+    exportVersion: 1,
+    issues: [
+      {
+        id: existing.id,
+        title: 'Selected import skipped replacement',
+        description: 'Imported detail that should not replace the selected issue under skip.',
+        status: 'review',
+        priority: 'high',
+        labels: ['import-skip'],
+        dueDate: null,
+        isOverdue: false,
+        isBlocked: false,
+        dependsOnIssueIds: [],
+        archivedAt: null,
+        createdAt: existing.createdAt,
+        updatedAt: '2999-04-01T00:00:00.000Z',
+        comments: [],
+        activityEvents: []
+      }
+    ]
+  };
+  const importFilePath = testInfo.outputPath('tinytracker-selected-skip-import.json');
+
+  writeFileSync(importFilePath, JSON.stringify(importPayload), 'utf8');
+  await importJsonFileInput(page).setInputFiles(importFilePath);
+
+  const importPanel = page.getByRole('region', { name: 'Import preview' });
+
+  await expect(importPanel.getByText('Ready to create 0 issues, replace 0 changed issues, and skip 1.')).toBeVisible();
+  await importPanel.getByRole('button', { name: 'Apply Import' }).click();
+  await expect(
+    importPanel.getByText('Import applied: 0 issues created, 0 changed issues replaced, 1 skipped.')
+  ).toBeVisible();
+
+  await expect(detail.getByRole('heading', { name: existing.title })).toBeVisible();
+  await expect(detail.locator('.detail-description')).toHaveText('Local detail that should remain after skip.');
+  await expect(detail.getByLabel('Issue labels').getByText('local-skip', { exact: true })).toBeVisible();
+  await expect(detail.getByLabel('Issue labels').getByText('import-skip', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('row', { name: /Selected import skipped issue.*Todo.*Medium/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Selected import skipped replacement.*Review.*High/ })).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`/issues/${existing.id}$`));
+});
+
+test('import reject keeps an already open issue detail route aligned to persisted issue state', async ({
+  page
+}, testInfo) => {
+  const existingResponse = await page.request.post('/api/issues', {
+    data: {
+      title: 'Selected import rejected issue',
+      description: 'Local detail that should remain after rejected apply.',
+      status: 'todo',
+      priority: 'medium',
+      labels: ['local-reject']
+    }
+  });
+
+  expect(existingResponse.ok()).toBe(true);
+  const existing = (await existingResponse.json()) as ApiIssue;
+
+  await page.goto('/');
+  await page.getByRole('button', { name: `Open ${existing.title}` }).click();
+
+  const detail = page.getByRole('region', { name: existing.title });
+
+  await expect(detail.getByRole('heading', { name: existing.title })).toBeVisible();
+  await expect(detail.locator('.detail-description')).toHaveText(
+    'Local detail that should remain after rejected apply.'
+  );
+
+  const importPayload = {
+    exportVersion: 1,
+    issues: [
+      {
+        id: existing.id,
+        title: 'Selected import rejected replacement',
+        description: 'Apply rejection should keep the selected detail unchanged.',
+        status: 'review',
+        priority: 'high',
+        labels: ['import-reject'],
+        dueDate: null,
+        isOverdue: false,
+        isBlocked: false,
+        dependsOnIssueIds: [],
+        archivedAt: null,
+        createdAt: existing.createdAt,
+        updatedAt: '2999-05-01T00:00:00.000Z',
+        comments: [],
+        activityEvents: []
+      }
+    ]
+  };
+  const importFilePath = testInfo.outputPath('tinytracker-selected-reject-import.json');
+
+  writeFileSync(importFilePath, JSON.stringify(importPayload), 'utf8');
+  await importJsonFileInput(page).setInputFiles(importFilePath);
+
+  const importPanel = page.getByRole('region', { name: 'Import preview' });
+
+  await expect(importPanel.getByText('Ready to create 0 issues, replace 0 changed issues, and skip 1.')).toBeVisible();
+
+  await page.route('**/api/import/apply', async (route) => {
+    await route.fulfill({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        valid: false,
+        exportVersion: 1,
+        policy: 'skip-conflicts',
+        summary: {
+          input: { issues: 1, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 },
+          toCreate: { issues: 0, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 },
+          toReplace: { issues: 0, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 },
+          skip: { issues: 0, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 },
+          exactMatches: { issues: 0, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 },
+          changed: { issues: 1, comments: 0, editHistory: 0, activityEvents: 0, savedFilterViews: 0 },
+          reject: 1
+        },
+        decisions: [
+          {
+            entity: 'issue',
+            sourceId: existing.id,
+            sourceIndex: 0,
+            issueId: existing.id,
+            decision: 'reject',
+            matchType: 'changed',
+            policyDecision: 'skip',
+            reasons: ['simulated reject for selected issue']
+          }
+        ],
+        errors: [
+          {
+            code: 'simulated_reject',
+            path: '$.issues[0]',
+            message: 'Simulated reject for selected issue.'
+          }
+        ],
+        warnings: []
+      })
+    });
+  });
+
+  await importPanel.getByRole('button', { name: 'Apply Import' }).click();
+  await expect(importPanel.getByText('Import apply found validation errors.')).toBeVisible();
+
+  await expect(detail.getByRole('heading', { name: existing.title })).toBeVisible();
+  await expect(detail.locator('.detail-description')).toHaveText(
+    'Local detail that should remain after rejected apply.'
+  );
+  await expect(detail.getByLabel('Issue labels').getByText('local-reject', { exact: true })).toBeVisible();
+  await expect(detail.getByLabel('Issue labels').getByText('import-reject', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('row', { name: /Selected import rejected issue.*Todo.*Medium/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Selected import rejected replacement.*High/ })).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`/issues/${existing.id}$`));
+});
+
 test('archives hides restores and preserves issue activity', async ({ page }) => {
   const issue = await createIssueThroughApi(page, {
     title: 'Archive recovery issue',

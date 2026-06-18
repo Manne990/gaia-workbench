@@ -175,6 +175,7 @@ describe('client API errors', () => {
       totalIssues: 1,
       totalArchivedIssues: 0,
       totalBlockedIssues: 1,
+      totalWaitingIssues: 0,
       totalOverdueIssues: 1,
       totalStaleIssues: 0,
       byStatus: {

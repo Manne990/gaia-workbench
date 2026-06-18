@@ -620,6 +620,28 @@ export class IssueRepository {
         .get({ ...scopedFilters.values, closedStatus: CLOSED_ISSUE_STATUS }) as CountRow
     ).count;
 
+    const totalWaitingIssues = (
+      this.database
+        .prepare(
+          `
+        SELECT COUNT(*) AS count
+        FROM issues
+        ${scopedFilters.whereClause}
+        ${scopedFilters.whereClause ? 'AND' : 'WHERE'} status = @waitingStatus
+        AND NOT EXISTS (
+            SELECT 1
+            FROM issue_dependencies AS dependencies
+            INNER JOIN issues AS blocked_dependencies
+              ON blocked_dependencies.id = dependencies.depends_on_issue_id
+            WHERE dependencies.issue_id = issues.id
+              AND blocked_dependencies.archived_at IS NULL
+              AND blocked_dependencies.status != @closedStatus
+          )
+          `
+        )
+        .get({ ...scopedFilters.values, closedStatus: CLOSED_ISSUE_STATUS, waitingStatus: 'review' }) as CountRow
+    ).count;
+
     const totalOverdueIssues = (
       this.database
         .prepare(
@@ -675,6 +697,7 @@ export class IssueRepository {
       totalIssues,
       totalArchivedIssues,
       totalBlockedIssues,
+      totalWaitingIssues,
       totalOverdueIssues,
       totalStaleIssues,
       byStatus,

@@ -83,6 +83,7 @@ export interface IssueAuditSummary {
   totalIssues: number;
   totalArchivedIssues: number;
   totalBlockedIssues: number;
+  totalWaitingIssues: number;
   totalOverdueIssues: number;
   totalStaleIssues: number;
   byStatus: Record<IssueStatus, number>;

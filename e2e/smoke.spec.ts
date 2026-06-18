@@ -512,6 +512,56 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   expect(formulaCsvLines[1]).toContain("'-risk|safe");
 });
 
+test('board health badge distinguishes blocked and waiting review work', async ({ page }) => {
+  const blocker = await createIssueThroughApi(page, {
+    title: 'Board health blocker',
+    description: 'Keeps one review issue blocked.',
+    status: 'todo',
+    priority: 'medium',
+    labels: ['board-health']
+  });
+  await createIssueThroughApi(page, {
+    title: 'Board health waiting review',
+    description: 'Review work waiting on normal flow.',
+    status: 'review',
+    priority: 'high',
+    labels: ['board-health']
+  });
+  const blockedReview = await createIssueThroughApi(page, {
+    title: 'Board health blocked review',
+    description: 'Review work that should count as blocked instead of waiting.',
+    status: 'review',
+    priority: 'high',
+    labels: ['board-health']
+  });
+  await createIssueThroughApi(page, {
+    title: 'Board health unrelated waiting',
+    description: 'Outside the active label filter.',
+    status: 'review',
+    priority: 'low',
+    labels: ['other-health']
+  });
+
+  const dependencyResponse = await page.request.post(`/api/issues/${blockedReview.id}/dependencies`, {
+    data: { dependsOnIssueId: blocker.id }
+  });
+
+  expect(dependencyResponse.ok()).toBe(true);
+
+  await page.goto('/?label=board-health');
+
+  const auditSummary = page.getByLabel('Tracker audit summary');
+  const boardHealth = auditSummary.getByLabel('Board health: 1 blocked, 1 waiting');
+
+  await expect(boardHealth).toBeVisible();
+  await expect(boardHealth).toContainText('1 blocked');
+  await expect(boardHealth).toContainText('1 waiting');
+  await expect(page.getByLabel('Issue filters').getByLabel('Label')).toHaveValue('board-health');
+  await expect(page.getByRole('row', { name: /Board health waiting review.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Board health blocked review.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Board health unrelated waiting.*Review.*Low/ })).toHaveCount(0);
+});
+
 test('dashboard issue-list error state preserves the API error and recovers on retry', async ({ page }) => {
   const issue = await createIssueThroughApi(page, {
     title: 'Retryable dashboard issue',

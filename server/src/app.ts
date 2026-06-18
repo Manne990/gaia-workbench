@@ -65,6 +65,21 @@ type ExportAuditTimelineEntry = {
   after: ExportAuditSnapshot | null;
 };
 
+type ExportAuditPlannedWork = {
+  issueId: string;
+  issueTitle: string;
+  status: IssueStatus;
+  priority: IssuePriority;
+  dueDate: string | null;
+  isBlocked: boolean;
+  labels: string[];
+};
+
+type ExportAuditMeetingPack = {
+  plannedWork: ExportAuditPlannedWork[];
+  completedChanges: ExportAuditTimelineEntry[];
+};
+
 type ExportAuditTimestampPolicy = {
   createdAt: {
     valueFormat: 'ISO 8601 UTC';
@@ -105,6 +120,7 @@ type ExportAuditSummary = {
     }>;
     timeline: ExportAuditTimelineEntry[];
   };
+  meetingPack: ExportAuditMeetingPack;
   savedFilterViews: {
     total: number;
   };
@@ -649,6 +665,18 @@ function buildActivityTimelineEntry(issue: ExportedIssue, event: ActivityEvent):
   };
 }
 
+function buildPlannedWorkEntry(issue: ExportedIssue): ExportAuditPlannedWork {
+  return {
+    issueId: issue.id,
+    issueTitle: issue.title,
+    status: issue.status,
+    priority: issue.priority,
+    dueDate: issue.dueDate,
+    isBlocked: issue.isBlocked,
+    labels: issue.labels
+  };
+}
+
 function buildExportAuditSummary(exportPayload: TrackerExportBase): ExportAuditSummary {
   const byStatus = emptyStatusCounts();
   const byPriority = emptyPriorityCounts();
@@ -656,6 +684,7 @@ function buildExportAuditSummary(exportPayload: TrackerExportBase): ExportAuditS
   const issueById = new Map(exportPayload.issues.map((issue) => [issue.id, issue]));
   const recentActivity: ExportAuditSummary['activity']['recent'] = [];
   const activityTimeline: ExportAuditTimelineEntry[] = [];
+  const plannedWork: ExportAuditPlannedWork[] = [];
   let archivedIssues = 0;
   let blockedIssues = 0;
   let overdueIssues = 0;
@@ -673,6 +702,10 @@ function buildExportAuditSummary(exportPayload: TrackerExportBase): ExportAuditS
     blockedIssues += issue.isBlocked ? 1 : 0;
     overdueIssues += issue.isOverdue ? 1 : 0;
     dependencies += issue.dependsOnIssueIds.length;
+
+    if (issue.archivedAt === null && issue.status !== CLOSED_ISSUE_STATUS) {
+      plannedWork.push(buildPlannedWorkEntry(issue));
+    }
 
     for (const dependsOnIssueId of issue.dependsOnIssueIds) {
       const dependency = issueById.get(dependsOnIssueId);
@@ -745,6 +778,10 @@ function buildExportAuditSummary(exportPayload: TrackerExportBase): ExportAuditS
       byType: byActivityType,
       recent: recentActivity.slice(0, 5),
       timeline: activityTimeline
+    },
+    meetingPack: {
+      plannedWork,
+      completedChanges: activityTimeline
     },
     savedFilterViews: {
       total: exportPayload.savedFilterViews.length

@@ -40,6 +40,18 @@ type SavedFilterView = {
   updatedAt: string;
 };
 
+type ExportAuditTimelineEntry = {
+  eventId: string;
+  issueId: string;
+  issueTitle: string;
+  type: string;
+  createdAt: string;
+  meetingLabel: string;
+  meetingImpact: string;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+};
+
 type ExportAuditSummary = {
   timestampPolicy: {
     createdAt: {
@@ -76,17 +88,19 @@ type ExportAuditSummary = {
       type: string;
       createdAt: string;
     }>;
-    timeline: Array<{
-      eventId: string;
+    timeline: ExportAuditTimelineEntry[];
+  };
+  meetingPack: {
+    plannedWork: Array<{
       issueId: string;
       issueTitle: string;
-      type: string;
-      createdAt: string;
-      meetingLabel: string;
-      meetingImpact: string;
-      before: Record<string, unknown> | null;
-      after: Record<string, unknown> | null;
+      status: string;
+      priority: string;
+      dueDate: string | null;
+      isBlocked: boolean;
+      labels: string[];
     }>;
+    completedChanges: ExportAuditTimelineEntry[];
   };
   savedFilterViews: {
     total: number;
@@ -482,6 +496,10 @@ describe('tracker export API', () => {
         recent: expect.any(Array),
         timeline: expect.any(Array)
       },
+      meetingPack: {
+        plannedWork: expect.any(Array),
+        completedChanges: expect.any(Array)
+      },
       savedFilterViews: {
         total: 1
       }
@@ -499,6 +517,27 @@ describe('tracker export API', () => {
     expect(exported.auditSummary?.activity.recent[0].createdAt).toMatch(
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
     );
+    expect(exported.auditSummary?.meetingPack.plannedWork).toEqual([
+      {
+        issueId: blocker.body.id,
+        issueTitle: 'Blocking audit issue',
+        status: 'todo',
+        priority: 'high',
+        dueDate: null,
+        isBlocked: false,
+        labels: []
+      },
+      {
+        issueId: blocked.body.id,
+        issueTitle: 'Blocked audit issue',
+        status: 'in_progress',
+        priority: 'medium',
+        dueDate: null,
+        isBlocked: true,
+        labels: []
+      }
+    ]);
+    expect(exported.auditSummary?.meetingPack.completedChanges).toEqual(exported.auditSummary?.activity.timeline);
   });
 
   it('adds before and after snapshots to audit timeline entries', async () => {

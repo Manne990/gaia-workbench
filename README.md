@@ -579,7 +579,12 @@ Add `includeAuditSummary=true` to include a compact top-level
     "activity": {
       "total": 0,
       "byType": {},
-      "recent": []
+      "recent": [],
+      "timeline": []
+    },
+    "meetingPack": {
+      "plannedWork": [],
+      "completedChanges": []
     },
     "savedFilterViews": {
       "total": 0
@@ -591,7 +596,12 @@ Add `includeAuditSummary=true` to include a compact top-level
 The summary is intended for quick audit review. It counts issue status,
 priority, archive state, blocked state, comments, comment edit history,
 dependency edges, activity by type, the five most recent activity highlights,
-and saved filter views. Invalid `includeAuditSummary` values return `400`.
+and saved filter views. Its `meetingPack` separates current planned work from
+completed changes for status meetings: `plannedWork` contains current
+non-archived issues whose status is not `done`, while `completedChanges`
+contains already-recorded activity timeline entries with their existing
+timestamps, labels, impacts, and before/after snapshots. Invalid
+`includeAuditSummary` values return `400`.
 
 `GET /api/export.csv` provides spreadsheet-facing issue rows. CSV export
 prefixes cells that start with spreadsheet formula markers (`=`, `+`, `-`, `@`,

@@ -2198,6 +2198,11 @@ describe('issues API', () => {
       .expect(400, validationErrorBody('Invalid issue description'));
 
     await request(app)
+      .post('/api/issues')
+      .send({ title: 'Invalid status issue', status: 'triage' })
+      .expect(400, validationErrorBody('Invalid issue status'));
+
+    await request(app)
       .put(`/api/issues/${created.body.id}`)
       .send({ description: 42 })
       .expect(400, validationErrorBody('Invalid issue description'));
@@ -2206,6 +2211,11 @@ describe('issues API', () => {
       .put(`/api/issues/${created.body.id}`)
       .send([])
       .expect(400, validationErrorBody('Invalid issue payload'));
+
+    await request(app)
+      .put(`/api/issues/${created.body.id}`)
+      .send({ status: 'triage' })
+      .expect(400, validationErrorBody('Invalid issue status'));
 
     await request(app)
       .put(`/api/issues/${created.body.id}`)

@@ -15,7 +15,8 @@ export {
   ISSUE_STATUSES,
   isIssueStatus,
   isSavedFilterStatus,
-  SAVED_FILTER_STATUSES
+  SAVED_FILTER_STATUSES,
+  validateIssueStatusValue
 } from './issueStatus.js';
 export { DuplicateSavedFilterViewNameError, SavedFilterViewRepository } from './savedFilterViewRepository.js';
 export { ensureTinyTrackerSchema, getTinyTrackerSchemaVersion, SCHEMA_VERSION, TABLE_NAMES } from './schema.js';

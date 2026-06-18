@@ -9,11 +9,11 @@ import {
   Issue,
   IssuePriority,
   IssueStatus,
-  isIssueStatus,
   isSavedFilterStatus,
   SavedFilterPriority,
   SavedFilterStatus,
-  SavedFilterView
+  SavedFilterView,
+  validateIssueStatusValue
 } from './db/index.js';
 
 type ExportedComment = Comment & {
@@ -432,24 +432,27 @@ function validateMetadata(value: unknown, path: string, errors: ImportErrorDetai
 function validateStatusChangeMetadata(event: ActivityEvent, eventPath: string, errors: ImportErrorDetail[]): void {
   const fromStatus = event.metadata.from;
   const toStatus = event.metadata.to;
+  const message = 'Status change activity metadata must reference valid issue statuses.';
+  const fromValidation = validateIssueStatusValue(fromStatus, message);
+  const toValidation = validateIssueStatusValue(toStatus, message);
 
-  if (!isIssueStatus(fromStatus)) {
+  if (!fromValidation.valid) {
     pushError(
       errors,
       'invalid_status_transition_metadata',
       `${eventPath}.metadata.from`,
-      'Status change activity metadata must reference valid issue statuses.',
-      fromStatus
+      fromValidation.message,
+      fromValidation.value
     );
   }
 
-  if (!isIssueStatus(toStatus)) {
+  if (!toValidation.valid) {
     pushError(
       errors,
       'invalid_status_transition_metadata',
       `${eventPath}.metadata.to`,
-      'Status change activity metadata must reference valid issue statuses.',
-      toStatus
+      toValidation.message,
+      toValidation.value
     );
   }
 }
@@ -1029,8 +1032,10 @@ function validateTrackerExport(input: unknown): ValidationResult {
       }
     }
 
-    if (!isIssueStatus(status)) {
-      pushError(errors, 'invalid_status', `${issuePath}.status`, 'Invalid issue status.', status);
+    const statusValidation = validateIssueStatusValue(status, 'Invalid issue status.');
+
+    if (!statusValidation.valid) {
+      pushError(errors, 'invalid_status', `${issuePath}.status`, statusValidation.message, statusValidation.value);
     }
 
     if (!VALID_PRIORITIES.includes(priority)) {

@@ -11,6 +11,7 @@ describe('IssueAuditSummary', () => {
           totalIssues: 8,
           totalArchivedIssues: 2,
           totalBlockedIssues: 3,
+          totalWaitingIssues: 1,
           totalOverdueIssues: 1,
           totalStaleIssues: 4,
           byStatus: {
@@ -33,6 +34,9 @@ describe('IssueAuditSummary', () => {
     );
 
     expect(markup).toContain('Tracker audit summary');
+    expect(markup).toContain('Board health');
+    expect(markup).toContain('3 blocked');
+    expect(markup).toContain('1 waiting');
     expect(markup).toContain('Open');
     expect(markup).toContain('6');
     expect(markup).toContain('Done');

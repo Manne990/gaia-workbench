@@ -678,6 +678,66 @@ describe('issues API', () => {
     });
   });
 
+  it('counts waiting review work separately from actively blocked work', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const blocker = await request(app).post('/api/issues').send({ title: 'Board health blocker' }).expect(201);
+    const waitingReview = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Board health waiting review', status: 'review', labels: ['health'] })
+      .expect(201);
+    const blockedReview = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Board health blocked review', status: 'review', labels: ['health'] })
+      .expect(201);
+    await request(app)
+      .post('/api/issues')
+      .send({ title: 'Board health done issue', status: 'done', labels: ['health'] })
+      .expect(201);
+
+    await request(app)
+      .post(`/api/issues/${blockedReview.body.id}/dependencies`)
+      .send({ dependsOnIssueId: blocker.body.id })
+      .expect(201);
+
+    const summary = await request(app).get('/api/issues/audit-summary?label=health').expect(200);
+
+    expect(summary.body).toMatchObject({
+      totalIssues: 3,
+      totalBlockedIssues: 1,
+      totalWaitingIssues: 1,
+      byStatus: {
+        review: 2,
+        done: 1
+      }
+    });
+
+    const blockedOnlySummary = await request(app)
+      .get('/api/issues/audit-summary?label=health&blockedOnly=true')
+      .expect(200);
+
+    expect(blockedOnlySummary.body).toMatchObject({
+      totalIssues: 1,
+      totalBlockedIssues: 1,
+      totalWaitingIssues: 0,
+      byStatus: {
+        review: 1
+      }
+    });
+
+    await request(app).post(`/api/issues/${blocker.body.id}/close`).expect(200);
+
+    const unblockedSummary = await request(app).get('/api/issues/audit-summary?label=health').expect(200);
+
+    expect(unblockedSummary.body).toMatchObject({
+      totalBlockedIssues: 0,
+      totalWaitingIssues: 2
+    });
+    expect(unblockedSummary.body.byStatus.review).toBe(2);
+    expect(unblockedSummary.body.totalIssues).toBe(3);
+    expect(waitingReview.body.status).toBe('review');
+  });
+
   it('filters issues by blocked state derived from active dependencies', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

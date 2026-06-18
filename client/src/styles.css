@@ -191,7 +191,7 @@ h1 {
 
 .audit-summary-strip {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: 12px;
   margin-top: 24px;
 }
@@ -215,6 +215,17 @@ h1 {
   margin-top: 16px;
   font-size: 1.85rem;
   line-height: 1;
+}
+
+.board-health-counts {
+  display: grid;
+  gap: 6px;
+}
+
+.audit-summary-metric .board-health-counts span {
+  color: #30363d;
+  font-size: 0.95rem;
+  line-height: 1.15;
 }
 
 .status-grid article {

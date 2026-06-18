@@ -37,6 +37,7 @@ const defaultAuditSummary: IssueAuditSummary = {
   totalIssues: 0,
   totalArchivedIssues: 0,
   totalBlockedIssues: 0,
+  totalWaitingIssues: 0,
   totalOverdueIssues: 0,
   totalStaleIssues: 0,
   byStatus: {

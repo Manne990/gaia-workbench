@@ -1932,22 +1932,33 @@ describe('tracker import API', () => {
     expect(afterImport.body).toEqual(beforeImport.body);
   });
 
-  it('rejects duplicate IDs inside the import payload', async () => {
+  it('reports duplicate external IDs with source context before import writes', async () => {
     const app = createApp({ databasePath: ':memory:' });
     const payload = await createExportFixture();
     const duplicated = cloneExport(payload);
     duplicated.issues[1].id = duplicated.issues[0].id;
 
-    const response = await request(app).post('/api/import/preview').send(duplicated).expect(400);
+    await request(app).post('/api/issues').send({ title: 'Keep duplicate import validation atomic' }).expect(201);
+    const beforeImport = await request(app).get('/api/export').expect(200);
+    const preview = await request(app).post('/api/import/preview').send(duplicated).expect(400);
+    const applied = await request(app).post('/api/import/apply').send(duplicated).expect(400);
+    const afterImport = await request(app).get('/api/export').expect(200);
 
-    expect(response.body.errors).toEqual(
+    expect(preview.body.errors).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           code: 'duplicate_id',
-          path: '$.issues[1].id'
+          path: '$.issues[1].id',
+          message: `Duplicate issue id "${duplicated.issues[0].id}" in import payload; first seen at $.issues[0].id.`,
+          value: {
+            id: duplicated.issues[0].id,
+            firstPath: '$.issues[0].id'
+          }
         })
       ])
     );
+    expect(applied.body.errors).toEqual(preview.body.errors);
+    expect(afterImport.body).toEqual(beforeImport.body);
   });
 
   it('rejects dangling nested references', async () => {

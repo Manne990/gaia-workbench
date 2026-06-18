@@ -110,6 +110,8 @@ type ValidationResult = {
   warnings: ImportWarningDetail[];
 };
 
+type SeenImportIds = Map<ImportEntity, Map<string, string>>;
+
 const DEFAULT_IMPORT_CONFLICT_POLICY: ImportConflictPolicy = 'skip-conflicts';
 const VALID_IMPORT_CONFLICT_POLICIES: ImportConflictPolicy[] = ['skip-conflicts', 'replace-conflicts'];
 const VALID_PRIORITIES: IssuePriority[] = ['low', 'medium', 'high'];
@@ -645,17 +647,25 @@ function validateUniqueId(
   id: string,
   entity: ImportEntity,
   path: string,
-  seen: Map<ImportEntity, Set<string>>,
+  seen: SeenImportIds,
   errors: ImportErrorDetail[]
 ) {
-  const entitySet = seen.get(entity) ?? new Set<string>();
+  const entityPaths = seen.get(entity) ?? new Map<string, string>();
+  const firstPath = entityPaths.get(id);
 
-  if (entitySet.has(id)) {
-    pushError(errors, 'duplicate_id', path, `Duplicate ${entity} id "${id}" in import payload.`, id);
+  if (firstPath) {
+    pushError(
+      errors,
+      'duplicate_id',
+      path,
+      `Duplicate ${entity} id "${id}" in import payload; first seen at ${firstPath}.`,
+      { id, firstPath }
+    );
+    return;
   }
 
-  entitySet.add(id);
-  seen.set(entity, entitySet);
+  entityPaths.set(id, path);
+  seen.set(entity, entityPaths);
 }
 
 function placeholdersFor(values: string[]): string {
@@ -930,7 +940,7 @@ function validateTrackerExport(input: unknown): ValidationResult {
   const errors: ImportErrorDetail[] = [];
   const warnings: ImportWarningDetail[] = [];
   const decisions: ImportDecision[] = [];
-  const seen = new Map<ImportEntity, Set<string>>();
+  const seen: SeenImportIds = new Map();
   const root = validateObject(input, '$', ['exportVersion', 'issues'], errors, ['conflictPolicy', 'savedFilterViews']);
 
   if (!root) {

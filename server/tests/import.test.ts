@@ -1779,20 +1779,24 @@ describe('tracker import API', () => {
     const beforeImport = await request(app).get('/api/export').expect(200);
 
     const malformed = cloneExport(payload);
-    malformed.issues[0].status = 'blocked';
+    malformed.issues[0].status = 'triage';
 
+    const preview = await request(app).post('/api/import/preview').send(malformed).expect(400);
     const response = await request(app).post('/api/import/apply').send(malformed).expect(400);
     const afterImport = await request(app).get('/api/export').expect(200);
 
-    expect(response.body.valid).toBe(false);
-    expect(response.body.errors).toEqual(
+    expect(preview.body.valid).toBe(false);
+    expect(preview.body.errors).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           code: 'invalid_status',
-          path: '$.issues[0].status'
+          path: '$.issues[0].status',
+          message: 'Invalid issue status.',
+          value: 'triage'
         })
       ])
     );
+    expect(response.body.errors).toEqual(preview.body.errors);
     expect(afterImport.body).toEqual(beforeImport.body);
   });
 

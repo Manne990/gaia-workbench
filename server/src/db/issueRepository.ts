@@ -54,6 +54,26 @@ type StatusCountRow = {
   count: number;
 };
 
+type AuditSummaryAggregateRow = {
+  totalIssues: number;
+  todoIssues: number;
+  inProgressIssues: number;
+  reviewIssues: number;
+  doneIssues: number;
+  lowPriorityIssues: number;
+  mediumPriorityIssues: number;
+  highPriorityIssues: number;
+  totalBlockedIssues: number;
+  totalWaitingIssues: number;
+  totalOverdueIssues: number;
+  totalStaleIssues: number;
+};
+
+type DependencyEdgeCountRow = {
+  total: number;
+  blocked: number;
+};
+
 type StatusActivityRow = {
   id: string;
   metadata: string;
@@ -538,54 +558,95 @@ export class IssueRepository {
     const scopeArchiveMode: ArchiveFilterMode = filters.includeArchived === true ? 'all' : 'active';
     const scopedFilters = buildIssueListWhereClause(filters, scopeArchiveMode);
     const archivedFilters = buildIssueListWhereClause(filters, 'archivedOnly');
-
-    const statusRows = this.database
+    const today = todayLocalDate();
+    const staleCutoff = scopedFilters.values.staleCutoff ?? getStaleIssueCutoffIso();
+    const summaryValues = {
+      ...scopedFilters.values,
+      closedStatus: CLOSED_ISSUE_STATUS,
+      staleCutoff,
+      today
+    };
+    const summaryRow = this.database
       .prepare(
         `
-        SELECT status, COUNT(*) AS count
+        SELECT
+          COUNT(*) AS totalIssues,
+          COALESCE(SUM(CASE WHEN status = 'todo' THEN 1 ELSE 0 END), 0) AS todoIssues,
+          COALESCE(SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END), 0) AS inProgressIssues,
+          COALESCE(SUM(CASE WHEN status = 'review' THEN 1 ELSE 0 END), 0) AS reviewIssues,
+          COALESCE(SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END), 0) AS doneIssues,
+          COALESCE(SUM(CASE WHEN priority = 'low' THEN 1 ELSE 0 END), 0) AS lowPriorityIssues,
+          COALESCE(SUM(CASE WHEN priority = 'medium' THEN 1 ELSE 0 END), 0) AS mediumPriorityIssues,
+          COALESCE(SUM(CASE WHEN priority = 'high' THEN 1 ELSE 0 END), 0) AS highPriorityIssues,
+          COALESCE(
+            SUM(
+              CASE
+                WHEN EXISTS (
+                  SELECT 1
+                  FROM issue_dependencies AS dependencies
+                  INNER JOIN issues AS blocked_dependencies
+                    ON blocked_dependencies.id = dependencies.depends_on_issue_id
+                  WHERE dependencies.issue_id = issues.id
+                    AND blocked_dependencies.archived_at IS NULL
+                    AND blocked_dependencies.status != @closedStatus
+                )
+                THEN 1
+                ELSE 0
+              END
+            ),
+            0
+          ) AS totalBlockedIssues,
+          COALESCE(
+            SUM(
+              CASE
+                WHEN status = 'review'
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM issue_dependencies AS dependencies
+                    INNER JOIN issues AS blocked_dependencies
+                      ON blocked_dependencies.id = dependencies.depends_on_issue_id
+                    WHERE dependencies.issue_id = issues.id
+                      AND blocked_dependencies.archived_at IS NULL
+                      AND blocked_dependencies.status != @closedStatus
+                  )
+                THEN 1
+                ELSE 0
+              END
+            ),
+            0
+          ) AS totalWaitingIssues,
+          COALESCE(
+            SUM(
+              CASE
+                WHEN due_date IS NOT NULL
+                  AND status != @closedStatus
+                  AND due_date < @today
+                THEN 1
+                ELSE 0
+              END
+            ),
+            0
+          ) AS totalOverdueIssues,
+          COALESCE(SUM(CASE WHEN updated_at <= @staleCutoff THEN 1 ELSE 0 END), 0) AS totalStaleIssues
         FROM issues
         ${scopedFilters.whereClause}
-        GROUP BY status
         `
       )
-      .all(scopedFilters.values) as StatusCountRow[];
+      .get(summaryValues) as AuditSummaryAggregateRow;
 
-    const byStatus = createEmptyIssueStatusCounts();
-    for (const row of statusRows) {
-      byStatus[row.status] = row.count;
-    }
-
-    const priorityRows = this.database
-      .prepare(
-        `
-        SELECT priority, COUNT(*) AS count
-        FROM issues
-        ${scopedFilters.whereClause}
-        GROUP BY priority
-        `
-      )
-      .all(scopedFilters.values) as Array<{ priority: IssuePriority; count: number }>;
+    const byStatus = {
+      ...createEmptyIssueStatusCounts(),
+      todo: summaryRow.todoIssues,
+      in_progress: summaryRow.inProgressIssues,
+      review: summaryRow.reviewIssues,
+      done: summaryRow.doneIssues
+    };
 
     const byPriority: IssueAuditSummary['byPriority'] = {
-      low: 0,
-      medium: 0,
-      high: 0
+      low: summaryRow.lowPriorityIssues,
+      medium: summaryRow.mediumPriorityIssues,
+      high: summaryRow.highPriorityIssues
     };
-    for (const row of priorityRows) {
-      byPriority[row.priority] = row.count;
-    }
-
-    const totalIssues = (
-      this.database
-        .prepare(
-          `
-        SELECT COUNT(*) AS count
-        FROM issues
-        ${scopedFilters.whereClause}
-        `
-        )
-        .get(scopedFilters.values) as CountRow
-    ).count;
 
     const totalArchivedIssues = (
       this.database
@@ -599,77 +660,6 @@ export class IssueRepository {
         .get(archivedFilters.values) as CountRow
     ).count;
 
-    const totalBlockedIssues = (
-      this.database
-        .prepare(
-          `
-        SELECT COUNT(*) AS count
-        FROM issues
-        ${scopedFilters.whereClause}
-        ${scopedFilters.whereClause ? 'AND' : 'WHERE'} EXISTS (
-            SELECT 1
-            FROM issue_dependencies AS dependencies
-            INNER JOIN issues AS blocked_dependencies
-              ON blocked_dependencies.id = dependencies.depends_on_issue_id
-            WHERE dependencies.issue_id = issues.id
-              AND blocked_dependencies.archived_at IS NULL
-              AND blocked_dependencies.status != @closedStatus
-          )
-          `
-        )
-        .get({ ...scopedFilters.values, closedStatus: CLOSED_ISSUE_STATUS }) as CountRow
-    ).count;
-
-    const totalWaitingIssues = (
-      this.database
-        .prepare(
-          `
-        SELECT COUNT(*) AS count
-        FROM issues
-        ${scopedFilters.whereClause}
-        ${scopedFilters.whereClause ? 'AND' : 'WHERE'} status = @waitingStatus
-        AND NOT EXISTS (
-            SELECT 1
-            FROM issue_dependencies AS dependencies
-            INNER JOIN issues AS blocked_dependencies
-              ON blocked_dependencies.id = dependencies.depends_on_issue_id
-            WHERE dependencies.issue_id = issues.id
-              AND blocked_dependencies.archived_at IS NULL
-              AND blocked_dependencies.status != @closedStatus
-          )
-          `
-        )
-        .get({ ...scopedFilters.values, closedStatus: CLOSED_ISSUE_STATUS, waitingStatus: 'review' }) as CountRow
-    ).count;
-
-    const totalOverdueIssues = (
-      this.database
-        .prepare(
-          `
-        SELECT COUNT(*) AS count
-        FROM issues
-        ${scopedFilters.whereClause}
-        ${scopedFilters.whereClause ? 'AND' : 'WHERE'} due_date IS NOT NULL
-        AND status != @closedStatus
-        AND due_date < @today
-        `
-        )
-        .get({ ...scopedFilters.values, closedStatus: CLOSED_ISSUE_STATUS, today: todayLocalDate() }) as CountRow
-    ).count;
-
-    const totalStaleIssues = (
-      this.database
-        .prepare(
-          `
-        SELECT COUNT(*) AS count
-        FROM issues
-        ${scopedFilters.whereClause}
-        ${scopedFilters.whereClause ? 'AND' : 'WHERE'} updated_at <= @staleCutoff
-        `
-        )
-        .get({ ...scopedFilters.values, staleCutoff: getStaleIssueCutoffIso() }) as CountRow
-    ).count;
-
     const dependencyRow = this.database
       .prepare(
         `
@@ -679,27 +669,34 @@ export class IssueRepository {
           ${scopedFilters.whereClause}
         )
         SELECT
-          (SELECT COUNT(*) FROM issue_dependencies AS dependencies WHERE dependencies.issue_id IN (SELECT id FROM filtered_issues)) AS total,
-          (
-            SELECT COUNT(*)
-            FROM issue_dependencies AS dependencies
-            INNER JOIN issues AS blocked_dependencies
-              ON blocked_dependencies.id = dependencies.depends_on_issue_id
-            WHERE dependencies.issue_id IN (SELECT id FROM filtered_issues)
-              AND blocked_dependencies.archived_at IS NULL
-              AND blocked_dependencies.status != @closedStatus
+          COUNT(dependencies.depends_on_issue_id) AS total,
+          COALESCE(
+            SUM(
+              CASE
+                WHEN blocked_dependencies.archived_at IS NULL
+                  AND blocked_dependencies.status != @closedStatus
+                THEN 1
+                ELSE 0
+              END
+            ),
+            0
           ) AS blocked
+        FROM filtered_issues
+        LEFT JOIN issue_dependencies AS dependencies
+          ON dependencies.issue_id = filtered_issues.id
+        LEFT JOIN issues AS blocked_dependencies
+          ON blocked_dependencies.id = dependencies.depends_on_issue_id
         `
       )
-      .get({ ...scopedFilters.values, closedStatus: CLOSED_ISSUE_STATUS }) as { total: number; blocked: number };
+      .get({ ...scopedFilters.values, closedStatus: CLOSED_ISSUE_STATUS }) as DependencyEdgeCountRow;
 
     return {
-      totalIssues,
+      totalIssues: summaryRow.totalIssues,
       totalArchivedIssues,
-      totalBlockedIssues,
-      totalWaitingIssues,
-      totalOverdueIssues,
-      totalStaleIssues,
+      totalBlockedIssues: summaryRow.totalBlockedIssues,
+      totalWaitingIssues: summaryRow.totalWaitingIssues,
+      totalOverdueIssues: summaryRow.totalOverdueIssues,
+      totalStaleIssues: summaryRow.totalStaleIssues,
       byStatus,
       byPriority,
       dependencyEdges: {

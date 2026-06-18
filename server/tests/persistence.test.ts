@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -567,6 +567,84 @@ describe('persistence layer', () => {
         'issue_dependency_removed'
       ]);
     } finally {
+      database.close();
+    }
+  });
+
+  it('keeps audit summary query work bounded for large dependency queues', () => {
+    const database = createDatabase(':memory:');
+    const issueRepository = new IssueRepository(database);
+    const priorities = ['low', 'medium', 'high'] as const;
+
+    try {
+      const blockers = Array.from({ length: 40 }, (_, index) =>
+        issueRepository.create({
+          title: `Overview blocker ${index}`,
+          status: index % 4 === 0 ? CLOSED_ISSUE_STATUS : DEFAULT_ISSUE_STATUS,
+          labels: ['blocker-pool']
+        })
+      );
+      const queueIssues = Array.from({ length: 160 }, (_, index) =>
+        issueRepository.create({
+          title: `Large overview queue item ${index}`,
+          status: ISSUE_STATUSES[index % ISSUE_STATUSES.length],
+          priority: priorities[index % priorities.length],
+          labels: ['large-overview', index % 2 === 0 ? 'even-lane' : 'odd-lane'],
+          dueDate: index % 10 === 0 ? '2000-01-01' : '2999-12-31'
+        })
+      );
+      const insertDependency = database.prepare(
+        `
+        INSERT INTO issue_dependencies (issue_id, depends_on_issue_id, created_at, updated_at)
+        VALUES (@issueId, @dependsOnIssueId, @createdAt, @updatedAt)
+        `
+      );
+      const insertDenseDependencies = database.transaction(() => {
+        const now = new Date().toISOString();
+
+        for (const [issueIndex, issue] of queueIssues.entries()) {
+          for (let offset = 0; offset < 4; offset += 1) {
+            insertDependency.run({
+              issueId: issue.id,
+              dependsOnIssueId: blockers[(issueIndex + offset) % blockers.length].id,
+              createdAt: now,
+              updatedAt: now
+            });
+          }
+        }
+      });
+
+      insertDenseDependencies();
+
+      const prepareSpy = vi.spyOn(database, 'prepare');
+      const summary = issueRepository.getAuditSummary({ label: 'large-overview' });
+
+      expect(prepareSpy.mock.calls.length).toBeLessThanOrEqual(3);
+      expect(summary).toEqual({
+        totalIssues: 160,
+        totalArchivedIssues: 0,
+        totalBlockedIssues: 160,
+        totalWaitingIssues: 0,
+        totalOverdueIssues: 16,
+        totalStaleIssues: 0,
+        byStatus: {
+          todo: 40,
+          in_progress: 40,
+          review: 40,
+          done: 40
+        },
+        byPriority: {
+          low: 54,
+          medium: 53,
+          high: 53
+        },
+        dependencyEdges: {
+          total: 640,
+          blocked: 480
+        }
+      });
+    } finally {
+      vi.restoreAllMocks();
       database.close();
     }
   });

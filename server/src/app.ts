@@ -246,6 +246,13 @@ const emptyImportPlan = (error: ImportPlan['errors'][number]): ImportPlan => ({
         savedFilterViews: 0
       }
     },
+    editHistorySummary: {
+      create: 0,
+      replace: 0,
+      skipDuplicate: 0,
+      skipConflict: 0,
+      reject: 1
+    },
     reject: 1
   },
   decisions: [],

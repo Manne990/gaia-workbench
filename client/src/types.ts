@@ -171,6 +171,14 @@ export type ImportPreviewCategories = {
   conflicts: ImportCounts;
 };
 
+export type ImportEditHistorySummary = {
+  create: number;
+  replace: number;
+  skipDuplicate: number;
+  skipConflict: number;
+  reject: number;
+};
+
 export type ImportSummary = {
   input: ImportCounts;
   toCreate: ImportCounts;
@@ -179,6 +187,7 @@ export type ImportSummary = {
   exactMatches: ImportCounts;
   changed: ImportCounts;
   categories: ImportPreviewCategories;
+  editHistorySummary: ImportEditHistorySummary;
   reject: number;
 };
 

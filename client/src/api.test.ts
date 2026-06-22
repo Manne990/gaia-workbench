@@ -35,6 +35,13 @@ function invalidImportPlan(code = 'invalid_json'): ImportPlan {
     duplicates: emptyCounts,
     conflicts: emptyCounts
   };
+  const emptyEditHistorySummary = {
+    create: 0,
+    replace: 0,
+    skipDuplicate: 0,
+    skipConflict: 0,
+    reject: 1
+  };
 
   return {
     valid: false,
@@ -48,6 +55,7 @@ function invalidImportPlan(code = 'invalid_json'): ImportPlan {
       exactMatches: emptyCounts,
       changed: emptyCounts,
       categories: emptyCategories,
+      editHistorySummary: emptyEditHistorySummary,
       reject: 1
     },
     decisions: [],
@@ -219,6 +227,26 @@ describe('client API errors', () => {
 
     await expect(previewImport({ exportVersion: 2, issues: [] })).resolves.toEqual(previewPlan);
     await expect(applyImport({ exportVersion: 2, issues: [] })).resolves.toEqual(applyPlan);
+  });
+
+  it('normalizes legacy import plans that omit edit history summary details', async () => {
+    const legacyPlan = JSON.parse(JSON.stringify(invalidImportPlan('legacy_shape'))) as ImportPlan;
+
+    delete (legacyPlan.summary as Record<string, unknown>).editHistorySummary;
+
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(legacyPlan, { status: 400 }));
+
+    await expect(previewImport({ exportVersion: 1, issues: [] })).resolves.toMatchObject({
+      summary: {
+        editHistorySummary: {
+          create: 0,
+          replace: 0,
+          skipDuplicate: 0,
+          skipConflict: 0,
+          reject: 0
+        }
+      }
+    });
   });
 
   it('preserves non-plan import server error messages', async () => {

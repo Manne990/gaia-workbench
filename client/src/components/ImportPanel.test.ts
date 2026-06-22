@@ -17,6 +17,13 @@ const emptyCategories = {
   duplicates: emptyCounts,
   conflicts: emptyCounts
 };
+const emptyEditHistorySummary = {
+  create: 0,
+  replace: 0,
+  skipDuplicate: 0,
+  skipConflict: 0,
+  reject: 0
+};
 
 describe('ImportPanel', () => {
   it('shows structured validation values alongside import preview errors', () => {
@@ -32,6 +39,7 @@ describe('ImportPanel', () => {
         exactMatches: emptyCounts,
         changed: emptyCounts,
         categories: emptyCategories,
+        editHistorySummary: emptyEditHistorySummary,
         reject: 1
       },
       decisions: [],
@@ -116,6 +124,7 @@ describe('ImportPanel', () => {
             issues: 1
           }
         },
+        editHistorySummary: emptyEditHistorySummary,
         reject: 0
       },
       decisions: [],
@@ -162,6 +171,7 @@ describe('ImportPanel', () => {
         exactMatches: emptyCounts,
         changed: emptyCounts,
         categories: emptyCategories,
+        editHistorySummary: emptyEditHistorySummary,
         reject: 0
       },
       decisions: [],
@@ -199,5 +209,95 @@ describe('ImportPanel', () => {
     expect(markup).toContain('Received');
     expect(markup).toContain('done-blocker');
     expect(markup).not.toContain('Validation errors');
+  });
+
+  it('renders a dedicated comment edit history summary instead of burying it in generic validation output', () => {
+    const plan: ImportPlan = {
+      valid: false,
+      exportVersion: 1,
+      policy: 'skip-conflicts',
+      summary: {
+        input: {
+          ...emptyCounts,
+          editHistory: 4
+        },
+        toCreate: {
+          ...emptyCounts,
+          editHistory: 1
+        },
+        toReplace: emptyCounts,
+        skip: {
+          ...emptyCounts,
+          editHistory: 2
+        },
+        exactMatches: {
+          ...emptyCounts,
+          editHistory: 1
+        },
+        changed: {
+          ...emptyCounts,
+          editHistory: 1
+        },
+        categories: {
+          creates: {
+            ...emptyCounts,
+            editHistory: 1
+          },
+          updates: emptyCounts,
+          duplicates: {
+            ...emptyCounts,
+            editHistory: 1
+          },
+          conflicts: {
+            ...emptyCounts,
+            editHistory: 1
+          }
+        },
+        editHistorySummary: {
+          create: 1,
+          replace: 0,
+          skipDuplicate: 1,
+          skipConflict: 1,
+          reject: 1
+        },
+        reject: 1
+      },
+      decisions: [],
+      errors: [
+        {
+          code: 'invalid_timestamp',
+          path: '$.issues[0].comments[0].editHistory[0].editedAt',
+          message: 'Invalid editedAt timestamp.',
+          value: 'bad-date'
+        }
+      ],
+      warnings: []
+    };
+
+    const markup = renderToStaticMarkup(
+      createElement(ImportPanel, {
+        fileName: 'tracker.json',
+        importPlan: plan,
+        importPolicy: 'skip-conflicts',
+        importError: 'Import preview found validation errors.',
+        importMessage: null,
+        isPreviewing: false,
+        isApplying: false,
+        canApply: false,
+        onPolicyChange: () => {},
+        onDownloadReport: () => {},
+        onApply: () => {},
+        onCancel: () => {}
+      })
+    );
+
+    expect(markup).toContain('Comment edit history');
+    expect(markup).toContain('Create 1 edit history entry.');
+    expect(markup).toContain('Skip 1 duplicate edit history entry that already exists unchanged.');
+    expect(markup).toContain('Skip 1 conflicting edit history entry; existing edit history ids are immutable');
+    expect(markup).toContain('Reject 1 invalid edit history entry before import writes.');
+    expect(markup).toContain('$.issues[0].comments[0].editHistory[0].editedAt');
+    expect(markup).toContain('Edit history validation');
+    expect(markup).not.toContain('<h3>Validation errors</h3>');
   });
 });

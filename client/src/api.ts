@@ -226,7 +226,7 @@ async function readImportPlan(response: Response): Promise<ImportPlan> {
   const body = (await response.json().catch(() => null)) as ImportPlan | { error?: string } | null;
 
   if (body && typeof body === 'object' && 'valid' in body && typeof body.valid === 'boolean') {
-    return body as ImportPlan;
+    return normalizeImportPlan(body as ImportPlan);
   }
 
   if (!response.ok) {
@@ -234,6 +234,28 @@ async function readImportPlan(response: Response): Promise<ImportPlan> {
   }
 
   throw new Error('Import request failed');
+}
+
+type ImportPlanLike = Omit<ImportPlan, 'summary'> & {
+  summary: Omit<ImportPlan['summary'], 'editHistorySummary'> & {
+    editHistorySummary?: ImportPlan['summary']['editHistorySummary'];
+  };
+};
+
+function normalizeImportPlan(plan: ImportPlanLike): ImportPlan {
+  return {
+    ...plan,
+    summary: {
+      ...plan.summary,
+      editHistorySummary: plan.summary.editHistorySummary ?? {
+        create: 0,
+        replace: 0,
+        skipDuplicate: 0,
+        skipConflict: 0,
+        reject: 0
+      }
+    }
+  };
 }
 
 export async function previewImport(

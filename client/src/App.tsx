@@ -2016,6 +2016,8 @@ export function App() {
           filteredIssues={filteredIssues}
           pagination={pagination}
           totalIssueCount={totalIssueCount}
+          totalArchivedIssueCount={auditSummary.totalArchivedIssues}
+          totalBlockedIssueCount={auditSummary.totalBlockedIssues}
           issueListSummary={issueListSummary}
           hasActiveFilters={hasActiveFilters}
           activeFilterSummaries={activeFilterSummaries}

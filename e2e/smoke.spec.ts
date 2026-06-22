@@ -2099,7 +2099,11 @@ test('archives hides restores and preserves issue activity', async ({ page }) =>
   await page.getByRole('button', { name: 'Archive Archive recovery issue' }).click();
 
   await expect(issueRow).toHaveCount(0);
-  await expect(page.getByText('No issues match the active filters.')).toBeVisible();
+  await expect(page.getByText('Matching issues are archived.')).toBeVisible();
+  await expect(
+    page.getByText('Include archived issues to review results that are hidden from the active board.')
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Include Archived' })).toBeVisible();
 
   await includeArchived.check();
   await expect(page.getByLabel('Active filters')).toContainText('Archived: Included');
@@ -2249,7 +2253,10 @@ test('archiving selected detail preserves active filters page size and route sta
   await expect(detail.getByText('Hidden from the active dashboard since')).toBeVisible();
   await expect(detail.getByLabel('Issue activity').getByText('Issue archived')).toBeVisible();
   await expect(issueRow).toHaveCount(0);
-  await expect(page.getByText('No issues match the active filters.')).toBeVisible();
+  await expect(page.getByText('Matching issues are archived.')).toBeVisible();
+  await expect(
+    page.getByText('Include archived issues to review results that are hidden from the active board.')
+  ).toBeVisible();
   await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${issue.id}`);
   await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Selected detail archive');
   await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('review');
@@ -3223,7 +3230,10 @@ test('dependency add refreshes blocked-only list while preserving detail route',
   await expect(detail.getByText('Waiting on at least one active dependency.')).toHaveCount(0);
   await expect(detail.getByLabel('Issue blockers')).toContainText('No blockers.');
   await expect(blockedRow).toHaveCount(0);
-  await expect(page.getByText('No issues match the active filters.')).toBeVisible();
+  await expect(page.getByText('No blocked issues match the current filters.')).toBeVisible();
+  await expect(
+    page.getByText('Turn off Blocked only to widen the list without losing the rest of your current filters.')
+  ).toBeVisible();
   await expect(detail.getByLabel('Issue activity').getByText('Dependency removed')).toBeVisible();
   await expect(filters.getByLabel('Search')).toHaveValue('Blocked-only live detail');
   await expect(filters.getByLabel('Blocked only')).toBeChecked();
@@ -3270,7 +3280,10 @@ test('blocked-only detail recovers when an archived blocker is restored', async 
   await page.reload();
 
   await expect(filters.getByLabel('Blocked only')).toBeChecked();
-  await expect(page.getByText('No issues match the active filters.')).toBeVisible();
+  await expect(page.getByText('No blocked issues match the current filters.')).toBeVisible();
+  await expect(
+    page.getByText('Turn off Blocked only to widen the list without losing the rest of your current filters.')
+  ).toBeVisible();
   await expect(blockedRow).toHaveCount(0);
   await expect(detail.getByRole('heading', { name: blocked.title })).toBeVisible();
   await expect(detail.getByText('Waiting on at least one active dependency.')).toHaveCount(0);

@@ -72,6 +72,11 @@ type TrackerExport = {
   exportVersion: number;
   issues: ExportedIssue[];
   savedFilterViews: SavedFilterView[];
+  archivedRecovery?: Array<{
+    issueId: string;
+    archivedAt: string;
+    archiveEventId: string | null;
+  }>;
 };
 
 const cloneExport = (payload: TrackerExport): TrackerExport => JSON.parse(JSON.stringify(payload));
@@ -251,6 +256,10 @@ async function createArchivedExportFixture(): Promise<TrackerExport> {
   const exported = await request(app).get('/api/export').expect(200);
 
   return exported.body as TrackerExport;
+}
+
+function findArchiveEventId(issue: ExportedIssue): string | null {
+  return issue.activityEvents.find((event) => event.type === 'issue_archived')?.id ?? null;
 }
 
 function findStatusChangeEvent(payload: TrackerExport): {
@@ -527,7 +536,8 @@ describe('tracker import API', () => {
           activityEvents: []
         }
       ],
-      savedFilterViews: []
+      savedFilterViews: [],
+      archivedRecovery: []
     };
 
     await request(app).post('/api/import/preview').send(payload).expect(200);
@@ -836,6 +846,101 @@ describe('tracker import API', () => {
       'issue_archived'
     ]);
     expect(exportedAfterImport.body).toEqual(payload);
+  });
+
+  it('warns when archived recovery metadata is missing and reconstructs it on export', async () => {
+    const targetApp = createApp({ databasePath: ':memory:' });
+    const payload = await createArchivedExportFixture();
+    const [sourceIssue] = payload.issues;
+
+    delete payload.archivedRecovery;
+
+    const preview = await request(targetApp).post('/api/import/preview').send(payload).expect(200);
+    await request(targetApp).post('/api/import/apply').send(payload).expect(200);
+    const exportedAfterImport = await request(targetApp).get('/api/export').expect(200);
+
+    expect(preview.body.valid).toBe(true);
+    expect(preview.body.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'missing_archived_recovery_metadata',
+          path: '$.issues[0].archivedAt',
+          message: 'Archived recovery metadata is missing and will be reconstructed from imported issue state.',
+          value: sourceIssue.id
+        })
+      ])
+    );
+    expect(exportedAfterImport.body.archivedRecovery).toEqual([
+      {
+        issueId: sourceIssue.id,
+        archivedAt: sourceIssue.archivedAt,
+        archiveEventId: findArchiveEventId(sourceIssue)
+      }
+    ]);
+  });
+
+  it('warns when archived recovery metadata is stale and normalizes it after apply', async () => {
+    const targetApp = createApp({ databasePath: ':memory:' });
+    const payload = await createArchivedExportFixture();
+
+    if (!payload.archivedRecovery?.[0]) {
+      throw new Error('Expected archived export fixture to include archived recovery metadata');
+    }
+
+    payload.archivedRecovery[0] = {
+      ...payload.archivedRecovery[0],
+      archivedAt: '2999-12-31T00:00:00.000Z'
+    };
+
+    const preview = await request(targetApp).post('/api/import/preview').send(payload).expect(200);
+    await request(targetApp).post('/api/import/apply').send(payload).expect(200);
+    const exportedAfterImport = await request(targetApp).get('/api/export').expect(200);
+
+    expect(preview.body.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'stale_archived_recovery_metadata',
+          path: '$.archivedRecovery[0].archivedAt',
+          message: 'Archived recovery metadata does not match the imported archivedAt value and will be normalized.',
+          value: '2999-12-31T00:00:00.000Z'
+        })
+      ])
+    );
+    expect(exportedAfterImport.body.archivedRecovery).not.toEqual(payload.archivedRecovery);
+    expect(exportedAfterImport.body.archivedRecovery).toEqual([
+      expect.objectContaining({
+        issueId: payload.issues[0].id,
+        archivedAt: payload.issues[0].archivedAt
+      })
+    ]);
+  });
+
+  it('warns when archived recovery metadata references the wrong archive event', async () => {
+    const targetApp = createApp({ databasePath: ':memory:' });
+    const payload = await createArchivedExportFixture();
+
+    if (!payload.archivedRecovery?.[0]) {
+      throw new Error('Expected archived export fixture to include archived recovery metadata');
+    }
+
+    payload.archivedRecovery[0] = {
+      ...payload.archivedRecovery[0],
+      archiveEventId: 'missing-archive-event'
+    };
+
+    const preview = await request(targetApp).post('/api/import/preview').send(payload).expect(200);
+
+    expect(preview.body.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'incompatible_archived_recovery_metadata',
+          path: '$.archivedRecovery[0].archiveEventId',
+          message:
+            'Archived recovery metadata does not reference the current archive activity and will be reconstructed.',
+          value: 'missing-archive-event'
+        })
+      ])
+    );
   });
 
   it('preserves archived blocked issue dependency context and comments through preview and import', async () => {
@@ -1672,6 +1777,13 @@ describe('tracker import API', () => {
 
     expectedReplacedIssue.comments[expectedExistingCommentIndex] = originalExistingComment;
     expectedReplacedIssue.activityEvents[expectedExistingActivityIndex] = originalExistingActivity;
+    expectedAfterReplace.archivedRecovery = [
+      {
+        issueId: changedIssue.id,
+        archivedAt: changedIssue.archivedAt ?? '',
+        archiveEventId: null
+      }
+    ];
 
     expect(applied.body.summary.toReplace).toMatchObject({ issues: 1, savedFilterViews: 1 });
     expect(applied.body.summary.toCreate).toMatchObject({

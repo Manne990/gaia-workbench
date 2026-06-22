@@ -107,10 +107,17 @@ type ExportAuditSummary = {
   };
 };
 
+type ExportArchivedRecoveryEntry = {
+  issueId: string;
+  archivedAt: string;
+  archiveEventId: string | null;
+};
+
 type TrackerExport = {
   exportVersion: number;
   issues: ExportedIssue[];
   savedFilterViews: SavedFilterView[];
+  archivedRecovery: ExportArchivedRecoveryEntry[];
   auditSummary?: ExportAuditSummary;
 };
 
@@ -283,7 +290,12 @@ describe('tracker export API', () => {
     const exportedEmptyIssue = exportedById.get(emptyIssueBefore.body.id);
 
     expect(firstExport.headers['content-type']).toContain('application/json');
-    expect(Object.keys(firstExport.body).sort()).toEqual(['exportVersion', 'issues', 'savedFilterViews']);
+    expect(Object.keys(firstExport.body).sort()).toEqual([
+      'archivedRecovery',
+      'exportVersion',
+      'issues',
+      'savedFilterViews'
+    ]);
     expect(firstExport.body).not.toHaveProperty('generatedAt');
     expect(firstExport.body).not.toHaveProperty('items');
     expect(firstExport.body).not.toHaveProperty('pagination');
@@ -432,8 +444,14 @@ describe('tracker export API', () => {
     const exported = summarizedExport.body as TrackerExport;
 
     expect(defaultExport.body).not.toHaveProperty('auditSummary');
-    expect(Object.keys(defaultExport.body).sort()).toEqual(['exportVersion', 'issues', 'savedFilterViews']);
+    expect(Object.keys(defaultExport.body).sort()).toEqual([
+      'archivedRecovery',
+      'exportVersion',
+      'issues',
+      'savedFilterViews'
+    ]);
     expect(Object.keys(summarizedExport.body).sort()).toEqual([
+      'archivedRecovery',
       'auditSummary',
       'exportVersion',
       'issues',
@@ -946,6 +964,14 @@ describe('tracker export API', () => {
       title: 'Archived export issue',
       archivedAt: archived.body.archivedAt
     });
+    expect(exported.body.archivedRecovery).toEqual([
+      {
+        issueId: created.body.id,
+        archivedAt: archived.body.archivedAt,
+        archiveEventId:
+          exportedIssue.activityEvents.find((event: { type: string }) => event.type === 'issue_archived')?.id ?? null
+      }
+    ]);
     expect(exportedIssue.activityEvents.map((event: { type: string }) => event.type)).toEqual([
       'issue_created',
       'issue_archived'

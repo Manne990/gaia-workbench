@@ -4663,6 +4663,149 @@ test('saved filter views persist restore and compose with detail routes', async 
   expect(savedViewListBody).toEqual([]);
 });
 
+test('toggling archived visibility preserves the current filter context and saved-view restore behavior', async ({
+  page
+}) => {
+  const blocker = await createIssueThroughApi(page, {
+    title: 'Archived toggle blocker',
+    description: 'Blocks archived-toggle regression targets.'
+  });
+  const activeTarget = await createIssueThroughApi(page, {
+    title: 'Archived toggle active target',
+    description: 'Visible when active-only blocked filters are applied.',
+    status: 'review',
+    priority: 'high',
+    labels: ['ops']
+  });
+  const archivedTarget = await createIssueThroughApi(page, {
+    title: 'Archived toggle archived target',
+    description: 'Visible only when archived matches are included.',
+    status: 'review',
+    priority: 'high',
+    labels: ['ops']
+  });
+  await createIssueThroughApi(page, {
+    title: 'Archived toggle mismatch row',
+    description: 'Should stay hidden by the composed filters.',
+    status: 'review',
+    priority: 'low',
+    labels: ['ops']
+  });
+
+  for (const issueId of [activeTarget.id, archivedTarget.id]) {
+    const dependencyResponse = await page.request.post(`/api/issues/${issueId}/dependencies`, {
+      data: { dependsOnIssueId: blocker.id }
+    });
+
+    expect(dependencyResponse.ok()).toBe(true);
+  }
+
+  const archiveResponse = await page.request.post(`/api/issues/${archivedTarget.id}/archive`);
+  expect(archiveResponse.ok()).toBe(true);
+
+  await page.goto('/?search=Archived%20toggle&status=review&priority=high&label=ops&blockedOnly=true');
+
+  const filters = page.getByLabel('Issue filters');
+  const includeArchived = filters.getByLabel('Include archived');
+  const blockedOnly = filters.getByLabel('Blocked only');
+  const activeFilters = page.getByLabel('Active filters');
+  const settings = await expandDashboardSettings(page);
+  const savedViews = settings.getByLabel('Saved filter views');
+  const activeRow = page.getByRole('row', { name: /Archived toggle active target.*Review.*High/ });
+  const archivedRow = page.getByRole('row', { name: /Archived toggle archived target.*Review.*High/ });
+  const mismatchRow = page.getByRole('row', { name: /Archived toggle mismatch row.*Review.*Low/ });
+
+  await expect(filters.getByLabel('Search')).toHaveValue('Archived toggle');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(filters.getByLabel('Priority')).toHaveValue('high');
+  await expect(filters.getByLabel('Label')).toHaveValue('ops');
+  await expect(blockedOnly).toBeChecked();
+  await expect(includeArchived).not.toBeChecked();
+  await expect(activeFilters).toContainText('Search: Archived toggle');
+  await expect(activeFilters).toContainText('Status: Review');
+  await expect(activeFilters).toContainText('Priority: High');
+  await expect(activeFilters).toContainText('Label: ops');
+  await expect(activeFilters).toContainText('Blocked: Only');
+  await expect(page.getByLabel('Active filter count')).toHaveText('5 active filters');
+  await expect(activeRow).toBeVisible();
+  await expect(archivedRow).toHaveCount(0);
+  await expect(mismatchRow).toHaveCount(0);
+
+  await savedViews.getByLabel('View name').fill('Blocked review ops');
+  await savedViews.getByRole('button', { name: 'Save View' }).click();
+  await expect(savedViews.getByLabel('Saved views')).toContainText('Blocked review ops');
+  const savedViewId = await savedViews.getByLabel('Saved views').inputValue();
+
+  expect(savedViewId).not.toBe('');
+  await expect(activeFilters).toContainText('Saved view: Blocked review ops');
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBe(savedViewId);
+
+  await includeArchived.check();
+
+  await expect(filters.getByLabel('Search')).toHaveValue('Archived toggle');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(filters.getByLabel('Priority')).toHaveValue('high');
+  await expect(filters.getByLabel('Label')).toHaveValue('ops');
+  await expect(blockedOnly).toBeChecked();
+  await expect(includeArchived).toBeChecked();
+  await expect(activeFilters).toContainText('Saved view: Blocked review ops (edited)');
+  await expect(activeFilters).toContainText('Archived: Included');
+  await expect(page.getByLabel('Active filter count')).toHaveText('7 active filters');
+  await expect(activeRow).toBeVisible();
+  await expect(archivedRow).toBeVisible();
+  await expect(archivedRow.locator('.archived-pill')).toHaveText('Archived');
+  await expect(mismatchRow).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Archived toggle');
+  await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('review');
+  await expect.poll(() => new URL(page.url()).searchParams.get('priority')).toBe('high');
+  await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('ops');
+  await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
+  await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBe('true');
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBeNull();
+
+  await includeArchived.uncheck();
+
+  await expect(filters.getByLabel('Search')).toHaveValue('Archived toggle');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(filters.getByLabel('Priority')).toHaveValue('high');
+  await expect(filters.getByLabel('Label')).toHaveValue('ops');
+  await expect(blockedOnly).toBeChecked();
+  await expect(includeArchived).not.toBeChecked();
+  await expect(activeFilters).not.toContainText('Saved view: Blocked review ops');
+  await expect(activeFilters).not.toContainText('Archived: Included');
+  await expect(page.getByLabel('Active filter count')).toHaveText('5 active filters');
+  await expect(activeRow).toBeVisible();
+  await expect(archivedRow).toHaveCount(0);
+  await expect(mismatchRow).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
+  await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBeNull();
+
+  await page.getByRole('button', { name: 'Clear board filters' }).click();
+  await expect(page).toHaveURL('/');
+
+  await savedViews.getByRole('button', { name: 'Apply View' }).click();
+
+  await expect(savedViews.getByLabel('Saved views')).toHaveValue(savedViewId);
+  await expect(filters.getByLabel('Search')).toHaveValue('Archived toggle');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(filters.getByLabel('Priority')).toHaveValue('high');
+  await expect(filters.getByLabel('Label')).toHaveValue('ops');
+  await expect(blockedOnly).toBeChecked();
+  await expect(includeArchived).not.toBeChecked();
+  await expect(activeFilters).toContainText('Saved view: Blocked review ops');
+  await expect(activeFilters).not.toContainText('Archived: Included');
+  await expect(activeRow).toBeVisible();
+  await expect(archivedRow).toHaveCount(0);
+  await expect(mismatchRow).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBe(savedViewId);
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Archived toggle');
+  await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('review');
+  await expect.poll(() => new URL(page.url()).searchParams.get('priority')).toBe('high');
+  await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('ops');
+  await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
+  await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBeNull();
+});
+
 test('saved view route restore keeps active filter chips aligned with restored filters', async ({ page }) => {
   await createIssueThroughApi(page, {
     title: 'Saved chip restore target',

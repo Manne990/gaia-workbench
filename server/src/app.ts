@@ -302,6 +302,29 @@ function sendValidationError(res: Response, message: string) {
   return res.status(400).json(validationErrorResponse(message));
 }
 
+function formatIssueStatusLabel(status: IssueStatus): string {
+  switch (status) {
+    case 'todo':
+      return 'Todo';
+    case 'in_progress':
+      return 'In Progress';
+    case 'review':
+      return 'Review';
+    case 'done':
+      return 'Done';
+  }
+}
+
+function buildBulkStatusNoOpMessage(status: IssueStatus, unchangedCount: number, duplicateCount: number): string {
+  const parts = [
+    `No status changes were applied. ${unchangedCount} selected issue${unchangedCount === 1 ? ' is' : 's are'} already ${formatIssueStatusLabel(status)}.`,
+    duplicateCount > 0 ? `${duplicateCount} duplicate ${duplicateCount === 1 ? 'id was' : 'ids were'} ignored.` : null,
+    'Choose a different status or adjust the selection.'
+  ];
+
+  return parts.filter(Boolean).join(' ');
+}
+
 function parseBulkDependencyIds(issueId: string, dependsOnIssueIds: unknown): string[] {
   if (!Array.isArray(dependsOnIssueIds)) {
     throw new Error('Invalid bulk dependency ids');
@@ -1018,13 +1041,18 @@ export function createApp(config: AppConfig = {}) {
   app.post('/api/issues/bulk-status', (req, res) => {
     try {
       const body = (req.body ?? {}) as { status?: unknown; issueIds?: unknown };
+      const result = issueRepository.bulkUpdateStatus({
+        status: body.status as never,
+        issueIds: body.issueIds as never
+      });
 
-      return res.status(200).json(
-        issueRepository.bulkUpdateStatus({
-          status: body.status as never,
-          issueIds: body.issueIds as never
-        })
-      );
+      if (result.updated.length === 0 && result.unchangedIds.length > 0 && result.notFoundIds.length === 0) {
+        return res.status(409).json({
+          error: buildBulkStatusNoOpMessage(result.status, result.unchangedIds.length, result.duplicateIds.length)
+        });
+      }
+
+      return res.status(200).json(result);
     } catch (error) {
       if (isValidationError(error)) {
         return sendValidationError(res, error.message);

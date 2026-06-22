@@ -5589,6 +5589,98 @@ test('blocked-only filter is shareable and restores from saved views', async ({ 
   }
 });
 
+test('saved view URL roundtrip preserves blocked-only filters across compact and comfortable density', async ({
+  page
+}) => {
+  const blocker = await createIssueThroughApi(page, {
+    title: 'Density saved-view blocker',
+    status: 'todo',
+    description: 'Blocks the saved-view target.'
+  });
+  const blockedIssue = await createIssueThroughApi(page, {
+    title: 'Density saved-view issue',
+    status: 'review',
+    priority: 'high',
+    description: 'Should remain visible when the blocked-only saved view is applied.'
+  });
+  await createIssueThroughApi(page, {
+    title: 'Density saved-view mismatch',
+    status: 'todo',
+    description: 'Should stay hidden when blocked-only is restored.'
+  });
+
+  const dependencyResponse = await page.request.post(`/api/issues/${blockedIssue.id}/dependencies`, {
+    data: { dependsOnIssueId: blocker.id }
+  });
+
+  expect(dependencyResponse.ok()).toBe(true);
+
+  await page.goto('/');
+
+  const filters = page.getByLabel('Issue filters');
+  const blockedOnly = filters.getByLabel('Blocked only');
+  const settings = await expandDashboardSettings(page);
+  const savedViews = settings.getByLabel('Saved filter views');
+  const densityControls = page.getByLabel('Dashboard density');
+  const compactButton = densityControls.getByRole('button', { name: 'Compact' });
+  const comfortableButton = densityControls.getByRole('button', { name: 'Comfortable' });
+
+  await blockedOnly.check();
+  await compactButton.click();
+
+  await expect(blockedOnly).toBeChecked();
+  await expect(compactButton).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
+  await expect.poll(() => new URL(page.url()).searchParams.get('density')).toBe('compact');
+
+  await savedViews.getByLabel('View name').fill('Blocked density roundtrip');
+  await savedViews.getByRole('button', { name: 'Save View' }).click();
+  await expect(savedViews.getByLabel('Saved views')).toContainText('Blocked density roundtrip');
+
+  const savedViewId = await savedViews.getByLabel('Saved views').inputValue();
+
+  expect(savedViewId).not.toBe('');
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBe(savedViewId);
+
+  await page.getByRole('button', { name: 'Clear board filters' }).click();
+
+  await expect(blockedOnly).not.toBeChecked();
+  await expect(compactButton).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBeNull();
+  await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBeNull();
+  await expect.poll(() => new URL(page.url()).searchParams.get('density')).toBe('compact');
+
+  await savedViews.getByRole('button', { name: 'Apply View' }).click();
+
+  await expect(savedViews.getByLabel('Saved views')).toHaveValue(savedViewId);
+  await expect(blockedOnly).toBeChecked();
+  await expect(compactButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('row', { name: /Density saved-view issue.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Density saved-view mismatch.*Todo/ })).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBe(savedViewId);
+  await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
+  await expect.poll(() => new URL(page.url()).searchParams.get('density')).toBe('compact');
+
+  await comfortableButton.click();
+
+  await expect(comfortableButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(blockedOnly).toBeChecked();
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBe(savedViewId);
+  await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
+  await expect.poll(() => new URL(page.url()).searchParams.get('density')).toBeNull();
+
+  await page.reload();
+
+  await expect(savedViews.getByLabel('Saved views')).toHaveValue(savedViewId);
+  await expect(blockedOnly).toBeChecked();
+  await expect(comfortableButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('row', { name: /Density saved-view issue.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Density saved-view mismatch.*Todo/ })).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBe(savedViewId);
+  await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
+  await expect.poll(() => new URL(page.url()).searchParams.get('density')).toBeNull();
+});
+
 test('large issue lists remain filterable and can open detail', async ({ page }) => {
   test.setTimeout(60_000);
 

@@ -14,6 +14,7 @@ import type {
   StatusFilter
 } from '../types';
 import { formatIssueDate, formatIssueDueDate, getIssueFreshnessPresentation } from '../utils/issuePresentation';
+import { getIssueListEmptyState } from '../utils/issueListEmptyState';
 import { renderMarkdownLiteInline } from '../utils/markdown';
 
 type IssueListPanelProps = {
@@ -23,6 +24,8 @@ type IssueListPanelProps = {
   filteredIssues: Issue[];
   pagination: IssueListPagination;
   totalIssueCount: number;
+  totalArchivedIssueCount: number;
+  totalBlockedIssueCount: number;
   issueListSummary: string;
   hasActiveFilters: boolean;
   activeFilterSummaries: ActiveFilterSummary[];
@@ -94,6 +97,8 @@ export function IssueListPanel({
   filteredIssues,
   pagination,
   totalIssueCount,
+  totalArchivedIssueCount,
+  totalBlockedIssueCount,
   issueListSummary,
   hasActiveFilters,
   activeFilterSummaries,
@@ -180,6 +185,39 @@ export function IssueListPanel({
   ]
     .filter(Boolean)
     .join(' ');
+  const emptyState =
+    loadState === 'loaded' && issues.length === 0
+      ? getIssueListEmptyState({
+          hasActiveFilters,
+          includeArchived,
+          blockedOnly,
+          totalIssueCount,
+          totalArchivedIssueCount,
+          totalBlockedIssueCount,
+          hasPreviousPage: pagination.hasPrevious,
+          isPageEmpty: pagination.total > 0
+        })
+      : null;
+
+  function handleEmptyStateAction() {
+    if (!emptyState) {
+      return;
+    }
+
+    switch (emptyState.action.kind) {
+      case 'includeArchived':
+        onIncludeArchivedChange(true);
+        return;
+      case 'clearFilters':
+        onClearFilters();
+        return;
+      case 'disableBlockedOnly':
+        onBlockedOnlyChange(false);
+        return;
+      case 'previousPage':
+        onPreviousPage();
+    }
+  }
   const listLinkCopyFeedback = issueLinkCopyFeedback?.source === 'list' ? issueLinkCopyFeedback : null;
 
   return (
@@ -582,29 +620,16 @@ export function IssueListPanel({
       ) : null}
 
       {loadState === 'loaded' && issues.length === 0 ? (
-        pagination.total === 0 ? (
-          hasActiveFilters || totalIssueCount > 0 ? (
-            <div className="state-message filtered-empty">
-              <strong>No issues match the active filters.</strong>
-              <button type="button" className="secondary-button" onClick={onClearFilters}>
-                Clear Filters
-              </button>
-            </div>
-          ) : (
-            <div className="state-message">No issues yet.</div>
-          )
-        ) : (
+        emptyState ? (
           <div className="state-message filtered-empty">
-            <strong>No issues on this page.</strong>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={onPreviousPage}
-              disabled={!pagination.hasPrevious}
-            >
-              Previous
+            <strong>{emptyState.title}</strong>
+            {emptyState.description ? <span>{emptyState.description}</span> : null}
+            <button type="button" className="secondary-button" onClick={handleEmptyStateAction}>
+              {emptyState.action.label}
             </button>
           </div>
+        ) : (
+          <div className="state-message">No issues yet.</div>
         )
       ) : null}
 

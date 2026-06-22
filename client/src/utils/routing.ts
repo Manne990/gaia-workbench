@@ -1,5 +1,6 @@
 import { priorityOrder, statusOrder } from '../constants';
 import type {
+  DashboardDensity,
   DashboardFilters,
   IssuePriority,
   IssueStatus,
@@ -12,15 +13,18 @@ import type {
 export const defaultPageSize = 25;
 export const maxPageSize = 100;
 export const savedViewQueryParam = 'savedView';
+export const dashboardDensityQueryParam = 'density';
 
 export type RouteState = {
   issueId: string | null;
   filters: DashboardFilters;
   savedViewId: string | null;
+  dashboardDensity: DashboardDensity | null;
 };
 
 type RouteBuildOptions = {
   savedViewId?: string | null;
+  dashboardDensity?: DashboardDensity | null;
 };
 
 type SavedViewRouteState = Pick<SavedFilterView, 'id'> & DashboardFilters;
@@ -131,7 +135,8 @@ export function getRouteStateFromLocation(): RouteState {
   return {
     issueId: getIssueIdFromLocation(),
     filters: parseDashboardFiltersFromLocation(),
-    savedViewId: parseSavedViewIdFromSearch(window.location.search)
+    savedViewId: parseSavedViewIdFromSearch(window.location.search),
+    dashboardDensity: parseDashboardDensityFromSearch(window.location.search)
   };
 }
 
@@ -155,12 +160,16 @@ export function buildIssuePath(
   return query ? `${path}?${query}` : path;
 }
 
-export function buildSavedViewPath(view: SavedViewRouteState, issueId: string | null = null): string {
+export function buildSavedViewPath(
+  view: SavedViewRouteState,
+  issueId: string | null = null,
+  options: RouteBuildOptions = {}
+): string {
   const filters = copyDashboardFilters(view);
 
   return issueId
-    ? buildIssuePath(issueId, filters, { savedViewId: view.id })
-    : buildDashboardPath(filters, { savedViewId: view.id });
+    ? buildIssuePath(issueId, filters, { savedViewId: view.id, dashboardDensity: options.dashboardDensity })
+    : buildDashboardPath(filters, { savedViewId: view.id, dashboardDensity: options.dashboardDensity });
 }
 
 export function buildStableIssueUrl(issueId: string, origin: string): string {
@@ -187,8 +196,13 @@ export function writeRoute(
   writePath(nextPath, mode);
 }
 
-export function writeSavedViewRoute(issueId: string | null, view: SavedViewRouteState, mode: 'push' | 'replace'): void {
-  writePath(buildSavedViewPath(view, issueId), mode);
+export function writeSavedViewRoute(
+  issueId: string | null,
+  view: SavedViewRouteState,
+  mode: 'push' | 'replace',
+  options: RouteBuildOptions = {}
+): void {
+  writePath(buildSavedViewPath(view, issueId, options), mode);
 }
 
 function parseStatusFilter(value: string | null): StatusFilter {
@@ -211,13 +225,17 @@ function parsePageSize(value: string | null): number {
 
 export function buildDashboardQuery(
   filters: DashboardFilters = defaultDashboardFilters,
-  options: { includePageSize?: boolean; savedViewId?: string | null } = {}
+  options: { includePageSize?: boolean; savedViewId?: string | null; dashboardDensity?: DashboardDensity | null } = {}
 ): string {
   const params = new URLSearchParams();
   const savedViewId = options.savedViewId?.trim();
 
   if (savedViewId) {
     params.set(savedViewQueryParam, savedViewId);
+  }
+
+  if (isDashboardDensity(options.dashboardDensity)) {
+    params.set(dashboardDensityQueryParam, options.dashboardDensity);
   }
 
   const search = filters.search.trim();
@@ -270,4 +288,18 @@ export function buildCsvExportPath(filters: DashboardFilters = defaultDashboardF
   const query = buildDashboardQuery(filters, { includePageSize: false });
 
   return query ? `/api/export.csv?${query}` : '/api/export.csv';
+}
+
+export function parseDashboardDensityFromSearch(search: string | URLSearchParams): DashboardDensity | null {
+  const params = typeof search === 'string' ? new URLSearchParams(search) : search;
+
+  return normalizeDashboardDensity(params.get(dashboardDensityQueryParam));
+}
+
+function normalizeDashboardDensity(value: string | null | undefined): DashboardDensity | null {
+  return isDashboardDensity(value) ? value : null;
+}
+
+function isDashboardDensity(value: string | null | undefined): value is DashboardDensity {
+  return value === 'comfortable' || value === 'compact';
 }

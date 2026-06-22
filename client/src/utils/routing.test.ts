@@ -219,7 +219,7 @@ describe('client routing helpers', () => {
       '/?savedView=view-123&density=compact&search=saved+target&status=review&priority=high&label=archive&includeArchived=true&blockedOnly=true&limit=50'
     );
     expect(buildIssuePath('issue id', filters, { savedViewId: 'view-123', dashboardDensity: 'comfortable' })).toBe(
-      '/issues/issue%20id?savedView=view-123&density=comfortable&search=saved+target&status=review&priority=high&label=archive&includeArchived=true&blockedOnly=true&limit=50'
+      '/issues/issue%20id?savedView=view-123&search=saved+target&status=review&priority=high&label=archive&includeArchived=true&blockedOnly=true&limit=50'
     );
   });
 
@@ -240,27 +240,25 @@ describe('client routing helpers', () => {
       pageSize: 50
     };
 
-    expect(buildSavedViewPath(defaultView, null, { dashboardDensity: 'comfortable' })).toBe(
-      '/?savedView=view-default&density=comfortable'
-    );
+    expect(buildSavedViewPath(defaultView, null, { dashboardDensity: 'comfortable' })).toBe('/?savedView=view-default');
     expect(buildSavedViewPath(defaultView, 'issue id', { dashboardDensity: 'compact' })).toBe(
       '/issues/issue%20id?savedView=view-default&density=compact'
     );
     expect(buildSavedViewPath(reviewView, null, { dashboardDensity: 'comfortable' })).toBe(
-      '/?savedView=view-review&density=comfortable&search=saved+target&status=review&priority=high&label=archive&includeArchived=true&staleOnly=true&limit=50'
+      '/?savedView=view-review&search=saved+target&status=review&priority=high&label=archive&includeArchived=true&staleOnly=true&limit=50'
     );
   });
 
   it('keeps inbound saved view URLs with explicit defaults loadable and canonicalizable', () => {
     const search =
-      '?savedView=view-default&density=compact&search=%20&status=all&priority=all&includeArchived=false&blockedOnly=false&staleOnly=false&limit=25';
+      '?savedView=view-default&density=comfortable&search=%20&status=all&priority=all&includeArchived=false&blockedOnly=false&staleOnly=false&limit=25';
     const filters = parseDashboardFiltersFromSearch(search);
 
     expect(parseSavedViewIdFromSearch(search)).toBe('view-default');
-    expect(parseDashboardDensityFromSearch(search)).toBe('compact');
+    expect(parseDashboardDensityFromSearch(search)).toBe('comfortable');
     expect(filters).toEqual(defaultDashboardFilters);
-    expect(buildSavedViewPath({ id: 'view-default', ...filters }, null, { dashboardDensity: 'compact' })).toBe(
-      '/?savedView=view-default&density=compact'
+    expect(buildSavedViewPath({ id: 'view-default', ...filters }, null, { dashboardDensity: 'comfortable' })).toBe(
+      '/?savedView=view-default'
     );
   });
 

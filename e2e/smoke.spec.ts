@@ -5634,7 +5634,7 @@ test('saved view URL roundtrip preserves blocked-only filters across compact and
   await expect(blockedOnly).toBeChecked();
   await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBe(savedViewId);
   await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
-  await expect.poll(() => new URL(page.url()).searchParams.get('density')).toBe('comfortable');
+  await expect.poll(() => new URL(page.url()).searchParams.get('density')).toBeNull();
 
   await page.reload();
 
@@ -5645,7 +5645,7 @@ test('saved view URL roundtrip preserves blocked-only filters across compact and
   await expect(page.getByRole('row', { name: /Density saved-view mismatch.*Todo/ })).toHaveCount(0);
   await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBe(savedViewId);
   await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
-  await expect.poll(() => new URL(page.url()).searchParams.get('density')).toBe('comfortable');
+  await expect.poll(() => new URL(page.url()).searchParams.get('density')).toBeNull();
 });
 
 test('large issue lists remain filterable and can open detail', async ({ page }) => {

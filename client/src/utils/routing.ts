@@ -234,7 +234,7 @@ export function buildDashboardQuery(
     params.set(savedViewQueryParam, savedViewId);
   }
 
-  if (isDashboardDensity(options.dashboardDensity)) {
+  if (options.dashboardDensity === 'compact') {
     params.set(dashboardDensityQueryParam, options.dashboardDensity);
   }
 

@@ -35,6 +35,13 @@ function invalidImportPlan(code = 'invalid_json'): ImportPlan {
     duplicates: emptyCounts,
     conflicts: emptyCounts
   };
+  const emptyEditHistorySummary = {
+    create: 0,
+    replace: 0,
+    skipDuplicate: 0,
+    skipConflict: 0,
+    reject: 1
+  };
 
   return {
     valid: false,
@@ -48,6 +55,7 @@ function invalidImportPlan(code = 'invalid_json'): ImportPlan {
       exactMatches: emptyCounts,
       changed: emptyCounts,
       categories: emptyCategories,
+      editHistorySummary: emptyEditHistorySummary,
       reject: 1
     },
     decisions: [],

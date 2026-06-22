@@ -20,6 +20,13 @@ const emptyCategories = {
   duplicates: emptyCounts,
   conflicts: emptyCounts
 };
+const emptyEditHistorySummary = {
+  create: 0,
+  replace: 0,
+  skipDuplicate: 0,
+  skipConflict: 0,
+  reject: 0
+};
 
 function createImportPlan(overrides: Partial<ImportPlan> = {}): ImportPlan {
   return {
@@ -37,6 +44,7 @@ function createImportPlan(overrides: Partial<ImportPlan> = {}): ImportPlan {
         ...emptyCategories,
         creates: { ...emptyCounts, issues: 1 }
       },
+      editHistorySummary: emptyEditHistorySummary,
       reject: 0
     },
     decisions: [],

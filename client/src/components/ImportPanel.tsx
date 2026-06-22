@@ -55,14 +55,14 @@ function ImportCountRow({
   );
 }
 
-function ImportErrors({ errors }: { errors: ImportErrorDetail[] }) {
+function ImportErrors({ errors, title = 'Validation errors' }: { errors: ImportErrorDetail[]; title?: string }) {
   if (errors.length === 0) {
     return null;
   }
 
   return (
     <div className="import-errors">
-      <h3>Validation errors</h3>
+      <h3>{title}</h3>
       <ul>
         {errors.slice(0, 6).map((error) => {
           const formattedValue = formatImportErrorValue(error.value);
@@ -107,6 +107,74 @@ function ImportWarnings({ warnings }: { warnings: ImportWarningDetail[] }) {
   );
 }
 
+function isEditHistoryDetailPath(path: string): boolean {
+  return /^\$\.issues\[\d+\]\.comments\[\d+\]\.editHistory\[\d+\](?:\.|$)/.test(path);
+}
+
+function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+  return count === 1 ? singular : plural;
+}
+
+function ImportEditHistorySummary({ plan }: { plan: ImportPlan }) {
+  const { editHistorySummary } = plan.summary;
+  const editHistoryErrors = plan.errors.filter((error) => isEditHistoryDetailPath(error.path));
+  const editHistoryWarnings = plan.warnings.filter((warning) => isEditHistoryDetailPath(warning.path));
+  const hasSummary =
+    editHistorySummary.create > 0 ||
+    editHistorySummary.replace > 0 ||
+    editHistorySummary.skipDuplicate > 0 ||
+    editHistorySummary.skipConflict > 0 ||
+    editHistorySummary.reject > 0;
+
+  if (!hasSummary && editHistoryErrors.length === 0 && editHistoryWarnings.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="import-warnings">
+      <h3>Comment edit history</h3>
+      <ul>
+        {editHistorySummary.create > 0 ? (
+          <li>
+            <span>
+              Create {editHistorySummary.create}{' '}
+              {pluralize(editHistorySummary.create, 'edit history entry', 'edit history entries')}.
+            </span>
+          </li>
+        ) : null}
+        {editHistorySummary.skipDuplicate > 0 ? (
+          <li>
+            <span>
+              Skip {editHistorySummary.skipDuplicate} duplicate{' '}
+              {pluralize(editHistorySummary.skipDuplicate, 'edit history entry', 'edit history entries')} that already
+              {editHistorySummary.skipDuplicate === 1 ? ' exists' : ' exist'} unchanged.
+            </span>
+          </li>
+        ) : null}
+        {editHistorySummary.skipConflict > 0 ? (
+          <li>
+            <span>
+              Skip {editHistorySummary.skipConflict} conflicting{' '}
+              {pluralize(editHistorySummary.skipConflict, 'edit history entry', 'edit history entries')}; existing edit
+              history ids are immutable and parent-skipped comments do not import child history.
+            </span>
+          </li>
+        ) : null}
+        {editHistorySummary.reject > 0 ? (
+          <li>
+            <span>
+              Reject {editHistorySummary.reject} invalid{' '}
+              {pluralize(editHistorySummary.reject, 'edit history entry', 'edit history entries')} before import writes.
+            </span>
+          </li>
+        ) : null}
+      </ul>
+      <ImportWarnings warnings={editHistoryWarnings} />
+      <ImportErrors errors={editHistoryErrors} title="Edit history validation" />
+    </div>
+  );
+}
+
 export function ImportPanel({
   fileName,
   importPlan,
@@ -121,6 +189,9 @@ export function ImportPanel({
   onApply,
   onCancel
 }: ImportPanelProps) {
+  const genericWarnings = importPlan?.warnings.filter((warning) => !isEditHistoryDetailPath(warning.path)) ?? [];
+  const genericErrors = importPlan?.errors.filter((error) => !isEditHistoryDetailPath(error.path)) ?? [];
+
   return (
     <section className="import-panel" aria-label="Import preview">
       <div className="panel-header">
@@ -218,8 +289,9 @@ export function ImportPanel({
                 </tbody>
               </table>
             </div>
-            <ImportWarnings warnings={importPlan.warnings} />
-            <ImportErrors errors={importPlan.errors} />
+            <ImportEditHistorySummary plan={importPlan} />
+            <ImportWarnings warnings={genericWarnings} />
+            <ImportErrors errors={genericErrors} />
           </>
         ) : null}
 

@@ -1576,6 +1576,13 @@ describe('tracker import API', () => {
         comments: 1,
         editHistory: 1,
         activityEvents: 1
+      },
+      editHistorySummary: {
+        create: 1,
+        replace: 0,
+        skipDuplicate: 1,
+        skipConflict: 1,
+        reject: 0
       }
     });
     expect(replacePreview.body.decisions).toEqual(
@@ -1678,6 +1685,13 @@ describe('tracker import API', () => {
       comments: 1,
       editHistory: 1,
       activityEvents: 1
+    });
+    expect(applied.body.summary.editHistorySummary).toMatchObject({
+      create: 1,
+      replace: 0,
+      skipDuplicate: 1,
+      skipConflict: 1,
+      reject: 0
     });
     expect(detail.body).toMatchObject({
       id: changedIssue.id,
@@ -1934,6 +1948,43 @@ describe('tracker import API', () => {
       ])
     );
     expect(afterImport.body).toEqual(beforeImport.body);
+  });
+
+  it('classifies invalid comment edit history consistently between preview and apply', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const invalidEditHistoryPayload = cloneExport(payload);
+    const issueWithEditHistoryIndex = invalidEditHistoryPayload.issues.findIndex((issue) =>
+      issue.comments.some((comment) => comment.editHistory.length > 0)
+    );
+
+    if (issueWithEditHistoryIndex < 0) {
+      throw new Error('Expected import fixture to include a comment with edit history');
+    }
+
+    invalidEditHistoryPayload.issues[issueWithEditHistoryIndex].comments[0].editHistory[0].editedAt = 'not-a-timestamp';
+
+    const preview = await request(app).post('/api/import/preview').send(invalidEditHistoryPayload).expect(400);
+    const applied = await request(app).post('/api/import/apply').send(invalidEditHistoryPayload).expect(400);
+
+    expect(preview.body.valid).toBe(false);
+    expect(preview.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'invalid_timestamp',
+          path: `$.issues[${issueWithEditHistoryIndex}].comments[0].editHistory[0].editedAt`
+        })
+      ])
+    );
+    expect(preview.body.summary.editHistorySummary).toMatchObject({
+      create: 0,
+      replace: 0,
+      skipDuplicate: 0,
+      skipConflict: 0,
+      reject: 1
+    });
+    expect(applied.body.summary.editHistorySummary).toEqual(preview.body.summary.editHistorySummary);
+    expect(applied.body.errors).toEqual(preview.body.errors);
   });
 
   it('reports duplicate external IDs with source context before import writes', async () => {

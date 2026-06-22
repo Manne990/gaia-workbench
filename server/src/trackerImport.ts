@@ -52,6 +52,14 @@ type ImportPreviewCategories = {
   conflicts: ImportCounts;
 };
 
+export type ImportEditHistorySummary = {
+  create: number;
+  replace: number;
+  skipDuplicate: number;
+  skipConflict: number;
+  reject: number;
+};
+
 export type ImportDecision = {
   entity: ImportEntity;
   sourceId: string | null;
@@ -87,6 +95,7 @@ export type ImportSummary = {
   exactMatches: ImportCounts;
   changed: ImportCounts;
   categories: ImportPreviewCategories;
+  editHistorySummary: ImportEditHistorySummary;
   reject: number;
 };
 
@@ -1452,6 +1461,60 @@ function incrementCount(counts: ImportCounts, entity: ImportEntity) {
   }
 }
 
+function editHistoryErrorPathPrefix(path: string): string | null {
+  const match = path.match(/^(\$\.issues\[\d+\]\.comments\[\d+\]\.editHistory\[\d+\])(?:\.|$)/);
+
+  return match ? match[1] : null;
+}
+
+function makeEditHistorySummary(decisions: ImportDecision[], errors: ImportErrorDetail[]): ImportEditHistorySummary {
+  const summary: ImportEditHistorySummary = {
+    create: 0,
+    replace: 0,
+    skipDuplicate: 0,
+    skipConflict: 0,
+    reject: 0
+  };
+  const rejectedPrefixes = new Set(
+    errors.map((error) => editHistoryErrorPathPrefix(error.path)).filter((prefix): prefix is string => prefix !== null)
+  );
+
+  for (const decision of decisions) {
+    if (decision.entity !== 'commentEditHistory') {
+      continue;
+    }
+
+    if (decision.decision === 'import') {
+      summary.create += 1;
+      continue;
+    }
+
+    if (decision.decision === 'replace-existing') {
+      summary.replace += 1;
+      continue;
+    }
+
+    if (decision.decision === 'skip-existing') {
+      if (decision.matchType === 'exact') {
+        summary.skipDuplicate += 1;
+      } else {
+        summary.skipConflict += 1;
+      }
+      continue;
+    }
+
+    if (decision.decision === 'reject') {
+      summary.reject += 1;
+    }
+  }
+
+  if (rejectedPrefixes.size > 0) {
+    summary.reject = rejectedPrefixes.size;
+  }
+
+  return summary;
+}
+
 function makeSummary(input: ImportCounts, decisions: ImportDecision[], errors: ImportErrorDetail[]): ImportSummary {
   const toCreate = emptyCounts();
   const toReplace = emptyCounts();
@@ -1496,6 +1559,7 @@ function makeSummary(input: ImportCounts, decisions: ImportDecision[], errors: I
       duplicates,
       conflicts
     },
+    editHistorySummary: makeEditHistorySummary(decisions, errors),
     reject: errors.length
   };
 }

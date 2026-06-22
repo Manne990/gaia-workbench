@@ -110,8 +110,12 @@ function normalizeDependencyIds(dependsOnIssueIds: string[]): string[] {
   for (const dependsOnIssueId of dependsOnIssueIds) {
     const normalizedIssueId = dependsOnIssueId.trim();
 
-    if (normalizedIssueId.length === 0 || seen.has(normalizedIssueId)) {
+    if (normalizedIssueId.length === 0) {
       throw new Error('Invalid bulk dependency ids');
+    }
+
+    if (seen.has(normalizedIssueId)) {
+      throw new Error('Duplicate bulk dependency ids are not allowed');
     }
 
     normalizedIds.push(normalizedIssueId);

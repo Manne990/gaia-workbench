@@ -1314,6 +1314,39 @@ describe('issues API', () => {
       });
   });
 
+  it('rejects bulk status transitions when every selected issue is already in the requested status', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const unchanged = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Bulk no-op unchanged issue', status: 'review' })
+      .expect(201);
+
+    await request(app)
+      .post('/api/issues/bulk-status')
+      .send({
+        status: 'review',
+        issueIds: [unchanged.body.id, unchanged.body.id]
+      })
+      .expect(409, {
+        error:
+          'No status changes were applied. 1 selected issue is already Review. 1 duplicate id was ignored. Choose a different status or adjust the selection.'
+      });
+
+    await request(app)
+      .get(`/api/issues/${unchanged.body.id}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.status).toBe('review');
+      });
+    await request(app)
+      .get(`/api/issues/${unchanged.body.id}/activity`)
+      .expect(200)
+      .expect((activity) => {
+        expect(activity.body.map((event: { type: string }) => event.type)).toEqual(['issue_created']);
+      });
+  });
+
   it('undoes the latest issue status transition with audit evidence', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

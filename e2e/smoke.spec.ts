@@ -2724,6 +2724,39 @@ test('bulk status failure announces an assertive error without clearing selectio
   await expect(bulkActions).toContainText('1 selected');
 });
 
+test('bulk status no-op gives actionable feedback without clearing selection', async ({ page }) => {
+  await createIssueThroughApi(page, {
+    title: 'Bulk status no-op issue',
+    description: 'Already in the requested status.',
+    status: 'done',
+    priority: 'medium'
+  });
+
+  await page.goto('/?search=Bulk%20status%20no-op');
+
+  const bulkActions = page.getByLabel('Bulk status actions');
+  const selection = page.getByLabel('Select Bulk status no-op issue');
+
+  await selection.check();
+  await expect(bulkActions).toContainText('1 selected');
+  await bulkActions.getByLabel(/Bulk status target\./).selectOption('done');
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toBe('Change 1 selected issue to Done?');
+    await dialog.accept();
+  });
+  await bulkActions.getByRole('button', { name: 'Change status for 1 selected issue' }).click();
+
+  const alert = bulkActions.getByRole('alert');
+
+  await expect(alert).toHaveText(
+    'No status changes were applied. 1 selected issue is already Done. Choose a different status or adjust the selection.'
+  );
+  await expect(alert).toHaveAttribute('aria-live', 'assertive');
+  await expect(selection).toBeChecked();
+  await expect(bulkActions).toContainText('1 selected');
+});
+
 test('stale issue signal filters and persists through saved views', async ({ page }) => {
   const staleIssueId = '00000000-0000-4000-8000-000000000215';
   const importResponse = await page.request.post('/api/import/apply', {

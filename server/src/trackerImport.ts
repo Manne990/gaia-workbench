@@ -29,6 +29,13 @@ type TrackerExport = {
   exportVersion: 1;
   issues: ExportedIssue[];
   savedFilterViews: SavedFilterView[];
+  archivedRecovery?: ArchivedRecoveryEntry[];
+};
+
+type ArchivedRecoveryEntry = {
+  issueId: string;
+  archivedAt: string;
+  archiveEventId: string | null;
 };
 
 type ImportEntity = 'issue' | 'comment' | 'commentEditHistory' | 'activityEvent' | 'savedFilterView';
@@ -398,6 +405,11 @@ function isValidTimestamp(value: string): boolean {
   return !Number.isNaN(timestamp) && new Date(timestamp).toISOString() === value;
 }
 
+function activityMetadataText(event: ActivityEvent, key: string): string | null {
+  const value = event.metadata[key];
+  return typeof value === 'string' ? value : null;
+}
+
 function validateMetadataValue(
   value: unknown,
   path: string,
@@ -653,6 +665,250 @@ function validateIssueDependencyGraph(
       }
     });
   }
+}
+
+function currentArchiveRecoveryEvent(issue: ExportedIssue): ActivityEvent | null {
+  if (issue.archivedAt === null) {
+    return null;
+  }
+
+  for (let index = issue.activityEvents.length - 1; index >= 0; index -= 1) {
+    const event = issue.activityEvents[index];
+
+    if (event.type !== 'issue_archived') {
+      continue;
+    }
+
+    if (event.createdAt !== issue.archivedAt) {
+      continue;
+    }
+
+    if (activityMetadataText(event, 'to') !== issue.archivedAt) {
+      continue;
+    }
+
+    return event;
+  }
+
+  return null;
+}
+
+function validateArchivedRecoveryMetadata(
+  issues: ExportedIssue[],
+  archivedRecoveryInput: unknown,
+  warnings: ImportWarningDetail[]
+): void {
+  const archivedIssues = issues.filter((issue) => issue.archivedAt !== null);
+
+  if (archivedIssues.length === 0) {
+    return;
+  }
+
+  const issueIndexById = new Map(issues.map((issue, index) => [issue.id, index]));
+
+  if (archivedRecoveryInput === undefined) {
+    for (const issue of archivedIssues) {
+      const issueIndex = issueIndexById.get(issue.id) ?? 0;
+      pushWarning(
+        warnings,
+        'missing_archived_recovery_metadata',
+        `$.issues[${issueIndex}].archivedAt`,
+        'Archived recovery metadata is missing and will be reconstructed from imported issue state.',
+        issue.id
+      );
+    }
+
+    return;
+  }
+
+  if (!Array.isArray(archivedRecoveryInput)) {
+    pushWarning(
+      warnings,
+      'invalid_archived_recovery_metadata',
+      '$.archivedRecovery',
+      'Archived recovery metadata must be an array and will be reconstructed from imported issue state.',
+      archivedRecoveryInput
+    );
+    return;
+  }
+
+  const entriesByIssueId = new Map<string, { entry: ArchivedRecoveryEntry; path: string }>();
+
+  archivedRecoveryInput.forEach((entryInput, entryIndex) => {
+    const entryPath = `$.archivedRecovery[${entryIndex}]`;
+
+    if (!isRecord(entryInput)) {
+      pushWarning(
+        warnings,
+        'invalid_archived_recovery_metadata',
+        entryPath,
+        'Archived recovery metadata entries must be objects.',
+        entryInput
+      );
+      return;
+    }
+
+    const issueId =
+      typeof entryInput.issueId === 'string' && entryInput.issueId.trim().length > 0 ? entryInput.issueId : null;
+    const archivedAt = typeof entryInput.archivedAt === 'string' ? entryInput.archivedAt : null;
+    const archiveEventId =
+      entryInput.archiveEventId === null || typeof entryInput.archiveEventId === 'string'
+        ? entryInput.archiveEventId
+        : undefined;
+
+    if (issueId === null) {
+      pushWarning(
+        warnings,
+        'invalid_archived_recovery_metadata',
+        `${entryPath}.issueId`,
+        'Archived recovery metadata issueId must be a non-empty string.',
+        entryInput.issueId
+      );
+      return;
+    }
+
+    if (entriesByIssueId.has(issueId)) {
+      pushWarning(
+        warnings,
+        'duplicate_archived_recovery_metadata',
+        `${entryPath}.issueId`,
+        'Duplicate archived recovery metadata for the same issue will be ignored.',
+        issueId
+      );
+      return;
+    }
+
+    if (archivedAt === null || !isValidTimestamp(archivedAt)) {
+      pushWarning(
+        warnings,
+        'invalid_archived_recovery_metadata',
+        `${entryPath}.archivedAt`,
+        'Archived recovery metadata archivedAt must be an ISO timestamp.',
+        entryInput.archivedAt
+      );
+      return;
+    }
+
+    if (archiveEventId === undefined) {
+      pushWarning(
+        warnings,
+        'invalid_archived_recovery_metadata',
+        `${entryPath}.archiveEventId`,
+        'Archived recovery metadata archiveEventId must be a string or null.',
+        entryInput.archiveEventId
+      );
+      return;
+    }
+
+    entriesByIssueId.set(issueId, {
+      entry: {
+        issueId,
+        archivedAt,
+        archiveEventId
+      },
+      path: entryPath
+    });
+  });
+
+  for (const issue of archivedIssues) {
+    const issueIndex = issueIndexById.get(issue.id) ?? 0;
+    const entryRecord = entriesByIssueId.get(issue.id);
+
+    if (!entryRecord) {
+      pushWarning(
+        warnings,
+        'missing_archived_recovery_metadata',
+        `$.issues[${issueIndex}].archivedAt`,
+        'Archived recovery metadata is missing and will be reconstructed from imported issue state.',
+        issue.id
+      );
+      continue;
+    }
+
+    const { entry, path } = entryRecord;
+
+    if (entry.archivedAt !== issue.archivedAt) {
+      pushWarning(
+        warnings,
+        'stale_archived_recovery_metadata',
+        `${path}.archivedAt`,
+        'Archived recovery metadata does not match the imported archivedAt value and will be normalized.',
+        entry.archivedAt
+      );
+      continue;
+    }
+
+    if (entry.archiveEventId === null) {
+      pushWarning(
+        warnings,
+        'missing_archived_recovery_metadata',
+        `${path}.archiveEventId`,
+        'Archived recovery metadata is missing the matching archive event id and will be reconstructed.',
+        issue.id
+      );
+      continue;
+    }
+
+    const matchedEvent = issue.activityEvents.find((event) => event.id === entry.archiveEventId);
+
+    if (
+      !matchedEvent ||
+      matchedEvent.type !== 'issue_archived' ||
+      matchedEvent.createdAt !== issue.archivedAt ||
+      activityMetadataText(matchedEvent, 'to') !== issue.archivedAt
+    ) {
+      pushWarning(
+        warnings,
+        'incompatible_archived_recovery_metadata',
+        `${path}.archiveEventId`,
+        'Archived recovery metadata does not reference the current archive activity and will be reconstructed.',
+        entry.archiveEventId
+      );
+      continue;
+    }
+
+    const derivedEvent = currentArchiveRecoveryEvent(issue);
+
+    if (!derivedEvent || derivedEvent.id !== matchedEvent.id) {
+      pushWarning(
+        warnings,
+        'stale_archived_recovery_metadata',
+        `${path}.archiveEventId`,
+        'Archived recovery metadata points to a stale archive activity and will be normalized.',
+        entry.archiveEventId
+      );
+    }
+  }
+
+  archivedRecoveryInput.forEach((entryInput, entryIndex) => {
+    if (!isRecord(entryInput) || typeof entryInput.issueId !== 'string') {
+      return;
+    }
+
+    const issue = issues.find((candidate) => candidate.id === entryInput.issueId);
+    const entryPath = `$.archivedRecovery[${entryIndex}].issueId`;
+
+    if (!issue) {
+      pushWarning(
+        warnings,
+        'incompatible_archived_recovery_metadata',
+        entryPath,
+        'Archived recovery metadata references an issue that is not present in the import payload.',
+        entryInput.issueId
+      );
+      return;
+    }
+
+    if (issue.archivedAt === null) {
+      pushWarning(
+        warnings,
+        'incompatible_archived_recovery_metadata',
+        entryPath,
+        'Archived recovery metadata for an active issue will be ignored during import.',
+        entryInput.issueId
+      );
+    }
+  });
 }
 
 function validateUniqueId(
@@ -953,7 +1209,11 @@ function validateTrackerExport(input: unknown): ValidationResult {
   const warnings: ImportWarningDetail[] = [];
   const decisions: ImportDecision[] = [];
   const seen: SeenImportIds = new Map();
-  const root = validateObject(input, '$', ['exportVersion', 'issues'], errors, ['conflictPolicy', 'savedFilterViews']);
+  const root = validateObject(input, '$', ['exportVersion', 'issues'], errors, [
+    'conflictPolicy',
+    'savedFilterViews',
+    'archivedRecovery'
+  ]);
 
   if (!root) {
     return {
@@ -1410,6 +1670,7 @@ function validateTrackerExport(input: unknown): ValidationResult {
   });
 
   validateIssueDependencyGraph(issues, explicitIsBlockedByIssueId, errors, warnings);
+  validateArchivedRecoveryMetadata(issues, root.archivedRecovery, warnings);
 
   const exportData: TrackerExport | null =
     exportVersion === 1

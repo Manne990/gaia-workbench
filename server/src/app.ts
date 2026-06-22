@@ -126,10 +126,17 @@ type ExportAuditSummary = {
   };
 };
 
+type ExportArchivedRecoveryEntry = {
+  issueId: string;
+  archivedAt: string;
+  archiveEventId: string | null;
+};
+
 type TrackerExport = {
   exportVersion: 1;
   issues: ExportedIssue[];
   savedFilterViews: SavedFilterView[];
+  archivedRecovery: ExportArchivedRecoveryEntry[];
   auditSummary?: ExportAuditSummary;
 };
 
@@ -712,6 +719,42 @@ function buildPlannedWorkEntry(issue: ExportedIssue): ExportAuditPlannedWork {
   };
 }
 
+function currentArchiveRecoveryEvent(issue: ExportedIssue): ActivityEvent | null {
+  if (issue.archivedAt === null) {
+    return null;
+  }
+
+  for (let index = issue.activityEvents.length - 1; index >= 0; index -= 1) {
+    const event = issue.activityEvents[index];
+
+    if (event.type !== 'issue_archived') {
+      continue;
+    }
+
+    if (event.createdAt !== issue.archivedAt) {
+      continue;
+    }
+
+    if (getActivityMetadataValue(event, 'to') !== issue.archivedAt) {
+      continue;
+    }
+
+    return event;
+  }
+
+  return null;
+}
+
+function buildArchivedRecoveryEntries(issues: ExportedIssue[]): ExportArchivedRecoveryEntry[] {
+  return issues
+    .filter((issue) => issue.archivedAt !== null)
+    .map((issue) => ({
+      issueId: issue.id,
+      archivedAt: issue.archivedAt ?? '',
+      archiveEventId: currentArchiveRecoveryEvent(issue)?.id ?? null
+    }));
+}
+
 function buildExportAuditSummary(exportPayload: TrackerExportBase): ExportAuditSummary {
   const byStatus = emptyStatusCounts();
   const byPriority = emptyPriorityCounts();
@@ -854,8 +897,11 @@ function buildTrackerExport(
         activityEvents: activityByIssueId.get(issue.id) ?? []
       };
     }),
-    savedFilterViews: savedFilterViewRepository.list()
+    savedFilterViews: savedFilterViewRepository.list(),
+    archivedRecovery: []
   };
+
+  exportPayload.archivedRecovery = buildArchivedRecoveryEntries(exportPayload.issues);
 
   if (!options.includeAuditSummary) {
     return exportPayload;

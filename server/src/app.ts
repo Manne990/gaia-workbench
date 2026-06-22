@@ -318,9 +318,7 @@ function formatIssueStatusLabel(status: IssueStatus): string {
 function buildBulkStatusNoOpMessage(status: IssueStatus, unchangedCount: number, duplicateCount: number): string {
   const parts = [
     `No status changes were applied. ${unchangedCount} selected issue${unchangedCount === 1 ? ' is' : 's are'} already ${formatIssueStatusLabel(status)}.`,
-    duplicateCount > 0
-      ? `${duplicateCount} duplicate ${duplicateCount === 1 ? 'id was' : 'ids were'} ignored.`
-      : null,
+    duplicateCount > 0 ? `${duplicateCount} duplicate ${duplicateCount === 1 ? 'id was' : 'ids were'} ignored.` : null,
     'Choose a different status or adjust the selection.'
   ];
 

@@ -53,7 +53,8 @@ const defaultAuditSummary: IssueAuditSummary = {
   },
   dependencyEdges: {
     total: 0,
-    blocked: 0
+    blocked: 0,
+    archivedBlocked: 0
   }
 };
 

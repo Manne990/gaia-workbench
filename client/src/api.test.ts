@@ -191,7 +191,8 @@ describe('client API errors', () => {
       },
       dependencyEdges: {
         total: 1,
-        blocked: 1
+        blocked: 1,
+        archivedBlocked: 0
       }
     };
     vi.mocked(fetch).mockResolvedValue(jsonResponse(summary, { status: 200 }));

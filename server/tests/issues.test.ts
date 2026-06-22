@@ -608,7 +608,8 @@ describe('issues API', () => {
       },
       dependencyEdges: {
         total: 1,
-        blocked: 1
+        blocked: 1,
+        archivedBlocked: 0
       }
     });
 
@@ -643,7 +644,8 @@ describe('issues API', () => {
       },
       dependencyEdges: {
         total: 1,
-        blocked: 1
+        blocked: 1,
+        archivedBlocked: 0
       }
     });
 
@@ -673,7 +675,8 @@ describe('issues API', () => {
       },
       dependencyEdges: {
         total: 1,
-        blocked: 1
+        blocked: 1,
+        archivedBlocked: 0
       }
     });
   });
@@ -736,6 +739,66 @@ describe('issues API', () => {
     expect(unblockedSummary.body.byStatus.review).toBe(2);
     expect(unblockedSummary.body.totalIssues).toBe(3);
     expect(waitingReview.body.status).toBe('review');
+  });
+
+  it('surfaces archived blocker dependency edges without inflating blocked-only counts', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const liveBlocker = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Live audit blocker', labels: ['audit'] })
+      .expect(201);
+    const archivedBlocker = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Archived audit blocker', labels: ['audit'] })
+      .expect(201);
+    const activelyBlocked = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Actively blocked issue', status: 'in_progress', labels: ['audit'] })
+      .expect(201);
+    const archivedRiskIssue = await request(app)
+      .post('/api/issues')
+      .send({ title: 'Archived blocker risk issue', status: 'in_progress', labels: ['audit'] })
+      .expect(201);
+
+    await request(app)
+      .post(`/api/issues/${activelyBlocked.body.id}/dependencies`)
+      .send({ dependsOnIssueId: liveBlocker.body.id })
+      .expect(201);
+    await request(app)
+      .post(`/api/issues/${archivedRiskIssue.body.id}/dependencies`)
+      .send({ dependsOnIssueId: archivedBlocker.body.id })
+      .expect(201);
+    await request(app).post(`/api/issues/${archivedBlocker.body.id}/archive`).expect(200);
+
+    const summary = await request(app).get('/api/issues/audit-summary?label=audit').expect(200);
+
+    expect(summary.body).toMatchObject({
+      totalIssues: 3,
+      totalArchivedIssues: 1,
+      totalBlockedIssues: 1,
+      totalWaitingIssues: 0,
+      dependencyEdges: {
+        total: 2,
+        blocked: 1,
+        archivedBlocked: 1
+      }
+    });
+
+    const blockedOnlySummary = await request(app)
+      .get('/api/issues/audit-summary?label=audit&blockedOnly=true')
+      .expect(200);
+
+    expect(blockedOnlySummary.body).toMatchObject({
+      totalIssues: 1,
+      totalArchivedIssues: 0,
+      totalBlockedIssues: 1,
+      dependencyEdges: {
+        total: 1,
+        blocked: 1,
+        archivedBlocked: 0
+      }
+    });
   });
 
   it('filters issues by blocked state derived from active dependencies', async () => {

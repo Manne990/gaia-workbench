@@ -688,10 +688,22 @@ export class IssueRepository {
             WHERE dependencies.issue_id IN (SELECT id FROM filtered_issues)
               AND blocked_dependencies.archived_at IS NULL
               AND blocked_dependencies.status != @closedStatus
-          ) AS blocked
+          ) AS blocked,
+          (
+            SELECT COUNT(*)
+            FROM issue_dependencies AS dependencies
+            INNER JOIN issues AS blocked_dependencies
+              ON blocked_dependencies.id = dependencies.depends_on_issue_id
+            WHERE dependencies.issue_id IN (SELECT id FROM filtered_issues)
+              AND blocked_dependencies.archived_at IS NOT NULL
+          ) AS archivedBlocked
         `
       )
-      .get({ ...scopedFilters.values, closedStatus: CLOSED_ISSUE_STATUS }) as { total: number; blocked: number };
+      .get({ ...scopedFilters.values, closedStatus: CLOSED_ISSUE_STATUS }) as {
+      total: number;
+      blocked: number;
+      archivedBlocked: number;
+    };
 
     return {
       totalIssues,
@@ -704,7 +716,8 @@ export class IssueRepository {
       byPriority,
       dependencyEdges: {
         total: dependencyRow.total,
-        blocked: dependencyRow.blocked
+        blocked: dependencyRow.blocked,
+        archivedBlocked: dependencyRow.archivedBlocked
       }
     };
   }

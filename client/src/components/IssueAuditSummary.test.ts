@@ -27,7 +27,8 @@ describe('IssueAuditSummary', () => {
           },
           dependencyEdges: {
             total: 3,
-            blocked: 2
+            blocked: 2,
+            archivedBlocked: 1
           }
         }
       })
@@ -37,12 +38,14 @@ describe('IssueAuditSummary', () => {
     expect(markup).toContain('Board health');
     expect(markup).toContain('3 blocked');
     expect(markup).toContain('1 waiting');
+    expect(markup).toContain('1 archived blocker');
     expect(markup).toContain('Open');
     expect(markup).toContain('6');
     expect(markup).toContain('Done');
     expect(markup).toContain('2');
     expect(markup).toContain('Blocked');
     expect(markup).toContain('3');
+    expect(markup).toContain('Archived blockers');
     expect(markup).toContain('Archived');
   });
 });

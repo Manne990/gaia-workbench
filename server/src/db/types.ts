@@ -91,6 +91,7 @@ export interface IssueAuditSummary {
   dependencyEdges: {
     total: number;
     blocked: number;
+    archivedBlocked: number;
   };
 }
 

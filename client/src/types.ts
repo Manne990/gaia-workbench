@@ -64,6 +64,7 @@ export type IssueAuditSummary = {
   dependencyEdges: {
     total: number;
     blocked: number;
+    archivedBlocked: number;
   };
 };
 

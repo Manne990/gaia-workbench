@@ -1,5 +1,14 @@
-import { type ChangeEvent, type FormEvent, type KeyboardEvent, type RefObject, useMemo } from 'react';
+import {
+  type ChangeEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  type RefObject,
+  useEffect,
+  useMemo,
+  useState
+} from 'react';
 import { getCommandPaletteMatches, type CommandSearchCommand } from '../utils/commandSearch';
+import { getAdjacentEnabledCommandId, resolveActiveCommandId } from '../utils/commandPaletteNavigation';
 
 type CommandDefinition = CommandSearchCommand;
 
@@ -38,6 +47,13 @@ export function CommandPalette({
   commands
 }: CommandPaletteProps) {
   const filteredCommands = useMemo(() => getCommandPaletteMatches(commands, searchQuery), [commands, searchQuery]);
+  const [activeCommandId, setActiveCommandId] = useState<string | null>(() =>
+    resolveActiveCommandId(filteredCommands, null)
+  );
+
+  useEffect(() => {
+    setActiveCommandId((current) => resolveActiveCommandId(filteredCommands, current));
+  }, [filteredCommands]);
 
   if (!isOpen) {
     return null;
@@ -47,6 +63,14 @@ export function CommandPalette({
     if (event.key === 'Escape') {
       event.preventDefault();
       onClose();
+      return;
+    }
+
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveCommandId((current) =>
+        getAdjacentEnabledCommandId(filteredCommands, current, event.key === 'ArrowDown' ? 'next' : 'previous')
+      );
       return;
     }
 
@@ -80,7 +104,8 @@ export function CommandPalette({
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const nextCommand = filteredCommands.find((command) => !command.disabled);
+    const nextCommandId = resolveActiveCommandId(filteredCommands, activeCommandId);
+    const nextCommand = filteredCommands.find((command) => command.id === nextCommandId && !command.disabled);
 
     if (nextCommand) {
       onRunCommand(nextCommand.id);
@@ -121,23 +146,32 @@ export function CommandPalette({
               No matching commands.
             </li>
           ) : (
-            filteredCommands.map((command) => (
-              <li key={command.id}>
-                <button
-                  type="button"
-                  className="command-item"
-                  disabled={command.disabled}
-                  onClick={() => onRunCommand(command.id)}
-                  aria-label={`${command.label}. ${command.description}`}
-                >
-                  <span className="command-item-label">{command.label}</span>
-                  <span className="command-item-hint" aria-hidden="true">
-                    {command.commandHint}
-                  </span>
-                  <span className="command-item-description">{command.description}</span>
-                </button>
-              </li>
-            ))
+            filteredCommands.map((command) => {
+              const isActive = command.id === activeCommandId && !command.disabled;
+
+              return (
+                <li key={command.id}>
+                  <button
+                    type="button"
+                    className={isActive ? 'command-item active' : 'command-item'}
+                    disabled={command.disabled}
+                    onClick={() => onRunCommand(command.id)}
+                    aria-label={`${command.label}. ${command.description}`}
+                    onMouseEnter={() => {
+                      if (!command.disabled) {
+                        setActiveCommandId(command.id);
+                      }
+                    }}
+                  >
+                    <span className="command-item-label">{command.label}</span>
+                    <span className="command-item-hint" aria-hidden="true">
+                      {command.commandHint}
+                    </span>
+                    <span className="command-item-description">{command.description}</span>
+                  </button>
+                </li>
+              );
+            })
           )}
         </ul>
       </section>

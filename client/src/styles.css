@@ -822,6 +822,10 @@ h3 {
   background: #f2f7fb;
 }
 
+.command-item.active {
+  background: #e8f2f3;
+}
+
 .command-item:disabled {
   opacity: 0.45;
 }

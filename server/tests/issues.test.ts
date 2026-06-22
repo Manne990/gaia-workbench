@@ -1987,7 +1987,14 @@ describe('issues API', () => {
     await request(app)
       .put(`/api/issues/${blocked.body.id}/dependencies`)
       .send({ dependsOnIssueIds: [validBlocker.body.id, validBlocker.body.id] })
-      .expect(400, validationErrorBody('Invalid bulk dependency ids'));
+      .expect(400, validationErrorBody('Duplicate bulk dependency ids are not allowed'));
+
+    await request(app)
+      .put(`/api/issues/${blocked.body.id}/dependencies`)
+      .send({ dependsOnIssueIds: [validBlocker.body.id, blocked.body.id] })
+      .expect(409, {
+        error: 'Issue cannot depend on itself'
+      });
 
     await request(app)
       .post(`/api/issues/${cycleTarget.body.id}/dependencies`)
@@ -2012,6 +2019,15 @@ describe('issues API', () => {
       'issue_created',
       'issue_dependency_added'
     ]);
+    const blockedDependenciesAfterValidationFailures = await request(app)
+      .get(`/api/issues/${blocked.body.id}/dependencies`)
+      .expect(200);
+    expect(blockedDependenciesAfterValidationFailures.body).toMatchObject({
+      issueId: blocked.body.id,
+      dependencies: [expect.objectContaining({ id: existingBlocker.body.id })],
+      isBlocked: true
+    });
+    expect(blockedDependenciesAfterValidationFailures.body.dependencies).toHaveLength(1);
 
     const cycleSourceActivity = await request(app).get(`/api/issues/${cycleSource.body.id}/activity`).expect(200);
     expect(cycleSourceActivity.body.map((event: { type: string }) => event.type)).toEqual(['issue_created']);

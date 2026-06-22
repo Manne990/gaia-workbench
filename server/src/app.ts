@@ -271,6 +271,7 @@ const validationErrorMessages = new Set([
   'Invalid status undo cursor',
   'Invalid bulk issue ids',
   'Invalid bulk dependency ids',
+  'Duplicate bulk dependency ids are not allowed',
   'dependsOnIssueId is required',
   'Saved view name is required',
   'Invalid saved view payload',
@@ -301,7 +302,7 @@ function sendValidationError(res: Response, message: string) {
   return res.status(400).json(validationErrorResponse(message));
 }
 
-function parseBulkDependencyIds(dependsOnIssueIds: unknown): string[] {
+function parseBulkDependencyIds(issueId: string, dependsOnIssueIds: unknown): string[] {
   if (!Array.isArray(dependsOnIssueIds)) {
     throw new Error('Invalid bulk dependency ids');
   }
@@ -317,7 +318,11 @@ function parseBulkDependencyIds(dependsOnIssueIds: unknown): string[] {
     const normalizedIssueId = dependsOnIssueId.trim();
 
     if (seen.has(normalizedIssueId)) {
-      throw new Error('Invalid bulk dependency ids');
+      throw new Error('Duplicate bulk dependency ids are not allowed');
+    }
+
+    if (normalizedIssueId === issueId) {
+      throw new IssueDependencyConflictError('Issue cannot depend on itself');
     }
 
     normalizedIds.push(normalizedIssueId);
@@ -1195,7 +1200,7 @@ export function createApp(config: AppConfig = {}) {
 
   app.put('/api/issues/:id/dependencies', (req, res) => {
     try {
-      const dependsOnIssueIds = parseBulkDependencyIds(req.body?.dependsOnIssueIds);
+      const dependsOnIssueIds = parseBulkDependencyIds(req.params.id, req.body?.dependsOnIssueIds);
 
       return res.status(200).json(issueDependencyRepository.replace(req.params.id, dependsOnIssueIds));
     } catch (error) {

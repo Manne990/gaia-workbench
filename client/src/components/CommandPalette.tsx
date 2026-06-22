@@ -1,4 +1,12 @@
-import { type ChangeEvent, type FormEvent, type KeyboardEvent, type RefObject, useEffect, useMemo, useState } from 'react';
+import {
+  type ChangeEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  type RefObject,
+  useEffect,
+  useMemo,
+  useState
+} from 'react';
 import { getCommandPaletteMatches, type CommandSearchCommand } from '../utils/commandSearch';
 import { getAdjacentEnabledCommandId, resolveActiveCommandId } from '../utils/commandPaletteNavigation';
 

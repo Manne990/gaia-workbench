@@ -714,6 +714,52 @@ test('open issue detail reconciles after a background issue mutation refreshes t
   await expect(detail.getByLabel('Issue activity').getByText('Priority changed')).toBeVisible();
 });
 
+test('issue detail dependency count updates after add and remove', async ({ page }) => {
+  const blocker = await createIssueThroughApi(page, {
+    title: 'Dependency count blocker issue'
+  });
+  const issue = await createIssueThroughApi(page, {
+    title: 'Dependency count target',
+    description: 'Starts with zero blockers in header detail panel.'
+  });
+
+  await page.goto(`/issues/${issue.id}`);
+
+  const detail = page.getByRole('region', { name: 'Dependency count target' });
+  const dependencyInput = detail.getByLabel('Add blocker issue ID');
+  const addDependencyButton = detail.getByRole('button', { name: 'Add Dependency' });
+
+  await expect(detail.getByText('Dependencies: 0')).toBeVisible();
+
+  const addDependencyResponse = page.waitForResponse((response) => {
+    const responseUrl = new URL(response.url());
+
+    return response.request().method() === 'POST' && responseUrl.pathname === `/api/issues/${issue.id}/dependencies`;
+  });
+
+  await dependencyInput.fill(blocker.id);
+  await addDependencyButton.click();
+
+  const addDependencyResult = await addDependencyResponse;
+  expect(addDependencyResult.ok()).toBe(true);
+  await expect(detail.getByText('Dependencies: 1')).toBeVisible();
+
+  const removeDependencyResponse = page.waitForResponse((response) => {
+    const responseUrl = new URL(response.url());
+
+    return (
+      response.request().method() === 'DELETE' &&
+      responseUrl.pathname === `/api/issues/${issue.id}/dependencies/${blocker.id}`
+    );
+  });
+
+  await detail.getByRole('button', { name: `Remove dependency ${blocker.title}` }).click();
+
+  const removeDependencyResult = await removeDependencyResponse;
+  expect(removeDependencyResult.ok()).toBe(true);
+  await expect(detail.getByText('Dependencies: 0')).toBeVisible();
+});
+
 test('duplicates an issue from detail without copying history or dependencies', async ({ page }) => {
   const blocker = await createIssueThroughApi(page, {
     title: 'Duplicate source blocker'

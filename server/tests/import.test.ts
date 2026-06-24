@@ -1939,7 +1939,7 @@ describe('tracker import API', () => {
     });
   });
 
-  it('rejects malformed payloads without mutating existing data', async () => {
+  it('rejects invalid issue status and priority values without mutating existing data', async () => {
     const app = createApp({ databasePath: ':memory:' });
     const payload = await createExportFixture();
 
@@ -1948,6 +1948,7 @@ describe('tracker import API', () => {
 
     const malformed = cloneExport(payload);
     malformed.issues[0].status = 'triage';
+    malformed.issues[1].priority = 'urgent';
 
     const preview = await request(app).post('/api/import/preview').send(malformed).expect(400);
     const response = await request(app).post('/api/import/apply').send(malformed).expect(400);
@@ -1961,6 +1962,12 @@ describe('tracker import API', () => {
           path: '$.issues[0].status',
           message: 'Invalid issue status.',
           value: 'triage'
+        }),
+        expect.objectContaining({
+          code: 'invalid_priority',
+          path: '$.issues[1].priority',
+          message: 'Invalid issue priority.',
+          value: 'urgent'
         })
       ])
     );

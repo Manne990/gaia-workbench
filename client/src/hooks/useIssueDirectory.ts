@@ -206,6 +206,11 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     return filters;
   }, [blockedOnly, includeArchived, labelFilter, pageSize, priorityFilter, searchFilter, staleOnly, statusFilter]);
 
+  const auditSummaryFilterSummaries = useMemo(
+    () => activeFilterSummaries.filter((filter) => filter.key !== 'includeArchived' && filter.key !== 'pageSize'),
+    [activeFilterSummaries]
+  );
+
   const hasActiveFilters = activeFilterSummaries.length > 0;
 
   const statusCounts = useMemo(() => {
@@ -333,6 +338,7 @@ export function useIssueDirectory(initialFilters: DashboardFilters = defaultDash
     totalIssueCount,
     filteredIssues: issues,
     activeFilterSummaries,
+    auditSummaryFilterSummaries,
     hasActiveFilters,
     statusCounts,
     issueListSummary,

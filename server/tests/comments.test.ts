@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
+import { expectValuesSortedAscending } from './sortAssertions.js';
 
 const validationErrorBody = (error: string) => ({
   error,
@@ -231,9 +232,7 @@ describe('comments API', () => {
       'issue_dependency_removed'
     ]);
     expect(events.every((event) => event.issueId === target.body.id)).toBe(true);
-    expect(events.map((event) => Date.parse(event.createdAt))).toEqual(
-      [...events].map((event) => Date.parse(event.createdAt)).sort((left, right) => left - right)
-    );
+    expectValuesSortedAscending(events, (event) => Date.parse(event.createdAt));
 
     const compoundIssueEvents = events.slice(1, 5);
     expect(compoundIssueEvents.map((event) => event.createdAt)).toEqual(

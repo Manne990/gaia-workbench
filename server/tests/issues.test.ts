@@ -2,6 +2,7 @@ import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { ISSUE_STATUSES } from '../src/db/index.js';
+import { expectValuesInAnyOrder } from './sortAssertions.js';
 
 const validationErrorBody = (error: string) => ({
   error,
@@ -520,13 +521,14 @@ describe('issues API', () => {
 
     expect(allSavedItems).toHaveLength(30);
     expect(allSavedMatches.body.pagination.total).toBe(30);
-    expect(allSavedItems.map((issue) => issue.id).sort()).toEqual([...matchingBlockedIds].sort());
-    expect(
-      allSavedItems
-        .filter((issue) => issue.archivedAt !== null)
-        .map((issue) => issue.id)
-        .sort()
-    ).toEqual([...archivedBlockedIds].sort());
+    expectValuesInAnyOrder(
+      allSavedItems.map((issue) => issue.id),
+      matchingBlockedIds
+    );
+    expectValuesInAnyOrder(
+      allSavedItems.filter((issue) => issue.archivedAt !== null).map((issue) => issue.id),
+      archivedBlockedIds
+    );
 
     const activeOnlyParams = new URLSearchParams(savedViewParams);
     activeOnlyParams.delete('includeArchived');

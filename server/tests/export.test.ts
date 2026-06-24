@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
+import { expectValuesSortedAscending } from './sortAssertions.js';
 
 const validationErrorBody = (error: string) => ({
   error,
@@ -629,9 +630,7 @@ describe('tracker export API', () => {
       before: { archivedAt: archived.body.archivedAt },
       after: { archivedAt: null }
     });
-    expect(timeline.map((entry) => entry.createdAt)).toEqual(
-      [...timeline.map((entry) => entry.createdAt)].sort((left, right) => left.localeCompare(right))
-    );
+    expectValuesSortedAscending(timeline, (entry) => entry.createdAt);
   });
 
   it('rejects invalid audit summary export options', async () => {

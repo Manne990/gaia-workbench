@@ -249,7 +249,7 @@ describe('persistence layer', () => {
       const firstDatabase = createDatabase(databasePath);
       const firstRepository = new SavedFilterViewRepository(firstDatabase);
       const created = firstRepository.create({
-        name: ' Review backlog ',
+        name: ' Review   backlog ',
         search: 'api',
         status: 'review',
         priority: 'high',
@@ -273,7 +273,7 @@ describe('persistence layer', () => {
           })
         ).toThrow('Saved view name already exists');
 
-        const renamed = secondRepository.update(created.id, { name: 'Ops backlog', pageSize: 10 });
+        const renamed = secondRepository.update(created.id, { name: '  Ops   backlog  ', pageSize: 10 });
 
         expect(renamed).toMatchObject({
           id: created.id,

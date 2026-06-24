@@ -911,6 +911,37 @@ function validateArchivedRecoveryMetadata(
   });
 }
 
+function validateSavedFilterViewFilters(
+  issues: ExportedIssue[],
+  savedFilterViews: SavedFilterView[],
+  warnings: ImportWarningDetail[]
+): void {
+  const importedStatuses = new Set(issues.map((issue) => issue.status));
+  const importedLabels = new Set(issues.flatMap((issue) => issue.labels));
+
+  savedFilterViews.forEach((view, viewIndex) => {
+    if (isSavedFilterStatus(view.status) && view.status !== 'all' && !importedStatuses.has(view.status)) {
+      pushWarning(
+        warnings,
+        'saved_view_status_without_import_match',
+        `$.savedFilterViews[${viewIndex}].status`,
+        'Saved view status filter does not match any issue status in the import payload and may only match existing target data.',
+        view.status
+      );
+    }
+
+    if (view.label.trim().length > 0 && view.label.length <= 32 && !importedLabels.has(view.label)) {
+      pushWarning(
+        warnings,
+        'saved_view_label_without_import_match',
+        `$.savedFilterViews[${viewIndex}].label`,
+        'Saved view label filter does not match any issue label in the import payload and may only match existing target data.',
+        view.label
+      );
+    }
+  });
+}
+
 function validateUniqueId(
   id: string,
   entity: ImportEntity,
@@ -1671,6 +1702,7 @@ function validateTrackerExport(input: unknown): ValidationResult {
 
   validateIssueDependencyGraph(issues, explicitIsBlockedByIssueId, errors, warnings);
   validateArchivedRecoveryMetadata(issues, root.archivedRecovery, warnings);
+  validateSavedFilterViewFilters(issues, savedFilterViews, warnings);
 
   const exportData: TrackerExport | null =
     exportVersion === 1

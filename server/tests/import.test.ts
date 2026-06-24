@@ -687,6 +687,48 @@ describe('tracker import API', () => {
     expect(exportedAfterImport.body).toEqual(payload);
   });
 
+  it('warns when saved view filters do not match imported issue labels or statuses', async () => {
+    const targetApp = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+    const unmatchedLabel = 'future-label';
+
+    expect(payload.issues.some((issue) => issue.status === 'done')).toBe(false);
+    expect(payload.issues.some((issue) => issue.labels?.includes(unmatchedLabel))).toBe(false);
+
+    payload.savedFilterViews[0] = {
+      ...payload.savedFilterViews[0],
+      status: 'done',
+      label: unmatchedLabel
+    };
+
+    const preview = await request(targetApp).post('/api/import/preview').send(payload).expect(200);
+    const applied = await request(targetApp).post('/api/import/apply').send(payload).expect(200);
+
+    const expectedWarnings = [
+      expect.objectContaining({
+        code: 'saved_view_status_without_import_match',
+        path: '$.savedFilterViews[0].status',
+        message:
+          'Saved view status filter does not match any issue status in the import payload and may only match existing target data.',
+        value: 'done'
+      }),
+      expect.objectContaining({
+        code: 'saved_view_label_without_import_match',
+        path: '$.savedFilterViews[0].label',
+        message:
+          'Saved view label filter does not match any issue label in the import payload and may only match existing target data.',
+        value: unmatchedLabel
+      })
+    ];
+
+    expect(preview.body).toMatchObject({
+      valid: true,
+      errors: []
+    });
+    expect(preview.body.warnings).toEqual(expect.arrayContaining(expectedWarnings));
+    expect(applied.body.warnings).toEqual(expect.arrayContaining(expectedWarnings));
+  });
+
   it('rejects duplicate saved filter view names before import writes', async () => {
     const targetApp = createApp({ databasePath: ':memory:' });
     const payload = await createExportFixture();

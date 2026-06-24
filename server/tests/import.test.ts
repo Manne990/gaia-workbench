@@ -2316,6 +2316,43 @@ describe('tracker import API', () => {
     );
   });
 
+  it('reports dependency cycles in preview before apply without mutating existing data', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+
+    await request(app).post('/api/issues').send({ title: 'Keep cycle preview validation atomic' }).expect(201);
+    const beforeImport = await request(app).get('/api/export').expect(200);
+
+    const cyclic = cloneExport(payload);
+
+    cyclic.issues[0].dependsOnIssueIds = [cyclic.issues[1].id];
+    cyclic.issues[1].dependsOnIssueIds = [cyclic.issues[0].id];
+
+    const preview = await request(app).post('/api/import/preview').send(cyclic).expect(400);
+    const applied = await request(app).post('/api/import/apply').send(cyclic).expect(400);
+    const afterImport = await request(app).get('/api/export').expect(200);
+
+    expect(preview.body.valid).toBe(false);
+    expect(preview.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'dependency_cycle',
+          path: '$.issues[0].dependsOnIssueIds[0]',
+          message: 'Dependency graph must not contain cycles.',
+          value: cyclic.issues[1].id
+        }),
+        expect.objectContaining({
+          code: 'dependency_cycle',
+          path: '$.issues[1].dependsOnIssueIds[0]',
+          message: 'Dependency graph must not contain cycles.',
+          value: cyclic.issues[0].id
+        })
+      ])
+    );
+    expect(applied.body.errors).toEqual(preview.body.errors);
+    expect(afterImport.body).toEqual(beforeImport.body);
+  });
+
   it('rejects imported isBlocked values that contradict active dependencies', async () => {
     const app = createApp({ databasePath: ':memory:' });
     const payload = await createExportFixture();

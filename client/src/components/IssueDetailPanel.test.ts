@@ -58,8 +58,76 @@ function buildIssueDependencies(overrides: Partial<IssueDependencyState> = {}): 
   };
 }
 
+function buildPanel(issueDependencies: IssueDependencyState | null = null, selectedIssue: Partial<Issue> = {}) {
+  return renderToStaticMarkup(
+    createElement(IssueDetailPanel, {
+      isIssueDetailLoading: false,
+      isIssueDetailError: false,
+      isMissingSelectedIssue: false,
+      selectedIssue: buildIssue(selectedIssue),
+      comments: [],
+      commentHistory: {},
+      commentLoadState: 'loaded',
+      activityEvents: [buildActivityEvent()],
+      activityLoadState: 'loaded',
+      issueDependencies,
+      dependencyLoadState: 'loaded',
+      dependencyIssueId: '',
+      onDependencyIssueIdChange: noop,
+      dependencyError: null,
+      dependencyRollbackReason: null,
+      isDependencySubmitting: false,
+      commentBody: '',
+      setCommentBody: noop,
+      commentError: null,
+      isCommentSubmitting: false,
+      editingCommentId: null,
+      editCommentBody: '',
+      setEditCommentBody: noop,
+      editCommentError: null,
+      isCommentEditing: false,
+      issueDetailHeadingRef: nullRef,
+      missingIssueHeadingRef: nullRef,
+      commentsHeadingRef: nullRef,
+      editCommentTextareaRef: nullRef,
+      dependencyIssueInputRef: nullRef,
+      issueLinkCopyFeedback: null,
+      statusUndoMessage: null,
+      statusUndoError: null,
+      isStatusUndoSubmitting: false,
+      onCloseIssueDetail: noop,
+      onCopyIssueLink: noop,
+      onDuplicateIssue: noop,
+      onUndoIssueStatus: noop,
+      onArchiveIssue: noop,
+      onUnarchiveIssue: noop,
+      onSubmitIssueDependency: noop,
+      onRemoveIssueDependency: noop,
+      onSubmitComment: noop,
+      onStartEditComment: noop,
+      onCancelEditComment: noop,
+      onSubmitCommentEdit: noop
+    })
+  );
+}
+
 describe('IssueDetailPanel', () => {
   it('renders activity audit timestamps as explicit UTC while preserving the ISO value', () => {
+    const markup = buildPanel();
+
+    expect(markup).toContain('2026-01-02 03:04:05 UTC');
+    expect(markup).toContain('dateTime="2026-01-02T03:04:05.000Z"');
+    expect(markup).toContain('Persisted audit timestamp: 2026-01-02T03:04:05.000Z');
+  });
+
+  it('renders dependency counts from server-loaded dependency state in the detail header and grid', () => {
+    const markup = buildPanel(buildIssueDependencies());
+
+    expect(markup).toContain('Dependencies: 2');
+    expect(markup).toContain('dependency-list');
+  });
+
+  it('adds accessible descriptions to dependency add/remove controls', () => {
     const markup = renderToStaticMarkup(
       createElement(IssueDetailPanel, {
         isIssueDetailLoading: false,
@@ -71,7 +139,19 @@ describe('IssueDetailPanel', () => {
         commentLoadState: 'loaded',
         activityEvents: [buildActivityEvent()],
         activityLoadState: 'loaded',
-        issueDependencies: null,
+        issueDependencies: {
+          issueId: 'issue-1',
+          isBlocked: false,
+          dependencies: [
+            {
+              id: 'blocker-1',
+              title: 'Blocking issue',
+              status: 'in_progress',
+              archivedAt: null
+            }
+          ],
+          dependents: []
+        },
         dependencyLoadState: 'loaded',
         dependencyIssueId: '',
         onDependencyIssueIdChange: noop,
@@ -111,117 +191,15 @@ describe('IssueDetailPanel', () => {
       })
     );
 
-    expect(markup).toContain('2026-01-02 03:04:05 UTC');
-    expect(markup).toContain('dateTime="2026-01-02T03:04:05.000Z"');
-    expect(markup).toContain('Persisted audit timestamp: 2026-01-02T03:04:05.000Z');
-  });
-
-  it('renders dependency counts from server-loaded dependency state in the detail header and grid', () => {
-    const markup = renderToStaticMarkup(
-      createElement(IssueDetailPanel, {
-        isIssueDetailLoading: false,
-        isIssueDetailError: false,
-        isMissingSelectedIssue: false,
-        selectedIssue: buildIssue({ dependsOnIssueIds: ['issue-stale'] }),
-        comments: [],
-        commentHistory: {},
-        commentLoadState: 'loaded',
-        activityEvents: [buildActivityEvent()],
-        activityLoadState: 'loaded',
-        issueDependencies: buildIssueDependencies(),
-        dependencyLoadState: 'loaded',
-        dependencyIssueId: '',
-        onDependencyIssueIdChange: noop,
-        dependencyError: null,
-        dependencyRollbackReason: null,
-        isDependencySubmitting: false,
-        commentBody: '',
-        setCommentBody: noop,
-        commentError: null,
-        isCommentSubmitting: false,
-        editingCommentId: null,
-        editCommentBody: '',
-        setEditCommentBody: noop,
-        editCommentError: null,
-        isCommentEditing: false,
-        issueDetailHeadingRef: nullRef,
-        missingIssueHeadingRef: nullRef,
-        commentsHeadingRef: nullRef,
-        editCommentTextareaRef: nullRef,
-        dependencyIssueInputRef: nullRef,
-        issueLinkCopyFeedback: null,
-        statusUndoMessage: null,
-        statusUndoError: null,
-        isStatusUndoSubmitting: false,
-        onCloseIssueDetail: noop,
-        onCopyIssueLink: noop,
-        onDuplicateIssue: noop,
-        onUndoIssueStatus: noop,
-        onArchiveIssue: noop,
-        onUnarchiveIssue: noop,
-        onSubmitIssueDependency: noop,
-        onRemoveIssueDependency: noop,
-        onSubmitComment: noop,
-        onStartEditComment: noop,
-        onCancelEditComment: noop,
-        onSubmitCommentEdit: noop
-      })
-    );
-
-    expect(markup).toContain('Dependencies: 2');
+    expect(markup).toContain('aria-describedby="remove-dependency-blocker-1-help"');
+    expect(markup).toContain('id="remove-dependency-blocker-1-help"');
+    expect(markup).toContain('Dependency id blocker-1');
+    expect(markup).toContain('aria-describedby="dependency-add-help"');
+    expect(markup).toContain('Add blocker issue ID to the selected issue.');
   });
 
   it('falls back to selected issue dependency ids when dependency state is still loading', () => {
-    const markup = renderToStaticMarkup(
-      createElement(IssueDetailPanel, {
-        isIssueDetailLoading: false,
-        isIssueDetailError: false,
-        isMissingSelectedIssue: false,
-        selectedIssue: buildIssue({ dependsOnIssueIds: ['issue-2', 'issue-3', 'issue-4'] }),
-        comments: [],
-        commentHistory: {},
-        commentLoadState: 'loaded',
-        activityEvents: [],
-        activityLoadState: 'loaded',
-        issueDependencies: null,
-        dependencyLoadState: 'loaded',
-        dependencyIssueId: '',
-        onDependencyIssueIdChange: noop,
-        dependencyError: null,
-        dependencyRollbackReason: null,
-        isDependencySubmitting: false,
-        commentBody: '',
-        setCommentBody: noop,
-        commentError: null,
-        isCommentSubmitting: false,
-        editingCommentId: null,
-        editCommentBody: '',
-        setEditCommentBody: noop,
-        editCommentError: null,
-        isCommentEditing: false,
-        issueDetailHeadingRef: nullRef,
-        missingIssueHeadingRef: nullRef,
-        commentsHeadingRef: nullRef,
-        editCommentTextareaRef: nullRef,
-        dependencyIssueInputRef: nullRef,
-        issueLinkCopyFeedback: null,
-        statusUndoMessage: null,
-        statusUndoError: null,
-        isStatusUndoSubmitting: false,
-        onCloseIssueDetail: noop,
-        onCopyIssueLink: noop,
-        onDuplicateIssue: noop,
-        onUndoIssueStatus: noop,
-        onArchiveIssue: noop,
-        onUnarchiveIssue: noop,
-        onSubmitIssueDependency: noop,
-        onRemoveIssueDependency: noop,
-        onSubmitComment: noop,
-        onStartEditComment: noop,
-        onCancelEditComment: noop,
-        onSubmitCommentEdit: noop
-      })
-    );
+    const markup = buildPanel(null, { dependsOnIssueIds: ['issue-2', 'issue-3', 'issue-4'] });
 
     expect(markup).toContain('Dependencies: 3');
   });

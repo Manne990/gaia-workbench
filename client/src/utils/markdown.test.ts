@@ -114,6 +114,32 @@ describe('markdown-lite renderer', () => {
     expect(rendered).toContain('[relative](/issues/1)');
   });
 
+  it('keeps comment-like markdown links plain when URLs are unsafe or malformed', () => {
+    const rendered = renderInline(
+      [
+        '[safe](https://example.com)',
+        '[proto-less](//example.com)',
+        '[paren mismatch](https://example.com/path(thing',
+        '[space host](https://exa mple.com)',
+        '[encoded](java%73cript:alert(1))',
+        '[bad](javascript:alert(1))',
+        '[relative](notes/1)'
+      ].join(' ')
+    );
+
+    expect(rendered).toContain('<a href="https://example.com/" target="_blank" rel="noopener noreferrer">safe</a>');
+    expect(rendered).toContain('[proto-less](//example.com)');
+    expect(rendered).toContain('[paren mismatch](https://example.com/path(thing');
+    expect(rendered).toContain('[space host](https://exa mple.com)');
+    expect(rendered).toContain('[encoded](java%73cript:alert(1))');
+    expect(rendered).toContain('[bad](javascript:alert(1))');
+    expect(rendered).toContain('[relative](notes/1)');
+    expect(rendered).not.toContain('target="_blank" rel="noopener noreferrer">proto-less');
+    expect(rendered).not.toContain('target="_blank" rel="noopener noreferrer">encoded');
+    expect(rendered).not.toContain('target="_blank" rel="noopener noreferrer">bad');
+    expect(rendered).not.toContain('target="_blank" rel="noopener noreferrer">relative');
+  });
+
   it('escapes raw html in link labels while preserving allowed links', () => {
     const rendered = renderInline('[<img src=x onerror=alert(1)>](https://example.com)');
 

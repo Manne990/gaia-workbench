@@ -307,6 +307,9 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   await expect(page.getByLabel('Active filter count')).toHaveText('1 active filter');
   await expect(page.getByRole('button', { name: 'Clear board filters' })).toBeVisible();
   await expect(page.getByText('No issues match the active filters.')).toBeVisible();
+  await expect(page.getByLabel('Audit summary empty reason')).toContainText(
+    'Active filters are hiding all audit results: Search: not in the tracker.'
+  );
   await page.getByRole('button', { name: 'Clear board filters' }).click();
   await expect(updatedRow).toBeVisible();
   await expect(page.getByLabel('Active filters')).toHaveCount(0);

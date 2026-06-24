@@ -1,7 +1,8 @@
-import type { IssueAuditSummary as IssueAuditSummaryData } from '../types';
+import type { ActiveFilterSummary, IssueAuditSummary as IssueAuditSummaryData } from '../types';
 
 type IssueAuditSummaryProps = {
   auditSummary: IssueAuditSummaryData;
+  activeFilterSummaries?: ActiveFilterSummary[];
 };
 
 type AuditMetric = {
@@ -10,7 +11,7 @@ type AuditMetric = {
   count: number;
 };
 
-export function IssueAuditSummary({ auditSummary }: IssueAuditSummaryProps) {
+export function IssueAuditSummary({ auditSummary, activeFilterSummaries = [] }: IssueAuditSummaryProps) {
   const openIssues = auditSummary.totalIssues - auditSummary.byStatus.done;
   const archivedBlockerLabel =
     auditSummary.dependencyEdges.archivedBlocked === 1 ? 'archived blocker' : 'archived blockers';
@@ -28,9 +29,16 @@ export function IssueAuditSummary({ auditSummary }: IssueAuditSummaryProps) {
     { key: 'stale', label: 'Stale', count: auditSummary.totalStaleIssues },
     { key: 'archived', label: 'Archived', count: auditSummary.totalArchivedIssues }
   ];
+  const emptyResultFilterSummary = activeFilterSummaries.map((filter) => `${filter.label}: ${filter.value}`).join(', ');
+  const showFilteredEmptyState = auditSummary.totalIssues === 0 && activeFilterSummaries.length > 0;
 
   return (
     <section className="audit-summary-strip" aria-label="Tracker audit summary">
+      {showFilteredEmptyState ? (
+        <p className="audit-summary-empty-state" aria-label="Audit summary empty reason">
+          Active filters are hiding all audit results: {emptyResultFilterSummary}.
+        </p>
+      ) : null}
       <article className="audit-summary-metric board-health-metric" aria-label={boardHealthLabel}>
         <span>Board health</span>
         <strong className="board-health-counts">

@@ -260,6 +260,7 @@ export function App() {
     pagination,
     totalIssueCount,
     activeFilterSummaries: dashboardActiveFilterSummaries,
+    auditSummaryFilterSummaries,
     auditSummary,
     statusCounts,
     issueListSummary,
@@ -1975,7 +1976,7 @@ export function App() {
           commands={commandPaletteCommands}
         />
 
-        <IssueAuditSummary auditSummary={auditSummary} />
+        <IssueAuditSummary auditSummary={auditSummary} activeFilterSummaries={auditSummaryFilterSummaries} />
 
         <IssueStatusSummary statusCounts={statusCounts} />
 

@@ -1321,6 +1321,27 @@ describe('issues API', () => {
     });
   });
 
+  it('restores issue ordering after reopening a closed issue', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const _first = await request(app).post('/api/issues').send({ title: 'Issue 01' }).expect(201);
+    const second = await request(app).post('/api/issues').send({ title: 'Issue 02' }).expect(201);
+    const _third = await request(app).post('/api/issues').send({ title: 'Issue 03' }).expect(201);
+
+    const initialOrder = await request(app).get('/api/issues').expect(200);
+    const expectedOrder = initialOrder.body.items.map((issue: { id: string }) => issue.id);
+
+    await request(app).post(`/api/issues/${second.body.id}/close`).expect(200);
+
+    const closedOrder = await request(app).get('/api/issues').expect(200);
+    expect(closedOrder.body.items.map((issue: { id: string }) => issue.id)).toEqual(expectedOrder);
+
+    await request(app).post(`/api/issues/${second.body.id}/reopen`).expect(200);
+
+    const restoredOrder = await request(app).get('/api/issues').expect(200);
+    expect(restoredOrder.body.items.map((issue: { id: string }) => issue.id)).toEqual(expectedOrder);
+  });
+
   it('bulk changes status for selected issues with duplicate and unchanged reporting', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

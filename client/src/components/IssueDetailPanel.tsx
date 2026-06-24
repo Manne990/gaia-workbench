@@ -127,6 +127,11 @@ export function IssueDetailPanel({
   const [activityCategory, setActivityCategory] = useState<ActivityCategory>('all');
   const blockers = issueDependencies?.dependencies ?? [];
   const dependents = issueDependencies?.dependents ?? [];
+  const dependencyCount = issueDependencies
+    ? blockers.length
+    : selectedIssue
+      ? selectedIssue.dependsOnIssueIds.length
+      : 0;
   const selectedIssueFreshness = selectedIssue ? getIssueFreshnessPresentation(selectedIssue.updatedAt) : null;
   const selectedIssueCanBlockDependents = selectedIssue
     ? selectedIssue.archivedAt === null && selectedIssue.status !== 'done'
@@ -181,6 +186,7 @@ export function IssueDetailPanel({
                 {selectedIssue.title}
               </h2>
               <p>Updated {formatIssueDate(selectedIssue.updatedAt)}</p>
+              <p>Dependencies: {dependencyCount}</p>
             </div>
             <div className="panel-actions">
               <button
@@ -313,7 +319,7 @@ export function IssueDetailPanel({
               </div>
               <div>
                 <span>Dependencies</span>
-                <strong>{selectedIssue.dependsOnIssueIds.length}</strong>
+                <strong>{dependencyCount}</strong>
                 {selectedIssue.isBlocked ? <em>Blocked</em> : null}
               </div>
             </div>
@@ -337,7 +343,7 @@ export function IssueDetailPanel({
             <section className="dependency-section" aria-labelledby="dependency-heading">
               <div className="dependency-header">
                 <h3 id="dependency-heading">Dependencies</h3>
-                <span>{issueDependencies?.dependencies.length ?? selectedIssue.dependsOnIssueIds.length}</span>
+                <span>{dependencyCount}</span>
               </div>
 
               {dependencyLoadState === 'loading' ? (

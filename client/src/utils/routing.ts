@@ -14,9 +14,23 @@ export const defaultPageSize = 25;
 export const maxPageSize = 100;
 export const savedViewQueryParam = 'savedView';
 export const dashboardDensityQueryParam = 'density';
+const dashboardPageSizeQueryParam = 'limit';
+const dashboardSearchQueryParam = 'search';
+const dashboardStatusQueryParam = 'status';
+const dashboardPriorityQueryParam = 'priority';
+const dashboardLabelQueryParam = 'label';
+const dashboardIncludeArchivedQueryParam = 'includeArchived';
+const dashboardBlockedOnlyQueryParam = 'blockedOnly';
+const dashboardStaleOnlyQueryParam = 'staleOnly';
 
 export type RouteState = {
   issueId: string | null;
+  filters: DashboardFilters;
+  savedViewId: string | null;
+  dashboardDensity: DashboardDensity | null;
+};
+
+type DashboardQueryState = {
   filters: DashboardFilters;
   savedViewId: string | null;
   dashboardDensity: DashboardDensity | null;
@@ -97,16 +111,19 @@ export function getIssueIdFromLocation(): string | null {
   return getIssueIdFromPath(window.location.pathname);
 }
 
-export function parseDashboardFiltersFromSearch(search: string | URLSearchParams): DashboardFilters {
-  const params = typeof search === 'string' ? new URLSearchParams(search) : search;
-  const searchFilter = (params.get('search') ?? '').trim();
-  const statusFilter = parseStatusFilter(params.get('status'));
-  const priorityFilter = parsePriorityFilter(params.get('priority'));
-  const label = (params.get('label') ?? '').trim();
-  const includeArchived = params.get('includeArchived') === 'true';
-  const blockedOnly = params.get('blockedOnly') === 'true';
-  const staleOnly = params.get('staleOnly') === 'true';
-  const pageSize = parsePageSize(params.get('limit'));
+function parseSearchParams(search: string | URLSearchParams): URLSearchParams {
+  return search instanceof URLSearchParams ? new URLSearchParams(search) : new URLSearchParams(search);
+}
+
+function parseDashboardFiltersFromParams(params: URLSearchParams): DashboardFilters {
+  const searchFilter = (params.get(dashboardSearchQueryParam) ?? '').trim();
+  const statusFilter = parseStatusFilter(params.get(dashboardStatusQueryParam));
+  const priorityFilter = parsePriorityFilter(params.get(dashboardPriorityQueryParam));
+  const label = (params.get(dashboardLabelQueryParam) ?? '').trim();
+  const includeArchived = params.get(dashboardIncludeArchivedQueryParam) === 'true';
+  const blockedOnly = params.get(dashboardBlockedOnlyQueryParam) === 'true';
+  const staleOnly = params.get(dashboardStaleOnlyQueryParam) === 'true';
+  const pageSize = parsePageSize(params.get(dashboardPageSizeQueryParam));
 
   return {
     search: searchFilter,
@@ -120,15 +137,36 @@ export function parseDashboardFiltersFromSearch(search: string | URLSearchParams
   };
 }
 
+function parseSavedViewIdFromParams(params: URLSearchParams): string | null {
+  const savedViewId = (params.get(savedViewQueryParam) ?? '').trim();
+
+  return savedViewId || null;
+}
+
+function parseDashboardDensityFromParams(params: URLSearchParams): DashboardDensity | null {
+  return normalizeDashboardDensity(params.get(dashboardDensityQueryParam));
+}
+
+export function parseDashboardRouteQueryState(search: string | URLSearchParams): DashboardQueryState {
+  const params = parseSearchParams(search);
+
+  return {
+    filters: parseDashboardFiltersFromParams(params),
+    savedViewId: parseSavedViewIdFromParams(params),
+    dashboardDensity: parseDashboardDensityFromParams(params)
+  };
+}
+
+export function parseDashboardFiltersFromSearch(search: string | URLSearchParams): DashboardFilters {
+  return parseDashboardRouteQueryState(search).filters;
+}
+
 export function parseDashboardFiltersFromLocation(): DashboardFilters {
   return parseDashboardFiltersFromSearch(window.location.search);
 }
 
 export function parseSavedViewIdFromSearch(search: string | URLSearchParams): string | null {
-  const params = typeof search === 'string' ? new URLSearchParams(search) : search;
-  const savedViewId = (params.get(savedViewQueryParam) ?? '').trim();
-
-  return savedViewId || null;
+  return parseSavedViewIdFromParams(parseSearchParams(search));
 }
 
 export function getRouteStateFromLocation(): RouteState {
@@ -291,9 +329,7 @@ export function buildCsvExportPath(filters: DashboardFilters = defaultDashboardF
 }
 
 export function parseDashboardDensityFromSearch(search: string | URLSearchParams): DashboardDensity | null {
-  const params = typeof search === 'string' ? new URLSearchParams(search) : search;
-
-  return normalizeDashboardDensity(params.get(dashboardDensityQueryParam));
+  return parseDashboardDensityFromParams(parseSearchParams(search));
 }
 
 function normalizeDashboardDensity(value: string | null | undefined): DashboardDensity | null {

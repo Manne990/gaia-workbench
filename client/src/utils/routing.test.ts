@@ -13,6 +13,7 @@ import {
   defaultDashboardFilters,
   getIssueIdFromPath,
   parseDashboardFiltersFromSearch,
+  parseDashboardRouteQueryState,
   parseDashboardDensityFromSearch,
   parseSavedViewIdFromSearch
 } from './routing';
@@ -326,6 +327,27 @@ describe('client routing helpers', () => {
     expect(buildDashboardPath(savedViewFilters, { savedViewId: savedView.id, dashboardDensity: 'compact' })).toBe(
       '/?savedView=view-ops&density=compact&search=api+export&status=review&priority=high&label=ops&includeArchived=true&blockedOnly=true&staleOnly=true&limit=50'
     );
+  });
+
+  it('parses dashboard route query metadata through a single helper', () => {
+    expect(
+      parseDashboardRouteQueryState(
+        '?search=api%20export&status=review&priority=high&label=ops&savedView=my-view&density=compact'
+      )
+    ).toEqual({
+      filters: {
+        search: 'api export',
+        status: 'review',
+        priority: 'high',
+        label: 'ops',
+        includeArchived: false,
+        blockedOnly: false,
+        staleOnly: false,
+        pageSize: 25
+      },
+      savedViewId: 'my-view',
+      dashboardDensity: 'compact'
+    });
   });
 
   it('uses the dashboard query model for list and export API paths', () => {

@@ -1988,6 +1988,46 @@ describe('issues API', () => {
     });
   });
 
+  it('rejects duplicate dependency adds without duplicating storage or activity', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const blocker = await request(app).post('/api/issues').send({ title: 'Duplicate blocker' }).expect(201);
+    const blocked = await request(app).post('/api/issues').send({ title: 'Duplicate dependency target' }).expect(201);
+
+    await request(app)
+      .post(`/api/issues/${blocked.body.id}/dependencies`)
+      .send({ dependsOnIssueId: blocker.body.id })
+      .expect(201);
+
+    await request(app)
+      .post(`/api/issues/${blocked.body.id}/dependencies`)
+      .send({ dependsOnIssueId: blocker.body.id })
+      .expect(409, {
+        error: 'Issue dependency already exists'
+      });
+
+    const dependencies = await request(app).get(`/api/issues/${blocked.body.id}/dependencies`).expect(200);
+    expect(dependencies.body).toMatchObject({
+      issueId: blocked.body.id,
+      isBlocked: true,
+      dependencies: [expect.objectContaining({ id: blocker.body.id, title: 'Duplicate blocker' })]
+    });
+    expect(dependencies.body.dependencies).toHaveLength(1);
+
+    const blockedDetail = await request(app).get(`/api/issues/${blocked.body.id}`).expect(200);
+    expect(blockedDetail.body).toMatchObject({
+      id: blocked.body.id,
+      isBlocked: true,
+      dependsOnIssueIds: [blocker.body.id]
+    });
+
+    const activity = await request(app).get(`/api/issues/${blocked.body.id}/activity`).expect(200);
+    expect(activity.body.map((event: { type: string }) => event.type)).toEqual([
+      'issue_created',
+      'issue_dependency_added'
+    ]);
+  });
+
   it('bulk replaces issue dependencies atomically', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

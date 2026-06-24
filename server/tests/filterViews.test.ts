@@ -15,7 +15,7 @@ describe('saved filter views API', () => {
     const created = await request(app)
       .post('/api/filter-views')
       .send({
-        name: ' Review backlog ',
+        name: ' Review   backlog ',
         search: 'api',
         status: 'review',
         priority: 'high',
@@ -51,7 +51,7 @@ describe('saved filter views API', () => {
     const updated = await request(app)
       .patch(`/api/filter-views/${created.body.id}`)
       .send({
-        name: 'Renamed backlog',
+        name: '  Renamed   backlog  ',
         search: 'ops',
         status: 'all',
         priority: 'medium',
@@ -178,7 +178,13 @@ describe('saved filter views API', () => {
     const app = createApp({ databasePath: ':memory:' });
 
     await request(app).post('/api/filter-views').send({ name: 'Daily review' }).expect(201);
-    await request(app).post('/api/filter-views').send({ name: 'daily REVIEW' }).expect(409, {
+    const otherView = await request(app).post('/api/filter-views').send({ name: 'Ops backlog' }).expect(201);
+
+    await request(app).post('/api/filter-views').send({ name: '  daily   REVIEW  ' }).expect(409, {
+      error: 'Saved view name already exists'
+    });
+
+    await request(app).patch(`/api/filter-views/${otherView.body.id}`).send({ name: ' Daily   review ' }).expect(409, {
       error: 'Saved view name already exists'
     });
 

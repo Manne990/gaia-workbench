@@ -4557,10 +4557,11 @@ test('saved filter views persist restore and compose with detail routes', async 
   await filters.getByLabel('Priority').selectOption('high');
   await filters.getByLabel('Include archived').check();
   await settings.getByLabel('Page size').selectOption('50');
-  await savedViews.getByLabel('View name').fill('Review archive view');
+  await savedViews.getByLabel('View name').fill('  Review   archive   view  ');
   await savedViews.getByRole('button', { name: 'Save View' }).click();
 
   await expect(savedViews.getByLabel('Saved views')).toContainText('Review archive view');
+  await expect(savedViews.getByLabel('View name')).toHaveValue('Review archive view');
   const savedViewId = await savedViews.getByLabel('Saved views').inputValue();
 
   expect(savedViewId).not.toBe('');
@@ -4646,9 +4647,10 @@ test('saved filter views persist restore and compose with detail routes', async 
   await expect(settings.getByLabel('Page size')).toHaveValue('50');
 
   await savedViews.getByLabel('Saved views').selectOption({ label: 'Review archive view' });
-  await savedViews.getByLabel('View name').fill('Renamed archive view');
+  await savedViews.getByLabel('View name').fill('  Renamed   archive   view  ');
   await savedViews.getByRole('button', { name: 'Rename' }).click();
   await expect(savedViews.getByLabel('Saved views')).toContainText('Renamed archive view');
+  await expect(savedViews.getByLabel('View name')).toHaveValue('Renamed archive view');
 
   await filters.getByLabel('Search').fill('Saved view active other');
   await filters.getByLabel('Label').fill('other');

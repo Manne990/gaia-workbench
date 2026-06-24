@@ -63,7 +63,7 @@ function normalizeName(value: unknown): string {
     throw new Error('Saved view name is required');
   }
 
-  const name = value.trim();
+  const name = value.replace(/\s+/g, ' ').trim();
 
   if (name.length === 0) {
     throw new Error('Saved view name is required');

@@ -390,9 +390,13 @@ export function IssueDetailPanel({
                                   onClick={() => onRemoveIssueDependency(dependency.id)}
                                   disabled={isDependencySubmitting}
                                   aria-label={`Remove dependency ${dependency.title}`}
+                                  aria-describedby={`remove-dependency-${dependency.id}-help`}
                                 >
                                   Remove
                                 </button>
+                                <span id={`remove-dependency-${dependency.id}-help`} className="sr-only">
+                                  Dependency id {dependency.id}
+                                </span>
                               </li>
                             );
                           })}
@@ -465,11 +469,15 @@ export function IssueDetailPanel({
                 <div className="form-actions">
                   <button
                     type="submit"
+                    aria-describedby="dependency-add-help"
                     className="primary-button"
                     disabled={isDependencySubmitting || dependencyLoadState === 'loading'}
                   >
                     Add Dependency
                   </button>
+                  <span id="dependency-add-help" className="sr-only">
+                    Add blocker issue ID to the selected issue.
+                  </span>
                 </div>
               </form>
             </section>

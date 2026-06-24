@@ -38,6 +38,20 @@ function importPlanReferencesIssue(plan: ImportPlan, issueId: string | null): is
   );
 }
 
+export function buildImportReport(
+  plan: ImportPlan,
+  sourceFileName: string | null,
+  selectedPolicy: ImportConflictPolicy,
+  generatedAt: string = new Date().toISOString()
+) {
+  return {
+    ...plan,
+    policy: selectedPolicy,
+    sourceFileName,
+    generatedAt
+  };
+}
+
 type UseImportWorkflowOptions = {
   importInputRef: RefObject<HTMLInputElement | null>;
   importButtonRef: RefObject<HTMLButtonElement | null>;
@@ -111,11 +125,7 @@ export function useImportWorkflow({
       return;
     }
 
-    const report = {
-      ...importPlan,
-      sourceFileName: importFileName,
-      generatedAt: new Date().toISOString()
-    };
+    const report = buildImportReport(importPlan, importFileName, importPolicy);
 
     downloadTextFile(`${sanitizeFilePart(importFileName)}-import-preview-report.json`, JSON.stringify(report, null, 2));
   }

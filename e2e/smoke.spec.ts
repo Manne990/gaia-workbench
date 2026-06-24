@@ -1604,6 +1604,20 @@ test('imports tracker JSON through preview and apply', async ({ page }, testInfo
     importPanel.getByText('Import applied: 10 created, 0 updated, 0 duplicates, 0 conflicts.')
   ).toBeVisible();
 
+  await importPanel.getByRole('radio', { name: 'Replace changed issues' }).check();
+  const postApplyReportDownloadPromise = page.waitForEvent('download');
+
+  await importPanel.getByRole('button', { name: 'Download report' }).click();
+  const postApplyReportDownload = await postApplyReportDownloadPromise;
+  const postApplyReportPath = await postApplyReportDownload.path();
+  const postApplyReportData = JSON.parse(readFileSync(postApplyReportPath ?? '', 'utf8')) as {
+    sourceFileName: string | null;
+    policy: string;
+  };
+
+  expect(postApplyReportData.sourceFileName).toBe('tinytracker-import.json');
+  expect(postApplyReportData.policy).toBe('replace-conflicts');
+
   const importedRow = page.getByRole('row', { name: /Imported issue from JSON.*Review.*High/ });
   await expect(importedRow).toBeVisible();
   await expect(importedRow.locator('.blocked-pill')).toHaveText('Blocked');

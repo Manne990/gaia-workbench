@@ -1,4 +1,4 @@
-import type { ActivityCategory, ActivityEvent } from '../types';
+import type { ActivityCategory, ActivityEvent, RecentActivityItem, RecentActivityItemType } from '../types';
 import {
   formatDueDateValue,
   formatLabelList,
@@ -17,6 +17,11 @@ export const activityCategoryOptions: Array<{ value: ActivityCategory; label: st
 
 export function metadataText(event: ActivityEvent, key: string): string | null {
   const value = event.metadata[key];
+  return typeof value === 'string' ? value : null;
+}
+
+function metadataTextValue(metadata: RecentActivityItem['metadata'], key: string): string | null {
+  const value = metadata[key];
   return typeof value === 'string' ? value : null;
 }
 
@@ -55,6 +60,56 @@ export function activityTitle(event: ActivityEvent): string {
       return 'Comment edited';
     default:
       return 'Activity recorded';
+  }
+}
+
+export function recentActivityTitle(type: RecentActivityItemType): string {
+  switch (type) {
+    case 'saved_filter_view_created':
+      return 'Saved view created';
+    case 'saved_filter_view_updated':
+      return 'Saved view updated';
+    default:
+      return activityTitle({ id: '', issueId: '', type, metadata: {}, createdAt: '' });
+  }
+}
+
+export function recentActivityDetail(item: RecentActivityItem): string {
+  if (item.type === 'saved_filter_view_created') {
+    return `Created ${formatOptionalText(metadataTextValue(item.metadata, 'name'))}.`;
+  }
+
+  if (item.type === 'saved_filter_view_updated') {
+    return `Updated ${formatOptionalText(metadataTextValue(item.metadata, 'name'))}.`;
+  }
+
+  switch (item.type) {
+    case 'issue_created':
+      return 'Issue was created.';
+    case 'issue_title_changed':
+      return 'Title was updated.';
+    case 'issue_description_changed':
+      return 'Description was updated.';
+    case 'issue_status_changed':
+      return 'Status changed.';
+    case 'issue_priority_changed':
+      return 'Priority changed.';
+    case 'issue_due_date_changed':
+      return 'Due date changed.';
+    case 'issue_labels_changed':
+      return 'Labels changed.';
+    case 'issue_archived':
+      return 'Issue was archived.';
+    case 'issue_unarchived':
+      return 'Issue was restored.';
+    case 'issue_dependency_added':
+      return 'Dependency was added.';
+    case 'issue_dependency_removed':
+      return 'Dependency was removed.';
+    case 'comment_added':
+      return 'Comment was added.';
+    case 'comment_edited':
+      return 'Comment was edited.';
   }
 }
 

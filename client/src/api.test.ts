@@ -8,6 +8,7 @@ import {
   fetchIssue,
   fetchIssueActivity,
   fetchIssues,
+  fetchRecentActivity,
   fetchServiceHealth,
   previewImport,
   undoIssueStatus
@@ -209,6 +210,25 @@ describe('client API errors', () => {
     expect(fetch).toHaveBeenCalledWith('/api/issues/audit-summary?blockedOnly=true&label=ops', {
       signal: controller.signal
     });
+  });
+
+  it('requests compact recent activity from the dashboard endpoint', async () => {
+    const controller = new AbortController();
+    const activity = [
+      {
+        id: 'activity:activity-1',
+        sourceId: 'activity-1',
+        issueId: 'issue-1',
+        issueTitle: 'Recent issue',
+        type: 'comment_added',
+        metadata: { preview: 'Recent comment' },
+        createdAt: '2026-06-25T18:45:00.000Z'
+      }
+    ];
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(activity, { status: 200 }));
+
+    await expect(fetchRecentActivity(controller.signal)).resolves.toEqual(activity);
+    expect(fetch).toHaveBeenCalledWith('/api/activity/recent?limit=8', { signal: controller.signal });
   });
 
   it('rejects successful JSON endpoints when the response body cannot be parsed', async () => {

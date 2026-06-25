@@ -281,6 +281,7 @@ const validationErrorMessages = new Set([
   'Invalid includeArchived parameter',
   'Invalid blockedOnly parameter',
   'Invalid staleOnly parameter',
+  'Invalid recent activity limit parameter',
   'Invalid includeAuditSummary parameter',
   'Invalid status undo cursor',
   'Invalid bulk issue ids',
@@ -471,6 +472,26 @@ function parseOptionalBooleanQuery(value: unknown, defaultValue: boolean, errorM
   }
 
   throw new Error(errorMessage);
+}
+
+function parseRecentActivityLimit(value: unknown): number {
+  const queryValue = getOptionalQueryString(value);
+
+  if (queryValue === undefined) {
+    return 8;
+  }
+
+  if (!/^[1-9]\d*$/.test(queryValue)) {
+    throw new Error('Invalid recent activity limit parameter');
+  }
+
+  const limit = Number(queryValue);
+
+  if (limit > 20) {
+    throw new Error('Invalid recent activity limit parameter');
+  }
+
+  return limit;
 }
 
 function buildIssueListCsv(issues: Issue[]): string {
@@ -1083,6 +1104,17 @@ export function createApp(config: AppConfig = {}) {
       const queryModel = buildIssueListFilterModel(req.query);
 
       return res.status(200).json(issueRepository.getAuditSummary(queryModel.filters));
+    } catch (error) {
+      if (isValidationError(error)) {
+        return sendValidationError(res, error.message);
+      }
+      throw error;
+    }
+  });
+
+  app.get('/api/activity/recent', (req, res) => {
+    try {
+      return res.status(200).json(activityRepository.listRecent(parseRecentActivityLimit(req.query.limit)));
     } catch (error) {
       if (isValidationError(error)) {
         return sendValidationError(res, error.message);

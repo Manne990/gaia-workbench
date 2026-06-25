@@ -261,6 +261,100 @@ h1 {
   line-height: 1;
 }
 
+.recent-activity-panel {
+  margin-top: 24px;
+  border: 1px solid #d7dde3;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.recent-activity-state {
+  margin: 0;
+  padding: 16px 20px;
+  color: #59636e;
+  font-weight: 700;
+}
+
+.recent-activity-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.recent-activity-error p {
+  margin: 0;
+}
+
+.recent-activity-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recent-activity-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+  padding: 14px 20px;
+  border-top: 1px solid #e4e8ec;
+}
+
+.recent-activity-item-main {
+  min-width: 0;
+}
+
+.recent-activity-kind {
+  display: inline-flex;
+  margin-bottom: 6px;
+  color: #2f6f73;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.recent-activity-item strong,
+.recent-activity-issue-link {
+  display: block;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #15181c;
+  font-weight: 900;
+  line-height: 1.25;
+  text-align: left;
+}
+
+.recent-activity-issue-link {
+  cursor: pointer;
+}
+
+.recent-activity-issue-link:hover,
+.recent-activity-issue-link:focus-visible {
+  color: #245d61;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.recent-activity-item p {
+  margin: 6px 0 0;
+  color: #59636e;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.recent-activity-item time {
+  color: #59636e;
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .issue-panel {
   margin-top: 24px;
   border: 1px solid #d7dde3;
@@ -2187,6 +2281,11 @@ td .issue-state-flags span {
     align-items: stretch;
     flex-direction: column;
     gap: 6px;
+  }
+
+  .recent-activity-item {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 
   th,

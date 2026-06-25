@@ -232,3 +232,15 @@ export interface NewActivityEvent {
   metadata?: ActivityMetadata;
   createdAt?: string;
 }
+
+export type RecentActivityItemType = ActivityEventType | 'saved_filter_view_created' | 'saved_filter_view_updated';
+
+export interface RecentActivityItem {
+  id: string;
+  sourceId: string;
+  issueId: string | null;
+  issueTitle: string | null;
+  type: RecentActivityItemType;
+  metadata: ActivityMetadata;
+  createdAt: string;
+}

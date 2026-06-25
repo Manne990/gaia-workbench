@@ -138,12 +138,24 @@ export type ActivityEventType =
   | 'comment_added'
   | 'comment_edited';
 
+export type RecentActivityItemType = ActivityEventType | 'saved_filter_view_created' | 'saved_filter_view_updated';
+
 export type ActivityMetadataValue = string | string[] | null;
 
 export type ActivityEvent = {
   id: string;
   issueId: string;
   type: ActivityEventType;
+  metadata: Record<string, ActivityMetadataValue>;
+  createdAt: string;
+};
+
+export type RecentActivityItem = {
+  id: string;
+  sourceId: string;
+  issueId: string | null;
+  issueTitle: string | null;
+  type: RecentActivityItemType;
   metadata: Record<string, ActivityMetadataValue>;
   createdAt: string;
 };

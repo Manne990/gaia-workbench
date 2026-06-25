@@ -241,6 +241,28 @@ async function createLargeIssueSet(
   return issues;
 }
 
+async function expectVisibleIssueTitles(page: Page, titles: string[]): Promise<void> {
+  const rows = page.locator('tbody tr');
+
+  await expect(rows).toHaveCount(titles.length);
+
+  for (const [index, title] of titles.entries()) {
+    await expect(rows.nth(index).locator('.issue-title-text')).toHaveText(title);
+  }
+}
+
+async function expectVisibleIssueTitlesInRelativeOrder(page: Page, titles: string[]): Promise<void> {
+  const titleLocator = page.locator('.issue-title-text');
+
+  await expect
+    .poll(async () => {
+      const visibleTitles = await titleLocator.allTextContents();
+
+      return visibleTitles.filter((title) => titles.includes(title));
+    })
+    .toEqual(titles);
+}
+
 test('TinyTracker smoke creates lists updates and comments on an issue', async ({ page }) => {
   const healthResponse = await page.request.get('/api/health');
 
@@ -513,6 +535,95 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   expect(formulaCsvLines[1]).toContain("'=CSV dashboard formula");
   expect(formulaCsvLines[1]).toContain("'+CSV dashboard description");
   expect(formulaCsvLines[1]).toContain("'-risk|safe");
+});
+
+test('issue list order survives search narrowing and clearing after a status edit', async ({ page }) => {
+  const issues = [
+    {
+      id: '00000000-0000-4000-9000-000000005371',
+      title: 'Search order oldest issue',
+      description: 'Older issue in the search-clear ordering guard.',
+      status: 'todo',
+      priority: 'medium',
+      labels: ['order-guard'],
+      dueDate: null,
+      isOverdue: false,
+      isBlocked: false,
+      dependsOnIssueIds: [],
+      archivedAt: null,
+      createdAt: '2026-06-25T10:00:00.000Z',
+      updatedAt: '2026-06-25T10:00:00.000Z',
+      comments: [],
+      activityEvents: []
+    },
+    {
+      id: '00000000-0000-4000-9000-000000005372',
+      title: 'Search order middle issue',
+      description: 'Filtered issue that will receive a status update.',
+      status: 'todo',
+      priority: 'medium',
+      labels: ['order-guard'],
+      dueDate: null,
+      isOverdue: false,
+      isBlocked: false,
+      dependsOnIssueIds: [],
+      archivedAt: null,
+      createdAt: '2026-06-25T10:01:00.000Z',
+      updatedAt: '2026-06-25T10:01:00.000Z',
+      comments: [],
+      activityEvents: []
+    },
+    {
+      id: '00000000-0000-4000-9000-000000005373',
+      title: 'Search order newest issue',
+      description: 'Newest issue in the search-clear ordering guard.',
+      status: 'todo',
+      priority: 'medium',
+      labels: ['order-guard'],
+      dueDate: null,
+      isOverdue: false,
+      isBlocked: false,
+      dependsOnIssueIds: [],
+      archivedAt: null,
+      createdAt: '2026-06-25T10:02:00.000Z',
+      updatedAt: '2026-06-25T10:02:00.000Z',
+      comments: [],
+      activityEvents: []
+    }
+  ];
+  const importResponse = await page.request.post('/api/import/apply', {
+    data: {
+      exportVersion: 1,
+      issues
+    }
+  });
+
+  expect(importResponse.ok()).toBe(true);
+
+  await page.goto('/');
+
+  const expectedFullOrder = ['Search order newest issue', 'Search order middle issue', 'Search order oldest issue'];
+  const filters = page.getByLabel('Issue filters');
+
+  await expectVisibleIssueTitlesInRelativeOrder(page, expectedFullOrder);
+
+  await filters.getByLabel('Search').fill('Search order middle');
+  await expect(page.getByLabel('Active filters')).toContainText('Search: Search order middle');
+  await expectVisibleIssueTitles(page, ['Search order middle issue']);
+
+  await page.getByRole('button', { name: 'Edit Search order middle issue' }).click();
+
+  const issueForm = page.getByRole('form', { name: 'Issue form' });
+
+  await issueForm.locator('#issue-status').selectOption('review');
+  await page.getByRole('button', { name: 'Save Changes' }).click();
+  await expect(page.getByRole('row', { name: /Search order middle issue.*Review.*Medium/ })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Clear board filters' }).click();
+  await expect(filters.getByLabel('Search')).toHaveValue('');
+  await expect(page.getByLabel('Active filters')).toHaveCount(0);
+  await expectVisibleIssueTitlesInRelativeOrder(page, expectedFullOrder);
+  await expect(page.getByRole('row', { name: /Search order middle issue.*Review.*Medium/ })).toBeVisible();
 });
 
 test('board health badge distinguishes blocked and waiting review work', async ({ page }) => {

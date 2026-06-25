@@ -2201,7 +2201,7 @@ describe('issues API', () => {
 
     await request(app)
       .put(`/api/issues/${blocked.body.id}/dependencies`)
-      .send({ dependsOnIssueIds: [validBlocker.body.id, validBlocker.body.id] })
+      .send({ dependsOnIssueIds: [validBlocker.body.id, `  ${validBlocker.body.id}  `] })
       .expect(400, validationErrorBody('Duplicate bulk dependency ids are not allowed'));
 
     await request(app)

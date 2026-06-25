@@ -495,9 +495,10 @@ function validateLabels(value: unknown, path: string, errors: ImportErrorDetail[
   }
 
   const labels: string[] = [];
+  const seen = new Set<string>();
 
   value.forEach((label, index) => {
-    if (typeof label !== 'string' || label.trim().length === 0 || label.length > 32) {
+    if (typeof label !== 'string') {
       pushError(
         errors,
         'invalid_label',
@@ -508,7 +509,25 @@ function validateLabels(value: unknown, path: string, errors: ImportErrorDetail[
       return;
     }
 
-    labels.push(label);
+    const trimmed = label.trim();
+
+    if (trimmed.length === 0 || trimmed.length > 32) {
+      pushError(
+        errors,
+        'invalid_label',
+        `${path}[${index}]`,
+        'Labels must be non-empty strings of 32 characters or fewer.',
+        label
+      );
+      return;
+    }
+
+    const key = trimmed.toLowerCase();
+
+    if (!seen.has(key)) {
+      labels.push(trimmed);
+      seen.add(key);
+    }
   });
 
   return labels;

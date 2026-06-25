@@ -647,6 +647,29 @@ describe('tracker import API', () => {
     expect(csvRowsById.get(created.body.id)?.[10]).toBe("'-risk|safe");
   });
 
+  it('normalizes malformed imported labels before export roundtrip', async () => {
+    const targetApp = createApp({ databasePath: ':memory:' });
+    const payload = cloneExport(await createExportFixture());
+    const malformedIssue = payload.issues[0];
+
+    malformedIssue.labels = [' verified ', 'Verified', '\timport', 'IMPORT ', 'Ops', 'ops'];
+
+    const expectedExport = cloneExport(payload);
+    expectedExport.issues[0].labels = ['verified', 'import', 'Ops'];
+
+    const preview = await request(targetApp).post('/api/import/preview').send(payload).expect(200);
+    await request(targetApp).post('/api/import/apply').send(payload).expect(200);
+
+    const exportedAfterImport = await request(targetApp).get('/api/export').expect(200);
+    const reapplied = await request(targetApp).post('/api/import/apply').send(exportedAfterImport.body).expect(200);
+    const exportedAfterReimport = await request(targetApp).get('/api/export').expect(200);
+
+    expect(preview.body.valid).toBe(true);
+    expect(exportedAfterImport.body).toEqual(expectedExport);
+    expect(reapplied.body.summary.toCreate).toEqual(emptyImportCounts());
+    expect(exportedAfterReimport.body).toEqual(exportedAfterImport.body);
+  });
+
   it('roundtrips saved filter views with preserved ids timestamps and filters', async () => {
     const targetApp = createApp({ databasePath: ':memory:' });
     const payload = await createExportFixture();

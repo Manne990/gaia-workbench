@@ -1,4 +1,4 @@
-import type { ActivityCategory, ActivityEvent } from '../types';
+import type { ActivityCategory, ActivityEvent, RecentActivityItem, RecentActivityItemType } from '../types';
 import {
   formatDueDateValue,
   formatLabelList,
@@ -17,6 +17,11 @@ export const activityCategoryOptions: Array<{ value: ActivityCategory; label: st
 
 export function metadataText(event: ActivityEvent, key: string): string | null {
   const value = event.metadata[key];
+  return typeof value === 'string' ? value : null;
+}
+
+function metadataTextValue(metadata: RecentActivityItem['metadata'], key: string): string | null {
+  const value = metadata[key];
   return typeof value === 'string' ? value : null;
 }
 
@@ -56,6 +61,35 @@ export function activityTitle(event: ActivityEvent): string {
     default:
       return 'Activity recorded';
   }
+}
+
+export function recentActivityTitle(type: RecentActivityItemType): string {
+  switch (type) {
+    case 'saved_filter_view_created':
+      return 'Saved view created';
+    case 'saved_filter_view_updated':
+      return 'Saved view updated';
+    default:
+      return activityTitle({ id: '', issueId: '', type, metadata: {}, createdAt: '' });
+  }
+}
+
+export function recentActivityDetail(item: RecentActivityItem): string {
+  if (item.type === 'saved_filter_view_created') {
+    return `Created ${formatOptionalText(metadataTextValue(item.metadata, 'name'))}.`;
+  }
+
+  if (item.type === 'saved_filter_view_updated') {
+    return `Updated ${formatOptionalText(metadataTextValue(item.metadata, 'name'))}.`;
+  }
+
+  return activityDetail({
+    id: item.sourceId,
+    issueId: item.issueId ?? '',
+    type: item.type,
+    metadata: item.metadata,
+    createdAt: item.createdAt
+  });
 }
 
 export function activityDetail(event: ActivityEvent): string {

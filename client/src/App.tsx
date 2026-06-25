@@ -11,6 +11,7 @@ import {
   duplicateIssue,
   fetchIssue,
   fetchIssueDependencies,
+  fetchRecentActivity,
   fetchSavedFilterView,
   fetchSavedFilterViews,
   fetchServiceHealth,
@@ -26,6 +27,7 @@ import { IssueDetailPanel } from './components/IssueDetailPanel';
 import { IssueFormPanel } from './components/IssueFormPanel';
 import { IssueListPanel } from './components/IssueListPanel';
 import { IssueStatusSummary } from './components/IssueStatusSummary';
+import { RecentActivityPanel } from './components/RecentActivityPanel';
 import { CommandPalette } from './components/CommandPalette';
 import { emptyFormValues, statusLabels, statusOrder } from './constants';
 import { useBulkIssueActions } from './hooks/useBulkIssueActions';
@@ -46,7 +48,9 @@ import type {
   IssueLinkCopyFeedback,
   IssueFormValues,
   IssueStatus,
+  LoadState,
   PriorityFilter,
+  RecentActivityItem,
   SavedFilterView,
   ServiceHealthState,
   StatusFilter
@@ -304,6 +308,8 @@ export function App() {
   const [statusUndoMessage, setStatusUndoMessage] = useState<string | null>(null);
   const [statusUndoError, setStatusUndoError] = useState<string | null>(null);
   const [issueLinkCopyFeedback, setIssueLinkCopyFeedback] = useState<IssueLinkCopyFeedback | null>(null);
+  const [recentActivity, setRecentActivity] = useState<RecentActivityItem[]>([]);
+  const [recentActivityLoadState, setRecentActivityLoadState] = useState<LoadState>('loading');
   const [isStatusUndoSubmitting, setIsStatusUndoSubmitting] = useState(false);
   const newIssueButtonRef = useRef<HTMLButtonElement>(null);
   const importButtonRef = useRef<HTMLButtonElement>(null);
@@ -653,6 +659,25 @@ export function App() {
     restoreFocus(element, () => newIssueButtonRef.current ?? issueListHeadingRef.current);
   }
 
+  const refreshRecentActivity = useCallback(() => {
+    const controller = new AbortController();
+
+    setRecentActivityLoadState('loading');
+
+    void fetchRecentActivity(controller.signal)
+      .then((items) => {
+        setRecentActivity(items);
+        setRecentActivityLoadState('loaded');
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setRecentActivityLoadState('error');
+        }
+      });
+
+    return controller;
+  }, []);
+
   function focusSavedViewControls() {
     if (savedViewsDetailsRef.current && !savedViewsDetailsRef.current.open) {
       savedViewsDetailsRef.current.open = true;
@@ -776,6 +801,7 @@ export function App() {
         setSelectedIssue(updatedIssue);
         setSelectedIssueLoadState('loaded');
         await refreshSelectedIssueDetail(updatedIssue.id);
+        refreshRecentActivity();
         setBulkStatusMessage(`Changed selected issue to ${statusLabels[result.status]}.`);
       } else if (result.unchangedIds.includes(selectedIssue.id)) {
         setBulkStatusMessage(`Selected issue already was ${statusLabels[result.status]}.`);
@@ -810,6 +836,7 @@ export function App() {
       }
 
       setStatusUndoMessage(`Restored status to ${statusLabels[updatedIssue.status]}.`);
+      refreshRecentActivity();
     } catch (error) {
       setStatusUndoError(error instanceof Error ? error.message : 'Issue status undo failed.');
     } finally {
@@ -955,6 +982,12 @@ export function App() {
 
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    const controller = refreshRecentActivity();
+
+    return () => controller.abort();
+  }, [refreshRecentActivity]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1289,6 +1322,7 @@ export function App() {
       setEditedSavedViewId(null);
       upsertSavedView(view);
       writeRouteState(selectedIssueIdRef.current, dashboardFiltersRef.current, 'replace', view.id);
+      refreshRecentActivity();
     } catch (error) {
       setSavedViewError(error instanceof Error ? error.message : 'Saved view create failed.');
     } finally {
@@ -1357,6 +1391,7 @@ export function App() {
 
     try {
       upsertSavedView(await updateSavedFilterView(selectedSavedViewId, { name }));
+      refreshRecentActivity();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Saved view rename failed.';
 
@@ -1381,6 +1416,7 @@ export function App() {
 
     try {
       upsertSavedView(await duplicateSavedFilterView(selectedSavedViewId));
+      refreshRecentActivity();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Saved view duplicate failed.';
 
@@ -1418,6 +1454,7 @@ export function App() {
 
       setSelectedSavedViewId('');
       setSavedViewName('');
+      refreshRecentActivity();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Saved view delete failed.';
 
@@ -1751,6 +1788,7 @@ export function App() {
 
       setDependencyIssueId('');
       await refreshSelectedIssueAfterDependency(selectedIssue.id, dependencies);
+      refreshRecentActivity();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Dependency add failed.';
 
@@ -1763,6 +1801,16 @@ export function App() {
     } finally {
       setIsDependencySubmitting(false);
     }
+  }
+
+  async function submitCommentAndRefreshActivity(event: FormEvent<HTMLFormElement>) {
+    await submitComment(event);
+    refreshRecentActivity();
+  }
+
+  async function submitCommentEditAndRefreshActivity(event: FormEvent<HTMLFormElement>) {
+    await submitCommentEdit(event);
+    refreshRecentActivity();
   }
 
   async function handleRemoveIssueDependency(dependsOnIssueId: string) {
@@ -1778,6 +1826,7 @@ export function App() {
       const dependencies = await removeIssueDependency(selectedIssue.id, dependsOnIssueId);
 
       await refreshSelectedIssueAfterDependency(selectedIssue.id, dependencies);
+      refreshRecentActivity();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Dependency remove failed.';
 
@@ -1810,6 +1859,7 @@ export function App() {
       }
 
       returnToFirstPage();
+      refreshRecentActivity();
       restoreFocus(trigger, () => issueListHeadingRef.current);
     } catch {
       restoreFocus(trigger, () => issueListHeadingRef.current);
@@ -1835,6 +1885,7 @@ export function App() {
       }
 
       refreshIssues();
+      refreshRecentActivity();
       setRecentlyArchivedIssue(null);
       restoreFocus(null, () => issueListHeadingRef.current);
     } catch {
@@ -1863,6 +1914,7 @@ export function App() {
       }
 
       refreshIssues();
+      refreshRecentActivity();
       restoreFocus(trigger, () => issueListHeadingRef.current);
     } catch {
       restoreFocus(trigger, () => issueListHeadingRef.current);
@@ -1875,6 +1927,7 @@ export function App() {
 
       openIssue(duplicatedIssue, trigger);
       returnToFirstPage();
+      refreshRecentActivity();
       restoreFocus(trigger, () => issueDetailHeadingRef.current);
     } catch {
       restoreFocus(trigger, () => issueDetailHeadingRef.current);
@@ -1952,6 +2005,7 @@ export function App() {
       } else {
         refreshIssues();
       }
+      refreshRecentActivity();
 
       if (selectedIssueId === savedIssue.id) {
         setSelectedIssue(savedIssue);
@@ -1994,6 +2048,25 @@ export function App() {
         <IssueAuditSummary auditSummary={auditSummary} activeFilterSummaries={auditSummaryFilterSummaries} />
 
         <IssueStatusSummary statusCounts={statusCounts} />
+
+        <RecentActivityPanel
+          activity={recentActivity}
+          loadState={recentActivityLoadState}
+          onOpenIssue={(issueId) => {
+            const issue = issues.find((item) => item.id === issueId);
+
+            if (issue) {
+              openIssue(issue);
+              return;
+            }
+
+            setSelectedIssueId(issueId);
+            writeRouteState(issueId, dashboardFiltersRef.current, 'push');
+          }}
+          onRetry={() => {
+            refreshRecentActivity();
+          }}
+        />
 
         {isImportPanelVisible ? (
           <ImportPanel
@@ -2153,10 +2226,10 @@ export function App() {
           onUnarchiveIssue={handleUnarchiveIssue}
           onSubmitIssueDependency={submitIssueDependency}
           onRemoveIssueDependency={handleRemoveIssueDependency}
-          onSubmitComment={submitComment}
+          onSubmitComment={submitCommentAndRefreshActivity}
           onStartEditComment={startEditComment}
           onCancelEditComment={(commentId) => cancelEditComment({ commentId })}
-          onSubmitCommentEdit={submitCommentEdit}
+          onSubmitCommentEdit={submitCommentEditAndRefreshActivity}
         />
       </section>
     </main>

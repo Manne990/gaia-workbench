@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { ActivityEvent } from '../types';
-import { activityCategoryForEvent, activityFilteredEmptyState, filterActivityEvents } from './activity';
+import {
+  activityCategoryForEvent,
+  activityFilteredEmptyState,
+  filterActivityEvents,
+  recentActivityDetail,
+  recentActivityTitle
+} from './activity';
 
 function buildEvent(type: ActivityEvent['type'], id: string): ActivityEvent {
   return {
@@ -60,5 +66,22 @@ describe('activity helpers', () => {
     expect(activityFilteredEmptyState('dependencies')).toBe('No dependency activity for this issue yet.');
     expect(activityFilteredEmptyState('archive')).toBe('No archive activity for this issue yet.');
     expect(activityFilteredEmptyState('all')).toBe('No activity yet.');
+  });
+
+  it('formats recent saved-view activity without issue context', () => {
+    expect(recentActivityTitle('saved_filter_view_updated')).toBe('Saved view updated');
+    expect(
+      recentActivityDetail({
+        id: 'saved-filter-view-updated:view-1',
+        sourceId: 'view-1',
+        issueId: null,
+        issueTitle: null,
+        type: 'saved_filter_view_updated',
+        metadata: {
+          name: 'Focus view'
+        },
+        createdAt: '2026-06-25T18:45:00Z'
+      })
+    ).toBe('Updated Focus view.');
   });
 });

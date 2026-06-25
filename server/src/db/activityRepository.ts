@@ -1,11 +1,27 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import { ActivityEvent, ActivityMetadata, NewActivityEvent } from './types.js';
+import {
+  ActivityEvent,
+  ActivityMetadata,
+  NewActivityEvent,
+  RecentActivityItem,
+  RecentActivityItemType
+} from './types.js';
 
 type ActivityEventRow = {
   id: string;
   issue_id: string;
   event_type: ActivityEvent['type'];
+  metadata: string;
+  created_at: string;
+};
+
+type RecentActivityRow = {
+  id: string;
+  source_id: string;
+  issue_id: string | null;
+  issue_title: string | null;
+  event_type: RecentActivityItemType;
   metadata: string;
   created_at: string;
 };
@@ -32,6 +48,18 @@ function mapActivityEventRow(row: ActivityEventRow): ActivityEvent {
   return {
     id: row.id,
     issueId: row.issue_id,
+    type: row.event_type,
+    metadata: parseMetadata(row.metadata),
+    createdAt: row.created_at
+  };
+}
+
+function mapRecentActivityRow(row: RecentActivityRow): RecentActivityItem {
+  return {
+    id: row.id,
+    sourceId: row.source_id,
+    issueId: row.issue_id,
+    issueTitle: row.issue_title,
     type: row.event_type,
     metadata: parseMetadata(row.metadata),
     createdAt: row.created_at
@@ -108,5 +136,59 @@ export class ActivityRepository {
       .all(...issueIds) as ActivityEventRow[];
 
     return rows.map(mapActivityEventRow);
+  }
+
+  listRecent(limit: number): RecentActivityItem[] {
+    const rows = this.database
+      .prepare(
+        `
+        SELECT id, source_id, issue_id, issue_title, event_type, metadata, created_at
+        FROM (
+          SELECT
+            'activity:' || activity_events.id AS id,
+            activity_events.id AS source_id,
+            activity_events.issue_id AS issue_id,
+            issues.title AS issue_title,
+            activity_events.event_type AS event_type,
+            activity_events.metadata AS metadata,
+            activity_events.created_at AS created_at,
+            activity_events.rowid AS sort_sequence
+          FROM activity_events
+          INNER JOIN issues ON issues.id = activity_events.issue_id
+
+          UNION ALL
+
+          SELECT
+            'saved-filter-view-created:' || saved_filter_views.id AS id,
+            saved_filter_views.id AS source_id,
+            NULL AS issue_id,
+            NULL AS issue_title,
+            'saved_filter_view_created' AS event_type,
+            json_object('name', saved_filter_views.name) AS metadata,
+            saved_filter_views.created_at AS created_at,
+            saved_filter_views.rowid AS sort_sequence
+          FROM saved_filter_views
+
+          UNION ALL
+
+          SELECT
+            'saved-filter-view-updated:' || saved_filter_views.id AS id,
+            saved_filter_views.id AS source_id,
+            NULL AS issue_id,
+            NULL AS issue_title,
+            'saved_filter_view_updated' AS event_type,
+            json_object('name', saved_filter_views.name) AS metadata,
+            saved_filter_views.updated_at AS created_at,
+            saved_filter_views.rowid AS sort_sequence
+          FROM saved_filter_views
+          WHERE saved_filter_views.updated_at != saved_filter_views.created_at
+        )
+        ORDER BY created_at DESC, sort_sequence DESC, id DESC
+        LIMIT @limit
+      `
+      )
+      .all({ limit }) as RecentActivityRow[];
+
+    return rows.map(mapRecentActivityRow);
   }
 }

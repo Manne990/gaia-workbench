@@ -10,6 +10,7 @@ import type {
   IssueListResponse,
   IssueStatus,
   IssueDependencyState,
+  RecentActivityItem,
   ServiceHealth,
   SavedFilterView,
   SavedFilterViewPayload
@@ -49,6 +50,12 @@ export async function fetchIssueAuditSummary(query: URLSearchParams, signal?: Ab
   const response = await fetch(`/api/issues/audit-summary${queryString ? `?${queryString}` : ''}`, { signal });
 
   return readJsonOrThrow<IssueAuditSummary>(response, 'Unable to load issue audit summary.');
+}
+
+export async function fetchRecentActivity(signal?: AbortSignal): Promise<RecentActivityItem[]> {
+  const response = await fetch('/api/activity/recent?limit=8', { signal });
+
+  return readJsonOrThrow<RecentActivityItem[]>(response, 'Unable to load recent activity.');
 }
 
 export async function fetchIssueActivity(issueId: string, signal?: AbortSignal): Promise<ActivityEvent[]> {

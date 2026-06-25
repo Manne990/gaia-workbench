@@ -46,6 +46,8 @@ export type {
   NewComment,
   NewIssue,
   NewSavedFilterView,
+  RecentActivityItem,
+  RecentActivityItemType,
   SavedFilterPriority,
   SavedFilterStatus,
   SavedFilterView,

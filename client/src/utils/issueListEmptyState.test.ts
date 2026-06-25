@@ -6,6 +6,7 @@ describe('getIssueListEmptyState', () => {
     expect(
       getIssueListEmptyState({
         hasActiveFilters: false,
+        hasSearchFilter: false,
         includeArchived: false,
         blockedOnly: false,
         totalIssueCount: 0,
@@ -25,6 +26,7 @@ describe('getIssueListEmptyState', () => {
     expect(
       getIssueListEmptyState({
         hasActiveFilters: true,
+        hasSearchFilter: false,
         includeArchived: false,
         blockedOnly: true,
         totalIssueCount: 0,
@@ -44,6 +46,7 @@ describe('getIssueListEmptyState', () => {
     expect(
       getIssueListEmptyState({
         hasActiveFilters: true,
+        hasSearchFilter: false,
         includeArchived: true,
         blockedOnly: true,
         totalIssueCount: 0,
@@ -63,6 +66,7 @@ describe('getIssueListEmptyState', () => {
     expect(
       getIssueListEmptyState({
         hasActiveFilters: true,
+        hasSearchFilter: false,
         includeArchived: true,
         blockedOnly: false,
         totalIssueCount: 0,
@@ -78,10 +82,51 @@ describe('getIssueListEmptyState', () => {
     });
   });
 
+  it('explains when archived issues are narrowed away by search', () => {
+    expect(
+      getIssueListEmptyState({
+        hasActiveFilters: true,
+        hasSearchFilter: true,
+        includeArchived: true,
+        blockedOnly: false,
+        totalIssueCount: 0,
+        totalArchivedIssueCount: 0,
+        totalBlockedIssueCount: 0,
+        hasPreviousPage: false,
+        isPageEmpty: false
+      })
+    ).toEqual({
+      title: 'No archived issues match your search.',
+      description: 'Clear the search to check archived issues outside this query.',
+      action: { kind: 'clearFilters', label: 'Clear Filters' }
+    });
+  });
+
+  it('keeps archived search empties distinct from hidden archived matches', () => {
+    expect(
+      getIssueListEmptyState({
+        hasActiveFilters: true,
+        hasSearchFilter: true,
+        includeArchived: true,
+        blockedOnly: false,
+        totalIssueCount: 0,
+        totalArchivedIssueCount: 2,
+        totalBlockedIssueCount: 0,
+        hasPreviousPage: false,
+        isPageEmpty: false
+      })
+    ).toEqual({
+      title: 'No visible issues match your search.',
+      description: 'Clear the search to review archived matches that are hidden by the current view.',
+      action: { kind: 'clearFilters', label: 'Clear Filters' }
+    });
+  });
+
   it('keeps pagination recovery distinct from filtered empties', () => {
     expect(
       getIssueListEmptyState({
         hasActiveFilters: true,
+        hasSearchFilter: false,
         includeArchived: true,
         blockedOnly: false,
         totalIssueCount: 10,

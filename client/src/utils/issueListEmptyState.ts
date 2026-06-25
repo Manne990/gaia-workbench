@@ -12,6 +12,7 @@ export type IssueListEmptyState = {
 
 type IssueListEmptyStateInput = {
   hasActiveFilters: boolean;
+  hasSearchFilter: boolean;
   includeArchived: boolean;
   blockedOnly: boolean;
   totalIssueCount: number;
@@ -24,6 +25,7 @@ type IssueListEmptyStateInput = {
 export function getIssueListEmptyState(input: IssueListEmptyStateInput): IssueListEmptyState | null {
   const {
     hasActiveFilters,
+    hasSearchFilter,
     includeArchived,
     blockedOnly,
     totalIssueCount,
@@ -40,6 +42,18 @@ export function getIssueListEmptyState(input: IssueListEmptyStateInput): IssueLi
         ? 'Return to the previous page to keep working in the current result set.'
         : undefined,
       action: { kind: 'previousPage', label: 'Previous' }
+    };
+  }
+
+  if (includeArchived && hasSearchFilter) {
+    return {
+      title:
+        totalArchivedIssueCount > 0 ? 'No visible issues match your search.' : 'No archived issues match your search.',
+      description:
+        totalArchivedIssueCount > 0
+          ? 'Clear the search to review archived matches that are hidden by the current view.'
+          : 'Clear the search to check archived issues outside this query.',
+      action: { kind: 'clearFilters', label: 'Clear Filters' }
     };
   }
 

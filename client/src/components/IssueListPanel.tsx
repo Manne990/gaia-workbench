@@ -189,6 +189,7 @@ export function IssueListPanel({
     loadState === 'loaded' && issues.length === 0
       ? getIssueListEmptyState({
           hasActiveFilters,
+          hasSearchFilter: searchFilter.trim().length > 0,
           includeArchived,
           blockedOnly,
           totalIssueCount,

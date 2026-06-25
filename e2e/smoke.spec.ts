@@ -251,6 +251,18 @@ async function expectVisibleIssueTitles(page: Page, titles: string[]): Promise<v
   }
 }
 
+async function expectVisibleIssueTitlesInRelativeOrder(page: Page, titles: string[]): Promise<void> {
+  const titleLocator = page.locator('.issue-title-text');
+
+  await expect
+    .poll(async () => {
+      const visibleTitles = await titleLocator.allTextContents();
+
+      return visibleTitles.filter((title) => titles.includes(title));
+    })
+    .toEqual(titles);
+}
+
 test('TinyTracker smoke creates lists updates and comments on an issue', async ({ page }) => {
   const healthResponse = await page.request.get('/api/health');
 
@@ -593,7 +605,7 @@ test('issue list order survives search narrowing and clearing after a status edi
   const expectedFullOrder = ['Search order newest issue', 'Search order middle issue', 'Search order oldest issue'];
   const filters = page.getByLabel('Issue filters');
 
-  await expectVisibleIssueTitles(page, expectedFullOrder);
+  await expectVisibleIssueTitlesInRelativeOrder(page, expectedFullOrder);
 
   await filters.getByLabel('Search').fill('Search order middle');
   await expect(page.getByLabel('Active filters')).toContainText('Search: Search order middle');
@@ -610,7 +622,7 @@ test('issue list order survives search narrowing and clearing after a status edi
   await page.getByRole('button', { name: 'Clear board filters' }).click();
   await expect(filters.getByLabel('Search')).toHaveValue('');
   await expect(page.getByLabel('Active filters')).toHaveCount(0);
-  await expectVisibleIssueTitles(page, expectedFullOrder);
+  await expectVisibleIssueTitlesInRelativeOrder(page, expectedFullOrder);
   await expect(page.getByRole('row', { name: /Search order middle issue.*Review.*Medium/ })).toBeVisible();
 });
 

@@ -371,6 +371,62 @@ describe('issues API', () => {
     );
   });
 
+  it('keeps filtered issue ordering stable after repeated active status changes', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    type ListedIssue = { id: string; title: string; status: string };
+
+    await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'Rapid active sort oldest',
+        description: 'Shared active sort fixture',
+        status: 'todo',
+        priority: 'medium'
+      })
+      .expect(201);
+    const changing = await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'Rapid active sort changing',
+        description: 'Shared active sort fixture',
+        status: 'todo',
+        priority: 'medium'
+      })
+      .expect(201);
+    await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'Rapid active sort newest',
+        description: 'Shared active sort fixture',
+        status: 'todo',
+        priority: 'medium'
+      })
+      .expect(201);
+
+    const filteredQuery = '/api/issues?search=Rapid%20active%20sort&limit=10';
+    const initial = await request(app).get(filteredQuery).expect(200);
+    const initialIds = initial.body.items.map((issue: ListedIssue) => issue.id);
+    const initialTitles = initial.body.items.map((issue: ListedIssue) => issue.title);
+
+    expect(initial.body.sort).toEqual({ field: 'created_at,id', direction: 'desc,desc' });
+    expect(initialTitles).toEqual(
+      expect.arrayContaining(['Rapid active sort newest', 'Rapid active sort changing', 'Rapid active sort oldest'])
+    );
+    expect(new Set(initialIds).size).toBe(3);
+
+    for (const status of ['review', 'in_progress', 'done', 'todo'] as const) {
+      await request(app).put(`/api/issues/${changing.body.id}`).send({ status }).expect(200);
+
+      const afterStatusChange = await request(app).get(filteredQuery).expect(200);
+
+      expect(afterStatusChange.body.sort).toEqual({ field: 'created_at,id', direction: 'desc,desc' });
+      expect(afterStatusChange.body.items.map((issue: ListedIssue) => issue.id)).toEqual(initialIds);
+      expect(afterStatusChange.body.items.find((issue: ListedIssue) => issue.id === changing.body.id)?.status).toBe(
+        status
+      );
+    }
+  });
+
   it('keeps saved-view large blocked filters paginated with archived inclusion', async () => {
     const app = createApp({ databasePath: ':memory:' });
     type ListedIssue = {

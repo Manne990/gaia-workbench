@@ -537,6 +537,73 @@ test('TinyTracker smoke creates lists updates and comments on an issue', async (
   expect(formulaCsvLines[1]).toContain("'-risk|safe");
 });
 
+test('adding a comment keeps dashboard filters without reloading the issue list', async ({ page }) => {
+  const targetIssue = await createIssueThroughApi(page, {
+    title: 'Comment no reload target',
+    description: 'Comment creation should stay local to the selected discussion.',
+    status: 'todo',
+    priority: 'medium',
+    labels: ['comment-no-reload']
+  });
+  await createIssueThroughApi(page, {
+    title: 'Comment no reload distractor',
+    description: 'Filtered out by the focused dashboard state.',
+    status: 'review',
+    priority: 'high',
+    labels: ['other-comment']
+  });
+
+  await page.goto('/');
+
+  const filters = page.getByRole('search', { name: 'Issue filters' });
+  await filters.getByLabel('Search').fill('Comment no reload target');
+  await filters.getByLabel('Label').fill('comment-no-reload');
+
+  const targetRow = page.getByRole('row', { name: /Comment no reload target.*Todo.*Medium/ });
+  await expect(targetRow).toBeVisible();
+  await expect(page.getByLabel('Active filters')).toContainText('Search: Comment no reload target');
+  await expect(page.getByLabel('Active filters')).toContainText('Label: comment-no-reload');
+  await expect(page.getByLabel('Active filter count')).toHaveText('2 active filters');
+
+  await targetRow.getByRole('button', { name: 'Open Comment no reload target' }).click();
+
+  const detail = page.getByRole('region', { name: 'Comment no reload target' });
+  await expect(detail.getByRole('heading', { name: 'Comment no reload target' })).toBeVisible();
+  await expect(detail.getByText('No comments yet.')).toBeVisible();
+
+  let issueListReloadsAfterCommentSubmit = 0;
+  page.on('request', (request) => {
+    const requestUrl = new URL(request.url());
+
+    if (request.method() === 'GET' && requestUrl.pathname === '/api/issues') {
+      issueListReloadsAfterCommentSubmit += 1;
+    }
+  });
+
+  const commentForm = page.getByRole('form', { name: 'Comment form' });
+  await commentForm.getByLabel('New comment').fill('No dashboard reload comment');
+  const [commentResponse] = await Promise.all([
+    page.waitForResponse((response) => {
+      const responseUrl = new URL(response.url());
+
+      return (
+        response.request().method() === 'POST' && responseUrl.pathname === `/api/issues/${targetIssue.id}/comments`
+      );
+    }),
+    commentForm.getByRole('button', { name: 'Add Comment' }).click()
+  ]);
+
+  expect(commentResponse.ok()).toBe(true);
+  await expect(detail.getByLabel('Issue comments').getByText('No dashboard reload comment')).toBeVisible();
+  await expect(detail.getByLabel('Issue activity').getByText('Comment added')).toBeVisible();
+  await expect(filters.getByLabel('Search')).toHaveValue('Comment no reload target');
+  await expect(filters.getByLabel('Label')).toHaveValue('comment-no-reload');
+  await expect(page.getByLabel('Active filters')).toContainText('Search: Comment no reload target');
+  await expect(page.getByLabel('Active filters')).toContainText('Label: comment-no-reload');
+  await expect(targetRow).toBeVisible();
+  await expect.poll(() => issueListReloadsAfterCommentSubmit).toBe(0);
+});
+
 test('issue list order survives search narrowing and clearing after a status edit', async ({ page }) => {
   const issues = [
     {

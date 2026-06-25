@@ -484,6 +484,16 @@ export function App() {
         commandHint: 'Enter',
         disabled: filteredIssues.length === 0
       },
+      {
+        id: 'copy-selected-issue-link',
+        label: 'Copy selected issue link',
+        description: selectedIssue
+          ? `Copy stable link for ${selectedIssue.title}`
+          : 'Open an issue to copy its stable link',
+        commandHint: 'Link',
+        searchText: ['copy issue link', 'share issue', 'permalink'],
+        disabled: !selectedIssue
+      },
       ...selectedIssueStatusCommands,
       {
         id: 'clear-active-filters',
@@ -744,6 +754,17 @@ export function App() {
 
       closeCommandPalette({ restoreFocus: false, clearQuery: true });
       openIssue(firstIssue);
+      return;
+    }
+
+    if (commandId === 'copy-selected-issue-link') {
+      if (!selectedIssue) {
+        closeCommandPalette();
+        return;
+      }
+
+      closeCommandPalette({ clearQuery: true });
+      await copyIssueLink(selectedIssue, 'detail');
       return;
     }
 

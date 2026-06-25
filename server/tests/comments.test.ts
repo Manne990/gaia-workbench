@@ -130,6 +130,73 @@ describe('comments API', () => {
     expect(activity.body.filter((event: { type: string }) => event.type === 'comment_edited')).toHaveLength(2);
   });
 
+  it('preserves edit history order when rapid saves share a timestamp', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-25T18:00:00.000Z'));
+
+    try {
+      const app = createApp({ databasePath: ':memory:' });
+      const issue = await request(app).post('/api/issues').send({ title: 'Rapid edit history issue' }).expect(201);
+      const comment = await request(app)
+        .post(`/api/issues/${issue.body.id}/comments`)
+        .send({ body: 'Initial comment' })
+        .expect(201);
+
+      const firstEdit = await request(app)
+        .put(`/api/comments/${comment.body.id}`)
+        .send({ body: 'First rapid edit' })
+        .expect(200);
+      const secondEdit = await request(app)
+        .put(`/api/comments/${comment.body.id}`)
+        .send({ body: 'Second rapid edit' })
+        .expect(200);
+      const thirdEdit = await request(app)
+        .put(`/api/comments/${comment.body.id}`)
+        .send({ body: 'Third rapid edit' })
+        .expect(200);
+
+      expect(firstEdit.body.updatedAt).toBe('2026-06-25T18:00:00.000Z');
+      expect(secondEdit.body.updatedAt).toBe('2026-06-25T18:00:00.000Z');
+      expect(thirdEdit.body.updatedAt).toBe('2026-06-25T18:00:00.000Z');
+
+      const currentComment = await request(app).get(`/api/issues/${issue.body.id}/comments`).expect(200);
+      expect(currentComment.body).toEqual([thirdEdit.body]);
+
+      const history = await request(app).get(`/api/comments/${comment.body.id}/history`).expect(200);
+      expect(history.body).toMatchObject([
+        {
+          commentId: comment.body.id,
+          previousBody: 'Initial comment',
+          newBody: 'First rapid edit',
+          editedAt: '2026-06-25T18:00:00.000Z'
+        },
+        {
+          commentId: comment.body.id,
+          previousBody: 'First rapid edit',
+          newBody: 'Second rapid edit',
+          editedAt: '2026-06-25T18:00:00.000Z'
+        },
+        {
+          commentId: comment.body.id,
+          previousBody: 'Second rapid edit',
+          newBody: 'Third rapid edit',
+          editedAt: '2026-06-25T18:00:00.000Z'
+        }
+      ]);
+
+      const activity = await request(app).get(`/api/issues/${issue.body.id}/activity`).expect(200);
+      expect(activity.body.map((event: { type: string }) => event.type)).toEqual([
+        'issue_created',
+        'comment_added',
+        'comment_edited',
+        'comment_edited',
+        'comment_edited'
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('exposes issue activity for issue changes and comments', async () => {
     const app = createApp({ databasePath: ':memory:' });
     const issue = await request(app)

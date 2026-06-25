@@ -1057,12 +1057,27 @@ export function App() {
     }
   }
 
+  function matchingSavedViewIdForFilters(filters: DashboardFilters): string | null {
+    const candidateViewId = activeSavedViewIdRef.current ?? editedSavedViewId;
+    const candidateView = candidateViewId ? savedViews.find((view) => view.id === candidateViewId) : null;
+
+    return candidateView && areDashboardFiltersEqual(candidateView, filters) ? candidateView.id : null;
+  }
+
   function commitDashboardFilterRoute(filters: DashboardFilters, mode: 'push' | 'replace') {
-    detachActiveSavedViewForEdit();
+    const matchingSavedViewId = matchingSavedViewIdForFilters(filters);
+
+    if (matchingSavedViewId) {
+      setActiveSavedViewState(matchingSavedViewId);
+      setEditedSavedViewId(null);
+    } else {
+      detachActiveSavedViewForEdit();
+    }
+
     savedViewRouteAbortRef.current?.abort();
     savedViewRouteAbortRef.current = null;
     dashboardFiltersRef.current = filters;
-    writeDashboardRoute(filters, mode, null);
+    writeDashboardRoute(filters, mode, matchingSavedViewId);
   }
 
   function handleSearchFilterChange(value: string) {

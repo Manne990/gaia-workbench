@@ -4836,12 +4836,13 @@ test('toggling archived visibility preserves the current filter context and save
   await expect(filters.getByLabel('Label')).toHaveValue('ops');
   await expect(blockedOnly).toBeChecked();
   await expect(includeArchived).not.toBeChecked();
-  await expect(activeFilters).not.toContainText('Saved view: Blocked review ops');
+  await expect(activeFilters).toContainText('Saved view: Blocked review ops');
   await expect(activeFilters).not.toContainText('Archived: Included');
-  await expect(page.getByLabel('Active filter count')).toHaveText('5 active filters');
+  await expect(page.getByLabel('Active filter count')).toHaveText('6 active filters');
   await expect(activeRow).toBeVisible();
   await expect(archivedRow).toHaveCount(0);
   await expect(mismatchRow).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBe(savedViewId);
   await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
   await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBeNull();
 
@@ -4868,6 +4869,89 @@ test('toggling archived visibility preserves the current filter context and save
   await expect.poll(() => new URL(page.url()).searchParams.get('priority')).toBe('high');
   await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('ops');
   await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
+  await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBeNull();
+});
+
+test('archived recovery from a saved view restores the saved-view route when returning to active results', async ({
+  page
+}) => {
+  const issue = await createIssueThroughApi(page, {
+    title: 'Saved archive recovery target',
+    description: 'Archived from an active-only saved view.',
+    status: 'review',
+    priority: 'high',
+    labels: ['recovery']
+  });
+  await createIssueThroughApi(page, {
+    title: 'Saved archive recovery mismatch',
+    description: 'Should stay hidden by the saved view filters.',
+    status: 'todo',
+    priority: 'low',
+    labels: ['recovery']
+  });
+
+  await page.goto(
+    `/?search=${encodeURIComponent('Saved archive recovery target')}&status=review&priority=high&label=recovery`
+  );
+
+  const filters = page.getByLabel('Issue filters');
+  const includeArchived = filters.getByLabel('Include archived');
+  const settings = await expandDashboardSettings(page);
+  const savedViews = settings.getByLabel('Saved filter views');
+  const activeFilters = page.getByLabel('Active filters');
+  const targetRow = page.getByRole('row', { name: /Saved archive recovery target.*Review.*High/ });
+  const mismatchRow = page.getByRole('row', { name: /Saved archive recovery mismatch.*Todo.*Low/ });
+
+  await expect(targetRow).toBeVisible();
+  await expect(mismatchRow).toHaveCount(0);
+
+  await savedViews.getByLabel('View name').fill('Saved archive recovery view');
+  await savedViews.getByRole('button', { name: 'Save View' }).click();
+  await expect(savedViews.getByLabel('Saved views')).toContainText('Saved archive recovery view');
+  const savedViewId = await savedViews.getByLabel('Saved views').inputValue();
+
+  expect(savedViewId).not.toBe('');
+  await expect(activeFilters).toContainText('Saved view: Saved archive recovery view');
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBe(savedViewId);
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Archive "Saved archive recovery target"?');
+    await dialog.accept();
+  });
+  const archiveResponse = waitForIssueActionResponse(page, issue.id, 'archive');
+  await page.getByRole('button', { name: `Archive ${issue.title}` }).click();
+  await archiveResponse;
+
+  await expect(targetRow).toHaveCount(0);
+  await expect(page.getByText('Matching issues are archived.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Include Archived' })).toBeVisible();
+  await expect(filters.getByLabel('Search')).toHaveValue('Saved archive recovery target');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(filters.getByLabel('Priority')).toHaveValue('high');
+  await expect(filters.getByLabel('Label')).toHaveValue('recovery');
+  await expect(activeFilters).toContainText('Saved view: Saved archive recovery view');
+
+  await page.getByRole('button', { name: 'Include Archived' }).click();
+
+  await expect(includeArchived).toBeChecked();
+  await expect(targetRow).toBeVisible();
+  await expect(targetRow.locator('.archived-pill')).toHaveText('Archived');
+  await expect(mismatchRow).toHaveCount(0);
+  await expect(activeFilters).toContainText('Saved view: Saved archive recovery view (edited)');
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBeNull();
+  await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBe('true');
+
+  await includeArchived.uncheck();
+
+  await expect(includeArchived).not.toBeChecked();
+  await expect(targetRow).toHaveCount(0);
+  await expect(page.getByText('Matching issues are archived.')).toBeVisible();
+  await expect(filters.getByLabel('Search')).toHaveValue('Saved archive recovery target');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(filters.getByLabel('Priority')).toHaveValue('high');
+  await expect(filters.getByLabel('Label')).toHaveValue('recovery');
+  await expect(activeFilters).toContainText('Saved view: Saved archive recovery view');
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBe(savedViewId);
   await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBeNull();
 });
 

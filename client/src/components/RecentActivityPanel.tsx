@@ -45,6 +45,7 @@ export function RecentActivityPanel({ activity, loadState, onOpenIssue, onRetry 
                   <button
                     type="button"
                     className="recent-activity-issue-link"
+                    aria-label={`Open issue ${item.issueId} from recent activity`}
                     onClick={() => onOpenIssue(item.issueId!)}
                   >
                     {item.issueTitle}

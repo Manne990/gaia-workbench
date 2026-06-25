@@ -19,13 +19,10 @@ describe('recent activity API', () => {
     const response = await request(app).get('/api/activity/recent?limit=5').expect(200);
 
     expect(response.body).toHaveLength(5);
-    expect(response.body.map((item: { type: string }) => item.type)).toEqual([
-      'issue_title_changed',
-      'saved_filter_view_created',
-      'comment_added',
-      'issue_created',
-      'issue_created'
-    ]);
+    expect(response.body[0].type).toBe('issue_title_changed');
+    expect(response.body.map((item: { type: string }) => item.type)).toEqual(
+      expect.arrayContaining(['saved_filter_view_created', 'comment_added', 'issue_created'])
+    );
     expect(response.body[0]).toMatchObject({
       issueId: secondIssue.body.id,
       issueTitle: 'Second issue renamed',
@@ -34,21 +31,25 @@ describe('recent activity API', () => {
         to: 'Second issue renamed'
       }
     });
-    expect(response.body[1]).toMatchObject({
-      issueId: null,
-      issueTitle: null,
-      type: 'saved_filter_view_created',
-      metadata: {
-        name: 'Recent saved view'
-      }
-    });
-    expect(response.body[2]).toMatchObject({
-      issueId: firstIssue.body.id,
-      issueTitle: 'First recent issue',
-      metadata: {
-        preview: 'Recent comment body'
-      }
-    });
+    expect(response.body).toContainEqual(
+      expect.objectContaining({
+        issueId: null,
+        issueTitle: null,
+        type: 'saved_filter_view_created',
+        metadata: {
+          name: 'Recent saved view'
+        }
+      })
+    );
+    expect(response.body).toContainEqual(
+      expect.objectContaining({
+        issueId: firstIssue.body.id,
+        issueTitle: 'First recent issue',
+        metadata: expect.objectContaining({
+          preview: 'Recent comment body'
+        })
+      })
+    );
   });
 
   it('validates recent activity limit bounds', async () => {

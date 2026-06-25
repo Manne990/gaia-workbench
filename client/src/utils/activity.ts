@@ -83,13 +83,34 @@ export function recentActivityDetail(item: RecentActivityItem): string {
     return `Updated ${formatOptionalText(metadataTextValue(item.metadata, 'name'))}.`;
   }
 
-  return activityDetail({
-    id: item.sourceId,
-    issueId: item.issueId ?? '',
-    type: item.type,
-    metadata: item.metadata,
-    createdAt: item.createdAt
-  });
+  switch (item.type) {
+    case 'issue_created':
+      return 'Issue was created.';
+    case 'issue_title_changed':
+      return 'Title was updated.';
+    case 'issue_description_changed':
+      return 'Description was updated.';
+    case 'issue_status_changed':
+      return 'Status changed.';
+    case 'issue_priority_changed':
+      return 'Priority changed.';
+    case 'issue_due_date_changed':
+      return 'Due date changed.';
+    case 'issue_labels_changed':
+      return 'Labels changed.';
+    case 'issue_archived':
+      return 'Issue was archived.';
+    case 'issue_unarchived':
+      return 'Issue was restored.';
+    case 'issue_dependency_added':
+      return 'Dependency was added.';
+    case 'issue_dependency_removed':
+      return 'Dependency was removed.';
+    case 'comment_added':
+      return 'Comment was added.';
+    case 'comment_edited':
+      return 'Comment was edited.';
+  }
 }
 
 export function activityDetail(event: ActivityEvent): string {

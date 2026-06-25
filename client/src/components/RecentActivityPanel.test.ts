@@ -47,7 +47,8 @@ describe('RecentActivityPanel', () => {
     expect(markup).toContain('Recent activity');
     expect(markup).toContain('Comment added');
     expect(markup).toContain('Visible issue title');
-    expect(markup).toContain('A compact comment preview');
+    expect(markup).toContain('Comment was added.');
+    expect(markup).toContain('Open issue issue-1 from recent activity');
     expect(markup).toContain('Saved view created');
     expect(markup).toContain('Created Planning view.');
     expect(markup).toContain('dateTime="2026-06-25T18:45:00.000Z"');

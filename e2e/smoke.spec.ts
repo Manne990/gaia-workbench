@@ -615,7 +615,7 @@ test('issue list order survives search narrowing and clearing after a status edi
 
   const issueForm = page.getByRole('form', { name: 'Issue form' });
 
-  await issueForm.getByLabel('Status').selectOption('review');
+  await issueForm.locator('#issue-status').selectOption('review');
   await page.getByRole('button', { name: 'Save Changes' }).click();
   await expect(page.getByRole('row', { name: /Search order middle issue.*Review.*Medium/ })).toBeVisible();
 

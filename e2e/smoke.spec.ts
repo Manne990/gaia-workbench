@@ -1022,6 +1022,56 @@ test('command palette opens and closes issue detail from keyboard commands', asy
   await expect(issueListHeading).toBeFocused();
 });
 
+test('command palette executes the selected issue command when labels are duplicated', async ({ page }) => {
+  const duplicateTitle = `Palette duplicate command ${Date.now()}`;
+  const firstIssue = await createIssueThroughApi(page, {
+    title: duplicateTitle,
+    description: 'First duplicate command target.'
+  });
+  const secondIssue = await createIssueThroughApi(page, {
+    title: duplicateTitle,
+    description: 'Second duplicate command target.'
+  });
+
+  const listResponse = await page.request.get(`/api/issues?search=${encodeURIComponent(duplicateTitle)}`);
+
+  expect(listResponse.ok()).toBe(true);
+
+  const listBody = (await listResponse.json()) as IssueListResponse;
+  const visibleDuplicateIssues = listBody.items.filter((issue) => issue.title === duplicateTitle);
+
+  expect(visibleDuplicateIssues).toHaveLength(2);
+  expect(new Set(visibleDuplicateIssues.map((issue) => issue.id))).toEqual(new Set([firstIssue.id, secondIssue.id]));
+
+  const secondVisibleIssue = visibleDuplicateIssues[1];
+
+  if (!secondVisibleIssue) {
+    throw new Error('Expected a second duplicate issue command target.');
+  }
+
+  await page.goto(`/?search=${encodeURIComponent(duplicateTitle)}`);
+
+  const commandPalette = page.getByRole('dialog', { name: 'Command palette' });
+  const commandSearch = page.getByLabel('Search commands');
+  const quickActionsButton = page.getByRole('button', { name: 'Quick Actions' });
+  const duplicateCommandName = `Open issue: ${duplicateTitle}. Open ${duplicateTitle}`;
+
+  await expect(page.getByRole('row', { name: new RegExp(duplicateTitle) })).toHaveCount(2);
+
+  await quickActionsButton.click();
+  await expect(commandPalette).toBeVisible();
+  await commandSearch.fill(duplicateTitle);
+
+  const duplicateCommands = commandPalette.getByRole('button', { name: duplicateCommandName, exact: true });
+
+  await expect(duplicateCommands).toHaveCount(2);
+  await duplicateCommands.nth(1).click();
+
+  await expect(commandPalette).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`/issues/${secondVisibleIssue.id}(?:\\?|$)`));
+  await expect(page.getByRole('region', { name: duplicateTitle })).toBeVisible();
+});
+
 test('keyboard shortcuts move detail focus through visible issues without stealing search focus', async ({ page }) => {
   const firstCreated = await createIssueThroughApi(page, {
     title: 'Keyboard focus path alpha',

@@ -4340,8 +4340,20 @@ test('copies stable issue links from list and detail actions', async ({ page }) 
 
   const expectedStableLink = new URL(`/issues/${issue.id}`, page.url()).toString();
   const row = page.getByRole('row', { name: /Stable link copy issue.*Review/ });
+  const quickActionsButton = page.getByRole('button', { name: 'Quick Actions' });
+  const commandPalette = page.getByRole('dialog', { name: 'Command palette' });
+  const commandSearch = page.getByLabel('Search commands');
 
   await expect(row).toBeVisible();
+
+  await quickActionsButton.click();
+  await commandSearch.fill('copy issue link');
+  await expect(
+    commandPalette.getByRole('button', {
+      name: 'Copy selected issue link. Open an issue to copy its stable link'
+    })
+  ).toBeDisabled();
+  await page.keyboard.press('Escape');
 
   const filteredListUrl = page.url();
   const listCopyButton = row.getByRole('button', { name: `Copy link for ${issue.title}` });
@@ -4369,6 +4381,20 @@ test('copies stable issue links from list and detail actions', async ({ page }) 
 
   await detailCopyButton.click();
   await expect(detailCopyButton).toBeFocused();
+  await expect(detail.locator('.link-copy-feedback')).toHaveText(`Copied link for "${issue.title}".`);
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(expectedStableLink);
+  expect(page.url()).toBe(detailUrl);
+
+  await quickActionsButton.click();
+  await commandSearch.fill('copy issue link');
+  await expect(
+    commandPalette.getByRole('button', {
+      name: `Copy selected issue link. Copy stable link for ${issue.title}`
+    })
+  ).toBeEnabled();
+  await page.keyboard.press('Enter');
+
+  await expect(commandPalette).toHaveCount(0);
   await expect(detail.locator('.link-copy-feedback')).toHaveText(`Copied link for "${issue.title}".`);
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(expectedStableLink);
   expect(page.url()).toBe(detailUrl);

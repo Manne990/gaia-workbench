@@ -64,6 +64,7 @@ import {
   dashboardFiltersFromSavedView,
   dashboardFiltersToSavedViewPayload,
   defaultDashboardFilters,
+  getDashboardReturnRouteState,
   getRouteStateFromLocation,
   parseIssueAnchorTarget,
   type RouteState,
@@ -1037,7 +1038,7 @@ export function App() {
     savedViewId: string | null = activeSavedViewIdRef.current,
     density: DashboardDensity = dashboardDensityRef.current
   ) {
-    writeRouteState(selectedIssueId, filters, mode, savedViewId, density);
+    writeRouteState(selectedIssueIdRef.current, filters, mode, savedViewId, density);
   }
 
   function setActiveSavedViewState(viewId: string | null) {
@@ -1642,11 +1643,26 @@ export function App() {
 
   function closeIssueDetail() {
     const returnFocusTarget = detailReturnFocusRef.current;
+    const returnRouteState = getDashboardReturnRouteState(window.location.search, {
+      savedViewId: activeSavedViewIdRef.current,
+      dashboardDensity: dashboardDensityRef.current
+    });
+    const returnDashboardDensity = returnRouteState.dashboardDensity ?? dashboardDensityRef.current;
 
     setSelectedIssueId(null);
     setSelectedIssue(null);
     setSelectedIssueLoadState('idle');
-    writeRouteState(null, dashboardFiltersRef.current, detailReturnFocusRef.current ? 'replace' : 'push');
+    dashboardFiltersRef.current = returnRouteState.filters;
+    dashboardDensityRef.current = returnDashboardDensity;
+    setDashboardFilters(returnRouteState.filters);
+    setDashboardDensity(returnDashboardDensity);
+    writeRouteState(
+      null,
+      returnRouteState.filters,
+      detailReturnFocusRef.current ? 'replace' : 'push',
+      returnRouteState.savedViewId,
+      returnDashboardDensity
+    );
     restoreFocus(returnFocusTarget, () => issueListHeadingRef.current);
     detailReturnFocusRef.current = null;
   }

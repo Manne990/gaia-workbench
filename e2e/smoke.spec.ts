@@ -5927,6 +5927,9 @@ test('saved filter view rename preserves manual filters changed while request is
   await savedViewName.fill('Rename race view');
   await savedViews.getByRole('button', { name: 'Save View' }).click();
 
+  await expect(savedViewSelect).toContainText('Rename race view');
+  await expect(savedViewName).toHaveValue('Rename race view');
+  await expect.poll(() => savedViewSelect.inputValue()).not.toBe('');
   const savedViewId = await savedViewSelect.inputValue();
 
   expect(savedViewId).not.toBe('');

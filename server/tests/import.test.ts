@@ -105,6 +105,27 @@ function emptyImportCounts(): ImportCounts {
   };
 }
 
+function buildImportIssue(id: string, overrides: Partial<ExportedIssue> = {}): ExportedIssue {
+  return {
+    id,
+    title: `Import issue ${id}`,
+    description: '',
+    status: 'todo',
+    priority: 'medium',
+    labels: [],
+    dueDate: null,
+    isOverdue: false,
+    isBlocked: false,
+    dependsOnIssueIds: [],
+    archivedAt: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    comments: [],
+    activityEvents: [],
+    ...overrides
+  };
+}
+
 function getCsvLines(csv: string): string[] {
   return csv.trim().split('\r\n');
 }
@@ -557,6 +578,52 @@ describe('tracker import API', () => {
     ]);
     expect(exportedBlocked?.dependsOnIssueIds).toEqual([firstDependencyId, secondDependencyId]);
     expect(exportedAfterImport.body).toEqual(payload);
+  });
+
+  it('rejects invalid dependency references during preview and before apply writes', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload: TrackerExport = {
+      exportVersion: 1,
+      issues: [
+        buildImportIssue('valid-dependency'),
+        buildImportIssue('missing-dependency-source', {
+          dependsOnIssueIds: ['missing-dependency'],
+          updatedAt: '2026-01-01T00:00:01.000Z'
+        }),
+        buildImportIssue('self-dependency-source', {
+          dependsOnIssueIds: ['self-dependency-source'],
+          updatedAt: '2026-01-01T00:00:02.000Z'
+        })
+      ],
+      savedFilterViews: [],
+      archivedRecovery: []
+    };
+
+    const preview = await request(app).post('/api/import/preview').send(payload).expect(400);
+    const afterPreview = await request(app).get('/api/issues?includeArchived=true').expect(200);
+    const applied = await request(app).post('/api/import/apply').send(payload).expect(400);
+    const afterApply = await request(app).get('/api/issues?includeArchived=true').expect(200);
+
+    expect(preview.body.valid).toBe(false);
+    expect(preview.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'dangling_reference',
+          path: '$.issues[1].dependsOnIssueIds[0]',
+          message: 'Dependency issue id must reference another issue in the import payload.',
+          value: 'missing-dependency'
+        }),
+        expect.objectContaining({
+          code: 'invalid_dependency',
+          path: '$.issues[2].dependsOnIssueIds[0]',
+          message: 'An issue cannot depend on itself.',
+          value: 'self-dependency-source'
+        })
+      ])
+    );
+    expect(applied.body.errors).toEqual(preview.body.errors);
+    expect(afterPreview.body.pagination.total).toBe(0);
+    expect(afterApply.body.pagination.total).toBe(0);
   });
 
   it('preserves markdown-like and unsafe-looking body text as raw import data', async () => {

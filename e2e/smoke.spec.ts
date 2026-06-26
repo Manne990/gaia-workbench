@@ -5394,6 +5394,39 @@ test('missing saved filter view URLs fall back to explicit filters', async ({ pa
   await expect.poll(() => new URL(page.url()).searchParams.get('blockedOnly')).toBe('true');
 });
 
+test('missing saved filter view issue URLs preserve the detail route and explicit filters', async ({ page }) => {
+  const targetIssue = await createIssueThroughApi(page, {
+    title: 'Missing saved view detail target',
+    description: 'Opened through a URL with a missing saved view id.',
+    status: 'review',
+    priority: 'high',
+    labels: ['missing-saved-view-detail']
+  });
+
+  await page.goto(
+    `/issues/${targetIssue.id}?savedView=missing-detail-e2e-view&search=Missing%20saved%20view%20detail%20target&status=review&priority=high&label=missing-saved-view-detail&includeArchived=true`
+  );
+
+  const filters = page.getByLabel('Issue filters');
+  const settings = await expandDashboardSettings(page);
+  const savedViews = settings.getByLabel('Saved filter views');
+
+  await expect(savedViews.getByText('Saved view not found. Showing filters from the URL instead.')).toBeVisible();
+  await expect(page.getByRole('region', { name: targetIssue.title })).toBeVisible();
+  await expect(filters.getByLabel('Search')).toHaveValue('Missing saved view detail target');
+  await expect(filters.getByLabel('Status')).toHaveValue('review');
+  await expect(filters.getByLabel('Priority')).toHaveValue('high');
+  await expect(filters.getByLabel('Label')).toHaveValue('missing-saved-view-detail');
+  await expect(filters.getByLabel('Include archived')).toBeChecked();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/issues/${targetIssue.id}`);
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBeNull();
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Missing saved view detail target');
+  await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('review');
+  await expect.poll(() => new URL(page.url()).searchParams.get('priority')).toBe('high');
+  await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('missing-saved-view-detail');
+  await expect.poll(() => new URL(page.url()).searchParams.get('includeArchived')).toBe('true');
+});
+
 test('applying an active-only saved view preserves an archived detail selection', async ({ page }) => {
   const archivedTarget = await createIssueThroughApi(page, {
     title: 'Saved view archived detail target',

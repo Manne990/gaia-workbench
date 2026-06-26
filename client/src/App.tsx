@@ -69,8 +69,8 @@ import {
   writeSavedViewRoute,
   writeRoute
 } from './utils/routing';
+import { readStoredDashboardDensity, writeStoredDashboardDensity } from './utils/clientStorage';
 
-const DASHBOARD_DENSITY_STORAGE_KEY = 'tinytracker.dashboardDensity';
 const SELECTED_ISSUE_STATUS_COMMAND_PREFIX = 'set-selected-issue-status:';
 const APPLY_SAVED_VIEW_COMMAND_PREFIX = 'apply-saved-view:';
 const OPEN_VISIBLE_ISSUE_COMMAND_PREFIX = 'open-visible-issue:';
@@ -78,32 +78,6 @@ type IssueAnchorTarget = {
   type: 'comment' | 'activity';
   id: string;
 };
-
-function isDashboardDensity(value: string | null): value is DashboardDensity {
-  return value === 'comfortable' || value === 'compact';
-}
-
-function readStoredDashboardDensity(): DashboardDensity {
-  try {
-    if (typeof window === 'undefined') {
-      return 'comfortable';
-    }
-
-    const storedDensity = window.localStorage.getItem(DASHBOARD_DENSITY_STORAGE_KEY);
-
-    return isDashboardDensity(storedDensity) ? storedDensity : 'comfortable';
-  } catch {
-    return 'comfortable';
-  }
-}
-
-function writeStoredDashboardDensity(value: DashboardDensity): void {
-  try {
-    window.localStorage.setItem(DASHBOARD_DENSITY_STORAGE_KEY, value);
-  } catch {
-    // Density is a local preference; storage failures should not block UI changes.
-  }
-}
 
 function areStringArraysEqual(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);

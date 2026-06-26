@@ -65,6 +65,7 @@ import {
   dashboardFiltersToSavedViewPayload,
   defaultDashboardFilters,
   getRouteStateFromLocation,
+  parseIssueAnchorTarget,
   type RouteState,
   writeSavedViewRoute,
   writeRoute
@@ -74,11 +75,6 @@ import { readStoredDashboardDensity, writeStoredDashboardDensity } from './utils
 const SELECTED_ISSUE_STATUS_COMMAND_PREFIX = 'set-selected-issue-status:';
 const APPLY_SAVED_VIEW_COMMAND_PREFIX = 'apply-saved-view:';
 const OPEN_VISIBLE_ISSUE_COMMAND_PREFIX = 'open-visible-issue:';
-type IssueAnchorTarget = {
-  type: 'comment' | 'activity';
-  id: string;
-};
-
 function areStringArraysEqual(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
@@ -117,27 +113,6 @@ function areIssueDetailSnapshotsEqual(left: Issue, right: Issue): boolean {
 
 function isIssueSnapshotOlder(left: Issue, right: Issue): boolean {
   return left.updatedAt < right.updatedAt;
-}
-
-function parseIssueAnchorTarget(hash: string): IssueAnchorTarget | null {
-  const match = /^(?:#)(comment|activity)-(.+)$/.exec(hash.trim());
-
-  if (!match) {
-    return null;
-  }
-
-  const type = match[1] as IssueAnchorTarget['type'];
-  const id = match[2].trim();
-
-  if (!id) {
-    return null;
-  }
-
-  try {
-    return { type, id: decodeURIComponent(id) };
-  } catch {
-    return { type, id };
-  }
 }
 
 function selectedIssueStatusCommandId(status: IssueStatus): string {

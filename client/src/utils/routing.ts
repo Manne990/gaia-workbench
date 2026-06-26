@@ -30,6 +30,11 @@ export type RouteState = {
   dashboardDensity: DashboardDensity | null;
 };
 
+export type IssueAnchorTarget = {
+  type: 'comment' | 'activity';
+  id: string;
+};
+
 type DashboardQueryState = {
   filters: DashboardFilters;
   savedViewId: string | null;
@@ -109,6 +114,29 @@ export function getIssueIdFromPath(pathname: string): string | null {
 
 export function getIssueIdFromLocation(): string | null {
   return getIssueIdFromPath(window.location.pathname);
+}
+
+export function parseIssueAnchorTarget(hash: string): IssueAnchorTarget | null {
+  const match = /^(?:#)(comment|activity)-(.+)$/.exec(hash.trim());
+
+  if (!match) {
+    return null;
+  }
+
+  const type = match[1] as IssueAnchorTarget['type'];
+  const rawId = match[2].trim();
+
+  if (!rawId) {
+    return null;
+  }
+
+  try {
+    const id = decodeURIComponent(rawId).trim();
+
+    return id ? { type, id } : null;
+  } catch {
+    return { type, id: rawId };
+  }
 }
 
 function parseSearchParams(search: string | URLSearchParams): URLSearchParams {

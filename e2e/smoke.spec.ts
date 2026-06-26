@@ -5896,6 +5896,129 @@ test('saved filter view controls stay locked during rename and delete requests',
   await expect(savedViewName).toHaveValue('');
 });
 
+test('saved filter view rename preserves manual filters changed while request is in flight', async ({ page }) => {
+  await createIssueThroughApi(page, {
+    title: 'Rename race saved target',
+    description: 'Matches the saved view before a delayed rename resolves.',
+    status: 'review',
+    priority: 'high',
+    labels: ['rename-race-saved']
+  });
+  await createIssueThroughApi(page, {
+    title: 'Rename race manual target',
+    description: 'Matches the manual filters changed while rename is pending.',
+    status: 'todo',
+    priority: 'low',
+    labels: ['rename-race-manual']
+  });
+
+  await page.goto('/');
+
+  const filters = page.getByLabel('Issue filters');
+  const settings = await expandDashboardSettings(page);
+  const savedViews = settings.getByLabel('Saved filter views');
+  const savedViewSelect = savedViews.getByLabel('Saved views');
+  const savedViewName = savedViews.getByLabel('View name');
+
+  await filters.getByLabel('Search').fill('Rename race saved target');
+  await filters.getByLabel('Status').selectOption('review');
+  await filters.getByLabel('Priority').selectOption('high');
+  await filters.getByLabel('Label').fill('rename-race-saved');
+  await savedViewName.fill('Rename race view');
+  await savedViews.getByRole('button', { name: 'Save View' }).click();
+
+  const savedViewId = await savedViewSelect.inputValue();
+
+  expect(savedViewId).not.toBe('');
+  await expect(page.getByLabel('Active filters')).toContainText('Saved view: Rename race view');
+  await expect(page.getByRole('row', { name: /Rename race saved target.*Review.*High/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Rename race manual target.*Todo.*Low/ })).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBe(savedViewId);
+
+  let resolvePatchIntercepted = () => {};
+  let releasePatch: (() => void) | null = null;
+  const patchIntercepted = new Promise<void>((resolve) => {
+    resolvePatchIntercepted = resolve;
+  });
+
+  await page.route('**/api/filter-views/*', async (route) => {
+    if (route.request().method() === 'PATCH') {
+      resolvePatchIntercepted();
+      await new Promise<void>((resolve) => {
+        releasePatch = resolve;
+      });
+    }
+
+    await route.continue();
+  });
+
+  const renameResponse = page.waitForResponse((response) => {
+    return (
+      response.request().method() === 'PATCH' && new URL(response.url()).pathname === `/api/filter-views/${savedViewId}`
+    );
+  });
+
+  await savedViewName.fill('Renamed race view');
+  await savedViews.getByRole('button', { name: 'Rename' }).click();
+  await patchIntercepted;
+  await expect(savedViewSelect).toBeDisabled();
+  await expect(savedViewName).toBeDisabled();
+
+  await filters.getByLabel('Search').fill('Rename race manual target');
+  await filters.getByLabel('Status').selectOption('todo');
+  await filters.getByLabel('Priority').selectOption('low');
+  await filters.getByLabel('Label').fill('rename-race-manual');
+  await expect(page.getByRole('row', { name: /Rename race manual target.*Todo.*Low/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Rename race saved target.*Review.*High/ })).toHaveCount(0);
+  await expect(page.getByLabel('Active filters')).toContainText('Saved view: Rename race view (edited)');
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBeNull();
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Rename race manual target');
+  await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('todo');
+  await expect.poll(() => new URL(page.url()).searchParams.get('priority')).toBe('low');
+  await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('rename-race-manual');
+
+  if (!releasePatch) {
+    throw new Error('Expected saved view rename request to be intercepted.');
+  }
+
+  releasePatch();
+  const renameResult = await renameResponse;
+  expect(renameResult.ok()).toBe(true);
+
+  await expect(savedViewSelect).toBeEnabled();
+  await expect(savedViewName).toBeEnabled();
+  await expect(savedViewSelect).toContainText('Renamed race view');
+  await expect(savedViewName).toHaveValue('Renamed race view');
+  await expect(filters.getByLabel('Search')).toHaveValue('Rename race manual target');
+  await expect(filters.getByLabel('Status')).toHaveValue('todo');
+  await expect(filters.getByLabel('Priority')).toHaveValue('low');
+  await expect(filters.getByLabel('Label')).toHaveValue('rename-race-manual');
+  await expect(page.getByRole('row', { name: /Rename race manual target.*Todo.*Low/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /Rename race saved target.*Review.*High/ })).toHaveCount(0);
+  await expect(page.getByLabel('Active filters')).toContainText('Saved view: Renamed race view (edited)');
+  await expect.poll(() => new URL(page.url()).searchParams.get('savedView')).toBeNull();
+  await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('Rename race manual target');
+  await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('todo');
+  await expect.poll(() => new URL(page.url()).searchParams.get('priority')).toBe('low');
+  await expect.poll(() => new URL(page.url()).searchParams.get('label')).toBe('rename-race-manual');
+
+  const savedViewResponse = await page.request.get(`/api/filter-views/${savedViewId}`);
+  const savedViewBody = (await savedViewResponse.json()) as {
+    name: string;
+    search: string;
+    status: string;
+    priority: string;
+    label: string;
+  };
+
+  expect(savedViewResponse.ok()).toBe(true);
+  expect(savedViewBody.name).toBe('Renamed race view');
+  expect(savedViewBody.search).toBe('Rename race saved target');
+  expect(savedViewBody.status).toBe('review');
+  expect(savedViewBody.priority).toBe('high');
+  expect(savedViewBody.label).toBe('rename-race-saved');
+});
+
 test('saved filter views recover from stale rename and delete selections', async ({ page }) => {
   await createIssueThroughApi(page, {
     title: 'Saved view stale recovery target',

@@ -2383,6 +2383,72 @@ describe('tracker import API', () => {
     expect(afterImport.body).toEqual(beforeImport.body);
   });
 
+  it('rejects longer imported dependency cycles before apply without mutating existing data', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+    const payload = await createExportFixture();
+
+    await request(app).post('/api/issues').send({ title: 'Keep transitive cycle validation atomic' }).expect(201);
+    const beforeImport = await request(app).get('/api/export').expect(200);
+
+    const cyclic = cloneExport(payload);
+    const [firstIssue, secondIssue] = cyclic.issues;
+
+    if (!firstIssue || !secondIssue) {
+      throw new Error('Expected import fixture to include at least two issues');
+    }
+
+    const thirdIssue: ExportedIssue = {
+      id: 'transitive-cycle-third',
+      title: 'Third imported cycle issue',
+      description: '',
+      status: 'todo',
+      priority: 'medium',
+      labels: [],
+      dueDate: null,
+      isOverdue: false,
+      isBlocked: true,
+      dependsOnIssueIds: [firstIssue.id],
+      archivedAt: null,
+      createdAt: '2026-01-01T00:00:02.000Z',
+      updatedAt: '2026-01-01T00:00:02.000Z',
+      comments: [],
+      activityEvents: []
+    };
+
+    firstIssue.isBlocked = true;
+    firstIssue.dependsOnIssueIds = [secondIssue.id];
+    secondIssue.isBlocked = true;
+    secondIssue.dependsOnIssueIds = [thirdIssue.id];
+    cyclic.issues.push(thirdIssue);
+
+    const preview = await request(app).post('/api/import/preview').send(cyclic).expect(400);
+    const applied = await request(app).post('/api/import/apply').send(cyclic).expect(400);
+    const afterImport = await request(app).get('/api/export').expect(200);
+
+    expect(preview.body.valid).toBe(false);
+    expect(preview.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'dependency_cycle',
+          path: '$.issues[0].dependsOnIssueIds[0]',
+          value: secondIssue.id
+        }),
+        expect.objectContaining({
+          code: 'dependency_cycle',
+          path: '$.issues[1].dependsOnIssueIds[0]',
+          value: thirdIssue.id
+        }),
+        expect.objectContaining({
+          code: 'dependency_cycle',
+          path: '$.issues[2].dependsOnIssueIds[0]',
+          value: firstIssue.id
+        })
+      ])
+    );
+    expect(applied.body.errors).toEqual(preview.body.errors);
+    expect(afterImport.body).toEqual(beforeImport.body);
+  });
+
   it('rejects imported isBlocked values that contradict active dependencies', async () => {
     const app = createApp({ databasePath: ':memory:' });
     const payload = await createExportFixture();

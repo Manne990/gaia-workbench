@@ -15,6 +15,7 @@ import {
   parseDashboardFiltersFromSearch,
   parseDashboardRouteQueryState,
   parseDashboardDensityFromSearch,
+  parseIssueAnchorTarget,
   parseSavedViewIdFromSearch
 } from './routing';
 
@@ -361,5 +362,20 @@ describe('client routing helpers', () => {
     expect(buildCsvExportPath(filters)).toBe(
       '/api/export.csv?search=roadmap&status=todo&priority=medium&label=team&includeArchived=true&blockedOnly=true&staleOnly=true'
     );
+  });
+
+  it('parses detail-panel comment and activity anchor hashes', () => {
+    expect(parseIssueAnchorTarget('#comment-comment-1')).toEqual({ type: 'comment', id: 'comment-1' });
+    expect(parseIssueAnchorTarget('#activity-status%20changed')).toEqual({ type: 'activity', id: 'status changed' });
+  });
+
+  it('ignores unsupported or decoded-empty detail-panel anchor hashes', () => {
+    expect(parseIssueAnchorTarget('#issue-comment-1')).toBeNull();
+    expect(parseIssueAnchorTarget('#comment-')).toBeNull();
+    expect(parseIssueAnchorTarget('#comment-%20%20')).toBeNull();
+  });
+
+  it('keeps malformed encoded detail-panel anchor ids loadable', () => {
+    expect(parseIssueAnchorTarget('#comment-%E0%A4%A')).toEqual({ type: 'comment', id: '%E0%A4%A' });
   });
 });

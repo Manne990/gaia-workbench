@@ -84,6 +84,55 @@ describe('saved filter views API', () => {
     });
   });
 
+  it('deletes only the saved view while preserving matching open issues', async () => {
+    const app = createApp({ databasePath: ':memory:' });
+
+    const openIssue = await request(app)
+      .post('/api/issues')
+      .send({
+        title: 'Open issue in saved view',
+        description: 'Should survive saved view deletion.',
+        status: 'todo',
+        priority: 'high',
+        labels: ['saved-view-delete-guard']
+      })
+      .expect(201);
+    const savedView = await request(app)
+      .post('/api/filter-views')
+      .send({
+        name: 'Delete guard view',
+        status: 'todo',
+        priority: 'high',
+        label: 'saved-view-delete-guard'
+      })
+      .expect(201);
+
+    await request(app).delete(`/api/filter-views/${savedView.body.id}`).expect(204);
+    await request(app).get(`/api/filter-views/${savedView.body.id}`).expect(404, {
+      error: 'Saved view not found'
+    });
+
+    const matchingIssues = await request(app)
+      .get('/api/issues?status=todo&priority=high&label=saved-view-delete-guard')
+      .expect(200);
+
+    expect(matchingIssues.body.items).toEqual([
+      expect.objectContaining({
+        id: openIssue.body.id,
+        title: 'Open issue in saved view',
+        status: 'todo',
+        archivedAt: null
+      })
+    ]);
+
+    await request(app)
+      .get(`/api/issues/${openIssue.body.id}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject(openIssue.body);
+      });
+  });
+
   it('applies defaults and orders saved views deterministically', async () => {
     const app = createApp({ databasePath: ':memory:' });
 

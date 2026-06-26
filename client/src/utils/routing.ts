@@ -35,7 +35,7 @@ export type IssueAnchorTarget = {
   id: string;
 };
 
-type DashboardQueryState = {
+export type DashboardRouteQueryState = {
   filters: DashboardFilters;
   savedViewId: string | null;
   dashboardDensity: DashboardDensity | null;
@@ -175,13 +175,26 @@ function parseDashboardDensityFromParams(params: URLSearchParams): DashboardDens
   return normalizeDashboardDensity(params.get(dashboardDensityQueryParam));
 }
 
-export function parseDashboardRouteQueryState(search: string | URLSearchParams): DashboardQueryState {
+export function parseDashboardRouteQueryState(search: string | URLSearchParams): DashboardRouteQueryState {
   const params = parseSearchParams(search);
 
   return {
     filters: parseDashboardFiltersFromParams(params),
     savedViewId: parseSavedViewIdFromParams(params),
     dashboardDensity: parseDashboardDensityFromParams(params)
+  };
+}
+
+export function getDashboardReturnRouteState(
+  search: string | URLSearchParams,
+  fallbackOptions: RouteBuildOptions = {}
+): DashboardRouteQueryState {
+  const routeState = parseDashboardRouteQueryState(search);
+
+  return {
+    filters: routeState.filters,
+    savedViewId: routeState.savedViewId ?? fallbackOptions.savedViewId ?? null,
+    dashboardDensity: routeState.dashboardDensity ?? fallbackOptions.dashboardDensity ?? null
   };
 }
 

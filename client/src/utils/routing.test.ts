@@ -11,6 +11,7 @@ import {
   dashboardFiltersFromSavedView,
   dashboardFiltersToSavedViewPayload,
   defaultDashboardFilters,
+  getDashboardReturnRouteState,
   getIssueIdFromPath,
   parseDashboardFiltersFromSearch,
   parseDashboardRouteQueryState,
@@ -189,6 +190,35 @@ describe('client routing helpers', () => {
       })
     ).toBe(
       '/issues/issue%20id?search=api+export&status=done&priority=low&label=docs&includeArchived=true&blockedOnly=true&staleOnly=true&limit=100'
+    );
+  });
+
+  it('derives a dashboard return route from detail query context', () => {
+    const returnRouteState = getDashboardReturnRouteState(
+      '?savedView=view-ops&density=compact&search=api%20export&status=review&priority=high&label=ops&includeArchived=true&blockedOnly=true&staleOnly=true&limit=50'
+    );
+
+    expect(returnRouteState).toEqual({
+      filters: {
+        search: 'api export',
+        status: 'review',
+        priority: 'high',
+        label: 'ops',
+        includeArchived: true,
+        blockedOnly: true,
+        staleOnly: true,
+        pageSize: 50
+      },
+      savedViewId: 'view-ops',
+      dashboardDensity: 'compact'
+    });
+    expect(
+      buildDashboardPath(returnRouteState.filters, {
+        savedViewId: returnRouteState.savedViewId,
+        dashboardDensity: returnRouteState.dashboardDensity
+      })
+    ).toBe(
+      '/?savedView=view-ops&density=compact&search=api+export&status=review&priority=high&label=ops&includeArchived=true&blockedOnly=true&staleOnly=true&limit=50'
     );
   });
 

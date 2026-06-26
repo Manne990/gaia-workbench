@@ -2860,6 +2860,16 @@ test('bulk archive clears focused detail and offers undo recovery', async ({ pag
   await expect(page.getByRole('row', { name: /Bulk archive focus detail.*Todo.*High/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /Bulk archive focus companion.*Review.*Medium/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /Bulk archive focus survivor.*In Progress.*Low/ })).toBeVisible();
+
+  const focusedAfterUndoResponse = await page.request.get(`/api/issues/${focused.id}`);
+  const secondAfterUndoResponse = await page.request.get(`/api/issues/${second.id}`);
+  const focusedAfterUndo = (await focusedAfterUndoResponse.json()) as ApiIssue;
+  const secondAfterUndo = (await secondAfterUndoResponse.json()) as ApiIssue;
+
+  expect(focusedAfterUndoResponse.ok()).toBe(true);
+  expect(secondAfterUndoResponse.ok()).toBe(true);
+  expect(focusedAfterUndo.archivedAt).toBeNull();
+  expect(secondAfterUndo.archivedAt).toBeNull();
 });
 
 test('bulk archive failure restores action focus and announces the reason', async ({ page }) => {
